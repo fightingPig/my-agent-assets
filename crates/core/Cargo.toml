@@ -1,0 +1,11 @@
+[package]
+name = "my-agent-assets-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "my_agent_assets_core"
+path = "src/lib.rs"
+
