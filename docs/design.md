@@ -72,6 +72,25 @@ The file contains only the server config body. Compilation writes managed MCP
 servers back into the correct scope while preserving unknown top-level JSON
 fields and unmanaged MCP servers.
 
+During scan/import, MCP configs are extracted into the asset center and mount
+records are created, but the original Claude JSON source is not deleted and is
+not immediately rewritten. Explicit MCP mount/unmount operations compile the
+managed view back into the target config source.
+
+If a scanned MCP has the same name as an asset-center MCP but the JSON differs,
+the plan shows both JSON bodies:
+
+- asset-center JSON
+- scanned runtime JSON
+
+Apply requires an explicit conflict decision:
+
+```bash
+maa scan --apply --on-conflict skip
+maa scan --apply --on-conflict overwrite
+maa scan --apply --on-conflict rename --rename-to github-work
+```
+
 ## Cross Platform Notes
 
 Skill and Command assets use symlinks. On Windows, symlink creation may require

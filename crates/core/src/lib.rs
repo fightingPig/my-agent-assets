@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
 use std::fs;
@@ -170,6 +171,7 @@ pub struct PlanItem {
     pub target: Option<PathBuf>,
     pub message: String,
     pub risk: &'static str,
+    pub details: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -221,8 +223,27 @@ impl Plan {
             if let Some(target) = &item.target {
                 out.push_str(&format!("   target: {}\n", target.display()));
             }
+            for detail in &item.details {
+                out.push_str("   ");
+                out.push_str(&detail.replace('\n', "\n   "));
+                out.push('\n');
+            }
         }
         out
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ConflictStrategy {
+    Prompt,
+    Skip,
+    Overwrite,
+    Rename(String),
+}
+
+impl ConflictStrategy {
+    pub fn skip() -> Self {
+        Self::Skip
     }
 }
 
@@ -253,6 +274,54 @@ pub struct MountRecord {
     pub scope: Option<McpScope>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DiskAssetsFile {
+    #[serde(default)]
+    assets: DiskAssetGroups,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DiskAssetGroups {
+    #[serde(default)]
+    skills: BTreeMap<String, DiskAssetRecord>,
+    #[serde(default)]
+    commands: BTreeMap<String, DiskAssetRecord>,
+    #[serde(default)]
+    mcps: BTreeMap<String, DiskAssetRecord>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DiskAssetRecord {
+    path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    file_name: Option<String>,
+    #[serde(default)]
+    aliases: Vec<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DiskMountsFile {
+    #[serde(default)]
+    mounts: DiskMountGroups,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct DiskMountGroups {
+    #[serde(default)]
+    skills: BTreeMap<String, Vec<DiskMountRecord>>,
+    #[serde(default)]
+    commands: BTreeMap<String, Vec<DiskMountRecord>>,
+    #[serde(default)]
+    mcps: BTreeMap<String, Vec<DiskMountRecord>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DiskMountRecord {
+    target: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scope: Option<String>,
+}
+
 pub fn init_plan(ctx: &Context) -> Plan {
     let mut plan = Plan::new("Init plan");
     for path in [
@@ -271,6 +340,7 @@ pub fn init_plan(ctx: &Context) -> Plan {
                 target: Some(path),
                 message: "create asset center directory".to_string(),
                 risk: "low",
+                details: Vec::new(),
             });
         }
     }
@@ -284,6 +354,7 @@ pub fn init_plan(ctx: &Context) -> Plan {
                 target: Some(path),
                 message: format!("create {file}"),
                 risk: "low",
+                details: Vec::new(),
             });
         }
     }
@@ -305,8 +376,8 @@ pub fn init_apply(ctx: &Context) -> Result<Plan> {
             ctx.home.display()
         ),
     )?;
-    write_if_missing(&ctx.asset_center.join("assets.yaml"), "assets:\n")?;
-    write_if_missing(&ctx.asset_center.join("mounts.yaml"), "mounts:\n")?;
+    write_if_missing(&ctx.asset_center.join("assets.yaml"), "assets: {}\n")?;
+    write_if_missing(&ctx.asset_center.join("mounts.yaml"), "mounts: {}\n")?;
     init_asset_center_git(ctx)?;
     Ok(plan)
 }
@@ -317,14 +388,24 @@ pub fn scan_plan(ctx: &Context) -> Result<Plan> {
     let discovered = discover(ctx)?;
     let mut plan = Plan::new("Scan plan");
     for asset in discovered {
-        if registry.assets.contains_key(&asset.id) {
+        if let Some(existing) = registry.assets.get(&asset.id) {
+            let details = if asset.id.kind == AssetType::Mcp {
+                mcp_conflict_details(ctx, existing, &asset)?
+            } else {
+                Vec::new()
+            };
             plan.push(PlanItem {
                 kind: ActionKind::Check,
                 asset: Some(asset.id),
                 source: Some(asset.source),
                 target: None,
-                message: "asset already exists; would require conflict decision".to_string(),
+                message: if details.is_empty() {
+                    "asset already exists; identical MCP assets will only create mount records during apply".to_string()
+                } else {
+                    "MCP name conflict with different JSON; choose skip, overwrite, or rename".to_string()
+                },
                 risk: "medium",
+                details,
             });
             continue;
         }
@@ -336,6 +417,7 @@ pub fn scan_plan(ctx: &Context) -> Result<Plan> {
             target: Some(target),
             message: "import runtime asset into asset center".to_string(),
             risk: "medium",
+            details: Vec::new(),
         });
         if asset.id.kind != AssetType::Mcp {
             plan.push(PlanItem {
@@ -345,41 +427,137 @@ pub fn scan_plan(ctx: &Context) -> Result<Plan> {
                 target: Some(asset.source),
                 message: "replace runtime path with symlink".to_string(),
                 risk: "high",
+                details: Vec::new(),
             });
         } else {
             plan.push(PlanItem {
-                kind: ActionKind::CompileMcp,
+                kind: ActionKind::RegisterMount,
                 asset: Some(asset.id),
                 source: None,
                 target: Some(asset.runtime_root),
-                message: "compile MCP server into Claude config source".to_string(),
+                message: "register MCP mount; runtime JSON source is not rewritten during scan"
+                    .to_string(),
                 risk: "medium",
+                details: Vec::new(),
             });
         }
     }
     Ok(plan)
 }
 
-pub fn scan_apply(ctx: &Context) -> Result<Plan> {
+pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<Plan> {
     ensure_initialized(ctx)?;
     let mut registry = load_registry(ctx)?;
     let discovered = discover(ctx)?;
+    if let ConflictStrategy::Rename(_) = &conflict_strategy {
+        let conflict_count = discovered
+            .iter()
+            .filter(|asset| mcp_has_different_existing(ctx, &registry, asset).unwrap_or(false))
+            .count();
+        if conflict_count > 1 {
+            return Err(MaaError::new(
+                "rename conflict strategy can only be used when exactly one MCP conflict is present",
+            ));
+        }
+    }
     let backup_id = backup_id();
     let backup_root = ctx.asset_center.join("backups").join(&backup_id);
     let mut manifest = BackupManifest::new(backup_id.clone());
     let mut backed_up_sources = BTreeSet::<PathBuf>::new();
-    let mut changed_mcp_targets = BTreeSet::<(String, String)>::new();
     let mut plan = Plan::new("Scan apply");
 
     for asset in discovered {
-        if registry.assets.contains_key(&asset.id) {
+        if let Some(existing) = registry.assets.get(&asset.id).cloned() {
+            if asset.id.kind == AssetType::Mcp {
+                let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&existing.path))?;
+                let incoming_json = asset
+                    .mcp_config
+                    .clone()
+                    .ok_or_else(|| MaaError::new("MCP asset missing scanned config"))?;
+                if existing_json == incoming_json {
+                    let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
+                    add_mount_if_missing(
+                        &mut registry,
+                        asset.id.clone(),
+                        asset.runtime_root.clone(),
+                        Some(scope),
+                    );
+                    plan.push(PlanItem {
+                        kind: ActionKind::RegisterMount,
+                        asset: Some(asset.id),
+                        source: Some(asset.source),
+                        target: Some(asset.runtime_root),
+                        message:
+                            "MCP asset already exists with identical JSON; registered mount only"
+                                .to_string(),
+                        risk: "low",
+                        details: Vec::new(),
+                    });
+                    continue;
+                }
+
+                match &conflict_strategy {
+                    ConflictStrategy::Prompt => {
+                        return Err(MaaError::new(format!(
+                            "unresolved MCP conflict for {}. Run scan first to inspect JSON, then use --on-conflict skip|overwrite|rename",
+                            asset.id
+                        )));
+                    }
+                    ConflictStrategy::Skip => {
+                        plan.push(PlanItem {
+                            kind: ActionKind::Check,
+                            asset: Some(asset.id.clone()),
+                            source: Some(asset.source.clone()),
+                            target: None,
+                            message: "skipped conflicting MCP asset".to_string(),
+                            risk: "medium",
+                            details: mcp_conflict_details(ctx, &existing, &asset)?,
+                        });
+                        continue;
+                    }
+                    ConflictStrategy::Overwrite => {
+                        let asset_path = ctx.asset_center.join(&existing.path);
+                        fs::write(&asset_path, incoming_json.to_pretty_string())?;
+                        let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
+                        add_mount_if_missing(
+                            &mut registry,
+                            asset.id.clone(),
+                            asset.runtime_root.clone(),
+                            Some(scope.clone()),
+                        );
+                        plan.push(PlanItem {
+                            kind: ActionKind::ImportAsset,
+                            asset: Some(asset.id),
+                            source: Some(asset.source),
+                            target: Some(asset_path),
+                            message: "overwrote asset center MCP JSON and registered mount"
+                                .to_string(),
+                            risk: "high",
+                            details: Vec::new(),
+                        });
+                        continue;
+                    }
+                    ConflictStrategy::Rename(new_name) => {
+                        let renamed_id = AssetId::new(AssetType::Mcp, new_name);
+                        if registry.assets.contains_key(&renamed_id) {
+                            return Err(MaaError::new(format!(
+                                "rename target already exists: {renamed_id}"
+                            )));
+                        }
+                        import_new_mcp_asset(ctx, &mut registry, &asset, renamed_id, &mut plan)?;
+                        continue;
+                    }
+                }
+            }
             plan.push(PlanItem {
                 kind: ActionKind::Check,
                 asset: Some(asset.id),
                 source: Some(asset.source),
                 target: None,
-                message: "skipped existing asset; conflict decisions are not automatic".to_string(),
+                message: "skipped existing non-MCP asset; conflict decisions are not automatic"
+                    .to_string(),
                 risk: "medium",
+                details: Vec::new(),
             });
             continue;
         }
@@ -437,33 +615,7 @@ pub fn scan_apply(ctx: &Context) -> Result<Plan> {
                 if asset.source.exists() && backed_up_sources.insert(asset.source.clone()) {
                     backup_path(&asset.source, &backup_root, &mut manifest)?;
                 }
-                if let Some(config) = asset.mcp_config.clone() {
-                    if let Some(parent) = asset_path.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    fs::write(&asset_path, config.to_pretty_string())?;
-                }
-                registry.assets.insert(
-                    asset.id.clone(),
-                    AssetRecord {
-                        path: relative_to(&asset_path, &ctx.asset_center),
-                        file_name: None,
-                    },
-                );
-                let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
-                registry
-                    .mounts
-                    .entry(asset.id.clone())
-                    .or_default()
-                    .push(MountRecord {
-                        target: asset.runtime_root.clone(),
-                        scope: Some(scope.clone()),
-                    });
-                changed_mcp_targets.insert((
-                    scope.as_str().to_string(),
-                    asset.runtime_root.display().to_string(),
-                ));
-                plan.push(imported_item(&asset.id, &asset.source, &asset_path));
+                import_new_mcp_asset(ctx, &mut registry, &asset, asset.id.clone(), &mut plan)?;
             }
         }
     }
@@ -472,14 +624,6 @@ pub fn scan_apply(ctx: &Context) -> Result<Plan> {
     if !manifest.entries.is_empty() {
         fs::create_dir_all(&backup_root)?;
         fs::write(backup_root.join("manifest.txt"), manifest.render())?;
-    }
-    for (scope, target) in changed_mcp_targets {
-        compile_mcp_for_target(
-            ctx,
-            &registry,
-            &McpScope::parse(&scope)?,
-            Path::new(&target),
-        )?;
     }
     Ok(plan)
 }
@@ -550,6 +694,7 @@ pub fn mount_plan(
                 .unwrap_or_default()
         ),
         risk: "medium",
+        details: Vec::new(),
     });
     Ok(plan)
 }
@@ -573,7 +718,13 @@ pub fn mount_apply(
     match id.kind {
         AssetType::Skill => {
             let runtime_path = target.join(".claude/skills").join(&id.name);
-            if runtime_path.exists() {
+            if runtime_path.exists() || is_symlink(&runtime_path) {
+                if !is_symlink(&runtime_path) {
+                    return Err(MaaError::new(format!(
+                        "refusing to overwrite non-symlink runtime path without backup: {}",
+                        runtime_path.display()
+                    )));
+                }
                 remove_path(&runtime_path)?;
             }
             if let Some(parent) = runtime_path.parent() {
@@ -590,7 +741,13 @@ pub fn mount_apply(
                 .file_name
                 .unwrap_or_else(|| format!("{}.md", id.name));
             let runtime_path = target.join(".claude/commands").join(file_name);
-            if runtime_path.exists() {
+            if runtime_path.exists() || is_symlink(&runtime_path) {
+                if !is_symlink(&runtime_path) {
+                    return Err(MaaError::new(format!(
+                        "refusing to overwrite non-symlink runtime path without backup: {}",
+                        runtime_path.display()
+                    )));
+                }
                 remove_path(&runtime_path)?;
             }
             if let Some(parent) = runtime_path.parent() {
@@ -613,7 +770,7 @@ pub fn mount_apply(
                     scope: Some(mcp_scope.clone()),
                 });
             save_registry(ctx, &registry)?;
-            compile_mcp_for_target(ctx, &registry, &mcp_scope, &target)?;
+            compile_mcp_for_target(ctx, &registry, &mcp_scope, &target, &[])?;
             return Ok(plan);
         }
     }
@@ -639,7 +796,13 @@ pub fn unmount_apply(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan>
             )?,
             AssetType::Mcp => {
                 if let Some(scope) = &mount.scope {
-                    compile_mcp_for_target(ctx, &registry, scope, &mount.target)?;
+                    compile_mcp_for_target(
+                        ctx,
+                        &registry,
+                        scope,
+                        &mount.target,
+                        std::slice::from_ref(&id.name),
+                    )?;
                 }
             }
         }
@@ -653,6 +816,7 @@ pub fn unmount_apply(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan>
         target: None,
         message: "removed mount records and runtime materialization".to_string(),
         risk: "medium",
+        details: Vec::new(),
     });
     Ok(plan)
 }
@@ -673,13 +837,14 @@ pub fn remove_plan(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan> {
         target: None,
         message: "remove asset and all mounts".to_string(),
         risk: "high",
+        details: Vec::new(),
     });
     Ok(plan)
 }
 
 pub fn remove_apply(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan> {
     let plan = remove_plan(ctx, name, kind.clone())?;
-    let _ = unmount_apply(ctx, name, kind.clone());
+    unmount_apply(ctx, name, kind.clone())?;
     let mut registry = load_registry(ctx)?;
     let id = AssetId::new(kind, name);
     if let Some(record) = registry.assets.remove(&id) {
@@ -706,6 +871,7 @@ pub fn restore_plan(ctx: &Context, backup_id: &str) -> Result<Plan> {
             target: Some(entry.original),
             message: "restore runtime path from backup".to_string(),
             risk: "high",
+            details: Vec::new(),
         });
     }
     Ok(plan)
@@ -763,7 +929,106 @@ fn imported_item(id: &AssetId, source: &Path, target: &Path) -> PlanItem {
         target: Some(target.to_path_buf()),
         message: "imported asset".to_string(),
         risk: "medium",
+        details: Vec::new(),
     }
+}
+
+fn import_new_mcp_asset(
+    ctx: &Context,
+    registry: &mut Registry,
+    asset: &DiscoveredAsset,
+    id: AssetId,
+    plan: &mut Plan,
+) -> Result<()> {
+    let asset_path = asset_center_path(ctx, &id);
+    let config = asset
+        .mcp_config
+        .clone()
+        .ok_or_else(|| MaaError::new("MCP asset missing scanned config"))?;
+    if let Some(parent) = asset_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&asset_path, config.to_pretty_string())?;
+    registry.assets.insert(
+        id.clone(),
+        AssetRecord {
+            path: relative_to(&asset_path, &ctx.asset_center),
+            file_name: None,
+        },
+    );
+    let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
+    add_mount_if_missing(
+        registry,
+        id.clone(),
+        asset.runtime_root.clone(),
+        Some(scope.clone()),
+    );
+    plan.push(imported_item(&id, &asset.source, &asset_path));
+    Ok(())
+}
+
+fn add_mount_if_missing(
+    registry: &mut Registry,
+    id: AssetId,
+    target: PathBuf,
+    scope: Option<McpScope>,
+) {
+    let mounts = registry.mounts.entry(id).or_default();
+    if mounts
+        .iter()
+        .any(|mount| mount.target == target && mount.scope == scope)
+    {
+        return;
+    }
+    mounts.push(MountRecord { target, scope });
+}
+
+fn mcp_has_different_existing(
+    ctx: &Context,
+    registry: &Registry,
+    asset: &DiscoveredAsset,
+) -> Result<bool> {
+    if asset.id.kind != AssetType::Mcp {
+        return Ok(false);
+    }
+    let Some(record) = registry.assets.get(&asset.id) else {
+        return Ok(false);
+    };
+    let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&record.path))?;
+    let incoming_json = asset
+        .mcp_config
+        .clone()
+        .ok_or_else(|| MaaError::new("MCP asset missing scanned config"))?;
+    Ok(existing_json != incoming_json)
+}
+
+fn mcp_conflict_details(
+    ctx: &Context,
+    existing: &AssetRecord,
+    asset: &DiscoveredAsset,
+) -> Result<Vec<String>> {
+    if asset.id.kind != AssetType::Mcp {
+        return Ok(Vec::new());
+    }
+    let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&existing.path))?;
+    let incoming_json = asset
+        .mcp_config
+        .clone()
+        .ok_or_else(|| MaaError::new("MCP asset missing scanned config"))?;
+    if existing_json == incoming_json {
+        return Ok(Vec::new());
+    }
+    Ok(vec![
+        format!(
+            "asset-center-json:\n{}",
+            existing_json.to_pretty_string().trim_end()
+        ),
+        format!(
+            "scanned-runtime-json:\n{}",
+            incoming_json.to_pretty_string().trim_end()
+        ),
+        "resolve with: --on-conflict skip | --on-conflict overwrite | --on-conflict rename --rename-to <new-name>".to_string(),
+    ])
 }
 
 fn ensure_initialized(ctx: &Context) -> Result<()> {
@@ -822,11 +1087,29 @@ fn discover(ctx: &Context) -> Result<Vec<DiscoveredAsset>> {
     let user_claude = ctx.home.join(".claude");
     discover_claude_dir(&user_claude, &ctx.home, &mut out)?;
     discover_user_mcp(ctx, &mut out)?;
+    let max_depth = scan_max_depth(ctx)?;
     for root in scan_roots(ctx)? {
-        discover_projects(&root, 0, 5, &mut out)?;
+        discover_projects(&root, 0, max_depth, &mut out)?;
         discover_project_mcp(&root, &mut out)?;
     }
     Ok(out)
+}
+
+fn scan_max_depth(ctx: &Context) -> Result<usize> {
+    let config = ctx.asset_center.join("config.yaml");
+    if !config.exists() {
+        return Ok(5);
+    }
+    for line in fs::read_to_string(config)?.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("max_depth:") {
+            return value
+                .trim()
+                .parse::<usize>()
+                .map_err(|err| MaaError::new(format!("invalid max_depth: {err}")));
+        }
+    }
+    Ok(5)
 }
 
 fn scan_roots(ctx: &Context) -> Result<Vec<PathBuf>> {
@@ -1006,75 +1289,117 @@ fn load_registry(ctx: &Context) -> Result<Registry> {
     let mut registry = Registry::default();
     let assets = ctx.asset_center.join("assets.yaml");
     if assets.exists() {
-        for line in fs::read_to_string(assets)?.lines() {
-            if let Some(rest) = line.strip_prefix("asset|") {
-                let parts: Vec<&str> = rest.split('|').collect();
-                if parts.len() >= 4 {
-                    let kind = AssetType::parse(parts[0])?;
-                    let id = AssetId::new(kind, parts[1]);
-                    registry.assets.insert(
-                        id,
-                        AssetRecord {
-                            path: PathBuf::from(parts[2]),
-                            file_name: if parts[3].is_empty() {
-                                None
-                            } else {
-                                Some(parts[3].to_string())
-                            },
-                        },
-                    );
-                }
-            }
-        }
+        let disk: DiskAssetsFile = serde_yaml::from_str(&fs::read_to_string(assets)?)
+            .map_err(|err| MaaError::new(format!("failed to parse assets.yaml: {err}")))?;
+        load_asset_group(&mut registry, AssetType::Skill, disk.assets.skills);
+        load_asset_group(&mut registry, AssetType::Command, disk.assets.commands);
+        load_asset_group(&mut registry, AssetType::Mcp, disk.assets.mcps);
     }
     let mounts = ctx.asset_center.join("mounts.yaml");
     if mounts.exists() {
-        for line in fs::read_to_string(mounts)?.lines() {
-            if let Some(rest) = line.strip_prefix("mount|") {
-                let parts: Vec<&str> = rest.split('|').collect();
-                if parts.len() >= 4 {
-                    let id = AssetId::new(AssetType::parse(parts[0])?, parts[1]);
-                    registry.mounts.entry(id).or_default().push(MountRecord {
-                        target: PathBuf::from(parts[2]),
-                        scope: if parts[3].is_empty() {
-                            None
-                        } else {
-                            Some(McpScope::parse(parts[3])?)
-                        },
-                    });
-                }
-            }
-        }
+        let disk: DiskMountsFile = serde_yaml::from_str(&fs::read_to_string(mounts)?)
+            .map_err(|err| MaaError::new(format!("failed to parse mounts.yaml: {err}")))?;
+        load_mount_group(&mut registry, AssetType::Skill, disk.mounts.skills)?;
+        load_mount_group(&mut registry, AssetType::Command, disk.mounts.commands)?;
+        load_mount_group(&mut registry, AssetType::Mcp, disk.mounts.mcps)?;
     }
     Ok(registry)
 }
 
 fn save_registry(ctx: &Context, registry: &Registry) -> Result<()> {
-    let mut assets = String::from("assets:\n");
+    let mut assets = DiskAssetsFile::default();
     for (id, record) in &registry.assets {
-        assets.push_str(&format!(
-            "asset|{}|{}|{}|{}\n",
-            id.kind.singular(),
-            id.name,
-            record.path.display(),
-            record.file_name.clone().unwrap_or_default()
-        ));
+        let disk = DiskAssetRecord {
+            path: record.path.clone(),
+            file_name: record.file_name.clone(),
+            aliases: Vec::new(),
+        };
+        match id.kind {
+            AssetType::Skill => assets.assets.skills.insert(id.name.clone(), disk),
+            AssetType::Command => assets.assets.commands.insert(id.name.clone(), disk),
+            AssetType::Mcp => assets.assets.mcps.insert(id.name.clone(), disk),
+        };
     }
-    fs::write(ctx.asset_center.join("assets.yaml"), assets)?;
+    fs::write(
+        ctx.asset_center.join("assets.yaml"),
+        serde_yaml::to_string(&assets)
+            .map_err(|err| MaaError::new(format!("failed to write assets.yaml: {err}")))?,
+    )?;
 
-    let mut mounts = String::from("mounts:\n");
+    let mut mounts = DiskMountsFile::default();
     for (id, records) in &registry.mounts {
         for record in records {
-            mounts.push_str(&format!(
-                "mount|{}|{}|{}|{}\n",
-                id.kind.singular(),
-                id.name,
-                record.target.display(),
-                record.scope.as_ref().map(McpScope::as_str).unwrap_or("")
-            ));
+            let disk = DiskMountRecord {
+                target: record.target.clone(),
+                scope: record
+                    .scope
+                    .as_ref()
+                    .map(|scope| scope.as_str().to_string()),
+            };
+            match id.kind {
+                AssetType::Skill => mounts
+                    .mounts
+                    .skills
+                    .entry(id.name.clone())
+                    .or_default()
+                    .push(disk),
+                AssetType::Command => mounts
+                    .mounts
+                    .commands
+                    .entry(id.name.clone())
+                    .or_default()
+                    .push(disk),
+                AssetType::Mcp => mounts
+                    .mounts
+                    .mcps
+                    .entry(id.name.clone())
+                    .or_default()
+                    .push(disk),
+            }
         }
     }
-    fs::write(ctx.asset_center.join("mounts.yaml"), mounts)?;
+    fs::write(
+        ctx.asset_center.join("mounts.yaml"),
+        serde_yaml::to_string(&mounts)
+            .map_err(|err| MaaError::new(format!("failed to write mounts.yaml: {err}")))?,
+    )?;
+    Ok(())
+}
+
+fn load_asset_group(
+    registry: &mut Registry,
+    kind: AssetType,
+    group: BTreeMap<String, DiskAssetRecord>,
+) {
+    for (name, record) in group {
+        registry.assets.insert(
+            AssetId::new(kind.clone(), name),
+            AssetRecord {
+                path: record.path,
+                file_name: record.file_name,
+            },
+        );
+    }
+}
+
+fn load_mount_group(
+    registry: &mut Registry,
+    kind: AssetType,
+    group: BTreeMap<String, Vec<DiskMountRecord>>,
+) -> Result<()> {
+    for (name, records) in group {
+        let id = AssetId::new(kind.clone(), name);
+        for record in records {
+            registry
+                .mounts
+                .entry(id.clone())
+                .or_default()
+                .push(MountRecord {
+                    target: record.target,
+                    scope: record.scope.as_deref().map(McpScope::parse).transpose()?,
+                });
+        }
+    }
     Ok(())
 }
 
@@ -1083,14 +1408,10 @@ fn compile_mcp_for_target(
     registry: &Registry,
     scope: &McpScope,
     target: &Path,
+    extra_remove: &[String],
 ) -> Result<()> {
     let mut managed = BTreeMap::<String, JsonValue>::new();
-    let mut all_managed_names = BTreeSet::<String>::new();
-    for id in registry.assets.keys() {
-        if id.kind == AssetType::Mcp {
-            all_managed_names.insert(id.name.clone());
-        }
-    }
+    let mut names_to_replace = BTreeSet::<String>::new();
     for (id, mounts) in &registry.mounts {
         if id.kind != AssetType::Mcp {
             continue;
@@ -1099,18 +1420,22 @@ fn compile_mcp_for_target(
             .iter()
             .any(|m| m.target == target && m.scope.as_ref() == Some(scope));
         if mounted {
+            names_to_replace.insert(id.name.clone());
             if let Some(record) = registry.assets.get(id) {
                 let path = ctx.asset_center.join(&record.path);
                 managed.insert(id.name.clone(), JsonValue::parse_file(&path)?);
             }
         }
     }
+    for name in extra_remove {
+        names_to_replace.insert(name.clone());
+    }
 
     match scope {
         McpScope::User => {
             let path = ctx.home.join(".claude.json");
             let mut json = read_json_or_object(&path)?;
-            merge_mcp_servers(&mut json, &all_managed_names, managed);
+            merge_mcp_servers(&mut json, &names_to_replace, managed);
             fs::write(path, json.to_pretty_string())?;
         }
         McpScope::Local => {
@@ -1124,13 +1449,13 @@ fn compile_mcp_for_target(
             let project = projects
                 .entry(target.display().to_string())
                 .or_insert_with(|| JsonValue::Object(BTreeMap::new()));
-            merge_mcp_servers(project, &all_managed_names, managed);
+            merge_mcp_servers(project, &names_to_replace, managed);
             fs::write(path, json.to_pretty_string())?;
         }
         McpScope::Project => {
             let path = target.join(".mcp.json");
             let mut json = read_json_or_object(&path)?;
-            merge_mcp_servers(&mut json, &all_managed_names, managed);
+            merge_mcp_servers(&mut json, &names_to_replace, managed);
             fs::write(path, json.to_pretty_string())?;
         }
     }

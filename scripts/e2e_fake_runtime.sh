@@ -145,6 +145,24 @@ assert_json_key "$FAKE_HOME/.claude.json" '.projects["'"$PROJECT_A"'"].mcpServer
 assert_json_key "$PROJECT_A/.mcp.json" '."projectOnly"'
 assert_json_key "$PROJECT_A/.mcp.json" '.mcpServers["project-tool"]'
 
+jq '.mcpServers.github.args = ["github-mcp-v2"]' "$FAKE_HOME/.claude.json" >"$TMP_ROOT/claude-json.tmp"
+mv "$TMP_ROOT/claude-json.tmp" "$FAKE_HOME/.claude.json"
+"$BIN" --home "$FAKE_HOME" scan >/tmp/maa-mcp-conflict-plan.out
+grep -q 'asset-center-json' /tmp/maa-mcp-conflict-plan.out
+grep -q 'scanned-runtime-json' /tmp/maa-mcp-conflict-plan.out
+if "$BIN" --home "$FAKE_HOME" scan --apply >/tmp/maa-mcp-conflict-apply.out 2>&1; then
+  echo "expected unresolved MCP conflict to fail without a decision" >&2
+  exit 1
+fi
+"$BIN" --home "$FAKE_HOME" scan --apply --on-conflict rename --rename-to github-v2 >/tmp/maa-mcp-rename.out
+assert_file "$FAKE_HOME/.my-agent-assets/assets/mcps/github-v2.json"
+assert_json_key "$FAKE_HOME/.claude.json" '.mcpServers.github'
+jq -e '.mcpServers.github.args == ["github-mcp-v2"]' "$FAKE_HOME/.claude.json" >/dev/null
+if jq -e '.mcpServers["github-v2"]' "$FAKE_HOME/.claude.json" >/dev/null; then
+  echo "scan import should not compile renamed MCP into runtime immediately" >&2
+  exit 1
+fi
+
 "$BIN" --home "$FAKE_HOME" mount review --type skill --project "$PROJECT_A" --apply >/tmp/maa-mount.out
 assert_symlink "$PROJECT_A/.claude/skills/review"
 
@@ -162,7 +180,7 @@ if test -e "$FAKE_HOME/.my-agent-assets/assets/commands/deploy.md"; then
   exit 1
 fi
 
-BACKUP_ID="$(find "$FAKE_HOME/.my-agent-assets/backups" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | tail -n 1)"
+BACKUP_ID="$(grep -rl "$FAKE_HOME/.claude/skills/review" "$FAKE_HOME/.my-agent-assets/backups" | head -n 1 | xargs dirname | xargs basename)"
 test -n "$BACKUP_ID"
 "$BIN" --home "$FAKE_HOME" restore "$BACKUP_ID" --apply >/tmp/maa-restore.out
 assert_not_symlink "$FAKE_HOME/.claude/skills/review"

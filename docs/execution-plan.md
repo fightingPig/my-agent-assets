@@ -54,3 +54,6 @@ fake-home/.my-agent-assets/.git
 - No test invokes `claude mcp list` or `claude mcp get`.
 - No test writes to real `~/.claude`, `~/.claude.json`, or
   `~/.my-agent-assets`.
+- MCP conflict tests must verify that scan displays both JSON bodies, default
+  apply fails without a decision, and rename imports without rewriting the
+  original runtime JSON source.

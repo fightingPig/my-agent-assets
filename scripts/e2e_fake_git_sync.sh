@@ -7,6 +7,7 @@ TMP_ROOT="$(mktemp -d /tmp/my-agent-assets-git-e2e-XXXXXX)"
 FAKE_HOME="$TMP_ROOT/fake-home"
 FAKE_WORKSPACE="$TMP_ROOT/fake-workspace"
 PROJECT_A="$FAKE_WORKSPACE/project-a"
+BRANCH="e2e-$(date +%s)-$$"
 
 cleanup() {
   rm -rf "$TMP_ROOT"
@@ -76,12 +77,12 @@ DATA
 cd "$FAKE_HOME/.my-agent-assets"
 git config user.name "My Agent Assets E2E"
 git config user.email "my-agent-assets-e2e@example.invalid"
-git branch -M main
+git branch -M "$BRANCH"
 git remote remove origin >/dev/null 2>&1 || true
 git remote add origin "$REMOTE_URL"
 git add .
 git commit -m "test: sync fake asset center" >/tmp/maa-git-commit.out
-git push -u origin main >/tmp/maa-git-initial-push.out
+git push -u origin "$BRANCH" >/tmp/maa-git-initial-push.out
 
 printf 'remote sync check\n' >sync-check.txt
 git add sync-check.txt
@@ -90,4 +91,3 @@ git commit -m "test: verify maa sync push" >/tmp/maa-git-commit-2.out
 "$BIN" --home "$FAKE_HOME" sync pull >/tmp/maa-git-sync-pull.out
 
 echo "E2E fake git sync passed: $TMP_ROOT"
-

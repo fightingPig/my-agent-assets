@@ -1,7 +1,7 @@
 use my_agent_assets_core::{
     doctor, init_apply, init_plan, list_assets, mount_apply, mount_plan, remove_apply, remove_plan,
     restore_apply, restore_plan, scan_apply, scan_plan, status, sync_command, unmount_apply,
-    AssetType, Context, MaaError, McpScope, Result,
+    AssetType, ConflictStrategy, Context, MaaError, McpScope, Result,
 };
 use std::env;
 use std::path::PathBuf;
@@ -23,7 +23,10 @@ fn run() -> Result<()> {
     let home = take_option(&mut args, "--home")
         .map(PathBuf::from)
         .or_else(|| env::var("MY_AGENT_ASSETS_HOME").ok().map(PathBuf::from))
-        .unwrap_or(env::current_dir()?);
+        .or_else(default_home)
+        .ok_or_else(|| {
+            MaaError::new("could not determine home directory; pass --home explicitly")
+        })?;
     let ctx = Context::new(home);
     let apply = take_flag(&mut args, "--apply");
     let command = args.remove(0);
@@ -43,8 +46,9 @@ fn run() -> Result<()> {
             }
         }
         "scan" => {
+            let conflict_strategy = conflict_strategy(&mut args)?;
             let plan = if apply {
-                scan_apply(&ctx)?
+                scan_apply(&ctx, conflict_strategy)?
             } else {
                 scan_plan(&ctx)?
             };
@@ -132,10 +136,37 @@ fn run() -> Result<()> {
 fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
-Usage:\n  maa [--home <fake-home>] <command> [options]\n\n\
+Usage:\n  maa [--home <home>] <command> [options]\n\n\
 Commands:\n  init [--apply]\n  scan [--apply]\n  list\n  status\n  doctor\n  mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]\n  unmount <name> --type skill|command|mcp [--apply]\n  remove <name> --type skill|command|mcp [--apply]\n  restore <backup-id> [--apply]\n  sync pull|push\n\n\
-Environment:\n  MY_AGENT_ASSETS_HOME overrides the runtime home.\n"
+Scan conflict options:\n  --on-conflict skip|overwrite|rename [--rename-to <new-name>]\n\n\
+Environment:\n  MY_AGENT_ASSETS_HOME overrides the runtime home. Defaults to HOME/USERPROFILE.\n"
     );
+}
+
+fn default_home() -> Option<PathBuf> {
+    env::var("HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| env::var("USERPROFILE").ok().map(PathBuf::from))
+}
+
+fn conflict_strategy(args: &mut Vec<String>) -> Result<ConflictStrategy> {
+    let Some(value) = take_option(args, "--on-conflict") else {
+        return Ok(ConflictStrategy::Prompt);
+    };
+    match value.as_str() {
+        "skip" => Ok(ConflictStrategy::Skip),
+        "overwrite" => Ok(ConflictStrategy::Overwrite),
+        "rename" => {
+            let rename_to = take_option(args, "--rename-to").ok_or_else(|| {
+                MaaError::new("--rename-to is required with --on-conflict rename")
+            })?;
+            Ok(ConflictStrategy::Rename(rename_to))
+        }
+        other => Err(MaaError::new(format!(
+            "unknown conflict strategy: {other}; expected skip, overwrite, or rename"
+        ))),
+    }
 }
 
 fn target_for(

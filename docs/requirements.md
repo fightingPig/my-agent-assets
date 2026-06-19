@@ -61,6 +61,10 @@ maa sync push
 
 All mutating operations default to plan output. `--apply` performs changes.
 
+MCP conflicts require an explicit decision. When an incoming MCP has the same
+name as an existing asset but different JSON, the plan must show both original
+JSON values and require skip, overwrite, or rename.
+
 `maa init --apply` creates the asset center and initializes Git inside that
 asset center. It must not initialize Git in the runtime directory or source code
 checkout.
@@ -79,7 +83,8 @@ checkout.
 - `scan` does not mutate runtime files.
 - `scan --apply` imports fake runtime assets into a fake asset center.
 - Skill and Command runtime paths become symlinks after adoption.
-- MCP assets are extracted and compiled back to fake Claude config files.
+- MCP assets are extracted into the asset center without deleting or immediately
+  rewriting the original Claude JSON source.
 - Backup manifests are created for mutating adoption.
 - `restore --apply` restores fake runtime paths from backup.
 - Tests and e2e scripts never access real `~/.claude`, `~/.claude.json`, or
