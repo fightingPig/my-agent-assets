@@ -72,6 +72,9 @@ The file contains only the server config body. Compilation writes managed MCP
 servers back into the correct scope while preserving unknown top-level JSON
 fields and unmanaged MCP servers.
 
+JSON parsing and formatting uses `serde_json`; config and registry files use
+`serde_yaml`.
+
 During scan/import, MCP configs are extracted into the asset center and mount
 records are created, but the original Claude JSON source is not deleted and is
 not immediately rewritten. Explicit MCP mount/unmount operations compile the

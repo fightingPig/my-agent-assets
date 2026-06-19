@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Result<T> = std::result::Result<T, MaaError>;
@@ -141,7 +142,6 @@ pub enum ActionKind {
     RemoveMount,
     RemoveAsset,
     RestorePath,
-    Git,
     Check,
 }
 
@@ -157,7 +157,6 @@ impl ActionKind {
             Self::RemoveMount => "remove-mount",
             Self::RemoveAsset => "remove-asset",
             Self::RestorePath => "restore-path",
-            Self::Git => "git",
             Self::Check => "check",
         }
     }
@@ -322,6 +321,14 @@ struct DiskMountRecord {
     scope: Option<String>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct ConfigFile {
+    #[serde(default)]
+    scan_roots: Vec<String>,
+    #[serde(default)]
+    max_depth: Option<usize>,
+}
+
 pub fn init_plan(ctx: &Context) -> Plan {
     let mut plan = Plan::new("Init plan");
     for path in [
@@ -469,7 +476,7 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
     for asset in discovered {
         if let Some(existing) = registry.assets.get(&asset.id).cloned() {
             if asset.id.kind == AssetType::Mcp {
-                let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&existing.path))?;
+                let existing_json = parse_json_file(&ctx.asset_center.join(&existing.path))?;
                 let incoming_json = asset
                     .mcp_config
                     .clone()
@@ -517,7 +524,7 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
                     }
                     ConflictStrategy::Overwrite => {
                         let asset_path = ctx.asset_center.join(&existing.path);
-                        fs::write(&asset_path, incoming_json.to_pretty_string())?;
+                        fs::write(&asset_path, json_to_pretty(&incoming_json))?;
                         let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
                         add_mount_if_missing(
                             &mut registry,
@@ -572,7 +579,7 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
                 registry.assets.insert(
                     asset.id.clone(),
                     AssetRecord {
-                        path: relative_to(&asset_path, &ctx.asset_center),
+                        path: relative_to(&asset_path, &ctx.asset_center)?,
                         file_name: None,
                     },
                 );
@@ -597,7 +604,7 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
                 registry.assets.insert(
                     asset.id.clone(),
                     AssetRecord {
-                        path: relative_to(&asset_path, &ctx.asset_center),
+                        path: relative_to(&asset_path, &ctx.asset_center)?,
                         file_name: Some(format!("{}.md", asset.id.name)),
                     },
                 );
@@ -915,10 +922,35 @@ pub fn sync_command(ctx: &Context, op: &str) -> Result<String> {
     let mut text = String::new();
     text.push_str(&String::from_utf8_lossy(&output.stdout));
     text.push_str(&String::from_utf8_lossy(&output.stderr));
+    let text = sanitize_command_output(&text);
     if !output.status.success() {
         return Err(MaaError::new(text));
     }
     Ok(text)
+}
+
+fn sanitize_command_output(text: &str) -> String {
+    text.split_whitespace()
+        .map(sanitize_token)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn sanitize_token(token: &str) -> String {
+    let mut value = token.to_string();
+    for marker in ["gho_", "ghp_", "github_pat_"] {
+        if let Some(pos) = value.find(marker) {
+            value.truncate(pos + marker.len());
+            value.push_str("***");
+            return value;
+        }
+    }
+    if let Some(rest) = value.strip_prefix("https://") {
+        if let Some(at) = rest.find('@') {
+            return format!("https://***@{}", &rest[at + 1..]);
+        }
+    }
+    value
 }
 
 fn imported_item(id: &AssetId, source: &Path, target: &Path) -> PlanItem {
@@ -948,11 +980,11 @@ fn import_new_mcp_asset(
     if let Some(parent) = asset_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&asset_path, config.to_pretty_string())?;
+    fs::write(&asset_path, json_to_pretty(&config))?;
     registry.assets.insert(
         id.clone(),
         AssetRecord {
-            path: relative_to(&asset_path, &ctx.asset_center),
+            path: relative_to(&asset_path, &ctx.asset_center)?,
             file_name: None,
         },
     );
@@ -994,7 +1026,7 @@ fn mcp_has_different_existing(
     let Some(record) = registry.assets.get(&asset.id) else {
         return Ok(false);
     };
-    let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&record.path))?;
+    let existing_json = parse_json_file(&ctx.asset_center.join(&record.path))?;
     let incoming_json = asset
         .mcp_config
         .clone()
@@ -1010,7 +1042,7 @@ fn mcp_conflict_details(
     if asset.id.kind != AssetType::Mcp {
         return Ok(Vec::new());
     }
-    let existing_json = JsonValue::parse_file(&ctx.asset_center.join(&existing.path))?;
+    let existing_json = parse_json_file(&ctx.asset_center.join(&existing.path))?;
     let incoming_json = asset
         .mcp_config
         .clone()
@@ -1021,11 +1053,11 @@ fn mcp_conflict_details(
     Ok(vec![
         format!(
             "asset-center-json:\n{}",
-            existing_json.to_pretty_string().trim_end()
+            json_to_pretty(&existing_json).trim_end()
         ),
         format!(
             "scanned-runtime-json:\n{}",
-            incoming_json.to_pretty_string().trim_end()
+            json_to_pretty(&incoming_json).trim_end()
         ),
         "resolve with: --on-conflict skip | --on-conflict overwrite | --on-conflict rename --rename-to <new-name>".to_string(),
     ])
@@ -1096,42 +1128,25 @@ fn discover(ctx: &Context) -> Result<Vec<DiscoveredAsset>> {
 }
 
 fn scan_max_depth(ctx: &Context) -> Result<usize> {
-    let config = ctx.asset_center.join("config.yaml");
-    if !config.exists() {
-        return Ok(5);
-    }
-    for line in fs::read_to_string(config)?.lines() {
-        let trimmed = line.trim();
-        if let Some(value) = trimmed.strip_prefix("max_depth:") {
-            return value
-                .trim()
-                .parse::<usize>()
-                .map_err(|err| MaaError::new(format!("invalid max_depth: {err}")));
-        }
-    }
-    Ok(5)
+    Ok(load_config(ctx)?.max_depth.unwrap_or(5))
 }
 
 fn scan_roots(ctx: &Context) -> Result<Vec<PathBuf>> {
-    let config = ctx.asset_center.join("config.yaml");
-    let mut roots = Vec::new();
-    if config.exists() {
-        let text = fs::read_to_string(config)?;
-        let mut in_roots = false;
-        for line in text.lines() {
-            let trimmed = line.trim();
-            if trimmed == "scan_roots:" {
-                in_roots = true;
-                continue;
-            }
-            if in_roots && trimmed.starts_with("- ") {
-                roots.push(expand_home(ctx, trimmed.trim_start_matches("- ").trim()));
-            } else if in_roots && !trimmed.is_empty() && !line.starts_with(' ') {
-                in_roots = false;
-            }
-        }
-    }
+    let roots = load_config(ctx)?
+        .scan_roots
+        .iter()
+        .map(|root| expand_home(ctx, root))
+        .collect::<Vec<_>>();
     Ok(roots.into_iter().filter(|p| p.exists()).collect())
+}
+
+fn load_config(ctx: &Context) -> Result<ConfigFile> {
+    let path = ctx.asset_center.join("config.yaml");
+    if !path.exists() {
+        return Ok(ConfigFile::default());
+    }
+    serde_yaml::from_str(&fs::read_to_string(path)?)
+        .map_err(|err| MaaError::new(format!("failed to parse config.yaml: {err}")))
 }
 
 fn expand_home(ctx: &Context, value: &str) -> PathBuf {
@@ -1157,7 +1172,11 @@ fn discover_projects(
     if claude.is_dir() {
         discover_claude_dir(&claude, root, out)?;
     }
-    for entry in fs::read_dir(root).or_else(|_| fs::read_dir(Path::new("/nonexistent")))? {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() && !is_symlink(&path) {
@@ -1214,11 +1233,11 @@ fn discover_user_mcp(ctx: &Context, out: &mut Vec<DiscoveredAsset>) -> Result<()
     if !path.exists() {
         return Ok(());
     }
-    let json = JsonValue::parse_file(&path)?;
-    if let Some(servers) = json.get("mcpServers").and_then(JsonValue::as_object) {
+    let json = parse_json_file(&path)?;
+    if let Some(servers) = json.get("mcpServers").and_then(|value| value.as_object()) {
         for (name, config) in servers {
             out.push(DiscoveredAsset {
-                id: AssetId::new(AssetType::Mcp, name),
+                id: AssetId::new(AssetType::Mcp, name.clone()),
                 source: path.clone(),
                 runtime_root: ctx.home.clone(),
                 mcp_scope: Some(McpScope::User),
@@ -1226,17 +1245,17 @@ fn discover_user_mcp(ctx: &Context, out: &mut Vec<DiscoveredAsset>) -> Result<()
             });
         }
     }
-    if let Some(projects) = json.get("projects").and_then(JsonValue::as_object) {
+    if let Some(projects) = json.get("projects").and_then(|value| value.as_object()) {
         for (project_path, project_value) in projects {
             if let Some(servers) = project_value
                 .get("mcpServers")
-                .and_then(JsonValue::as_object)
+                .and_then(|value| value.as_object())
             {
                 for (name, config) in servers {
                     out.push(DiscoveredAsset {
-                        id: AssetId::new(AssetType::Mcp, name),
+                        id: AssetId::new(AssetType::Mcp, name.clone()),
                         source: path.clone(),
-                        runtime_root: PathBuf::from(project_path),
+                        runtime_root: PathBuf::from(project_path.clone()),
                         mcp_scope: Some(McpScope::Local),
                         mcp_config: Some(config.clone()),
                     });
@@ -1250,11 +1269,11 @@ fn discover_user_mcp(ctx: &Context, out: &mut Vec<DiscoveredAsset>) -> Result<()
 fn discover_project_mcp(root: &Path, out: &mut Vec<DiscoveredAsset>) -> Result<()> {
     let path = root.join(".mcp.json");
     if path.exists() {
-        let json = JsonValue::parse_file(&path)?;
-        if let Some(servers) = json.get("mcpServers").and_then(JsonValue::as_object) {
+        let json = parse_json_file(&path)?;
+        if let Some(servers) = json.get("mcpServers").and_then(|value| value.as_object()) {
             for (name, config) in servers {
                 out.push(DiscoveredAsset {
-                    id: AssetId::new(AssetType::Mcp, name),
+                    id: AssetId::new(AssetType::Mcp, name.clone()),
                     source: path.clone(),
                     runtime_root: root.to_path_buf(),
                     mcp_scope: Some(McpScope::Project),
@@ -1263,7 +1282,11 @@ fn discover_project_mcp(root: &Path, out: &mut Vec<DiscoveredAsset>) -> Result<(
             }
         }
     }
-    for entry in fs::read_dir(root).or_else(|_| fs::read_dir(Path::new("/nonexistent")))? {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries {
         let path = entry?.path();
         if path.is_dir() && !should_skip_dir(&path) && !is_symlink(&path) {
             discover_project_mcp(&path, out)?;
@@ -1423,7 +1446,7 @@ fn compile_mcp_for_target(
             names_to_replace.insert(id.name.clone());
             if let Some(record) = registry.assets.get(id) {
                 let path = ctx.asset_center.join(&record.path);
-                managed.insert(id.name.clone(), JsonValue::parse_file(&path)?);
+                managed.insert(id.name.clone(), parse_json_file(&path)?);
             }
         }
     }
@@ -1436,27 +1459,27 @@ fn compile_mcp_for_target(
             let path = ctx.home.join(".claude.json");
             let mut json = read_json_or_object(&path)?;
             merge_mcp_servers(&mut json, &names_to_replace, managed);
-            fs::write(path, json.to_pretty_string())?;
+            fs::write(path, json_to_pretty(&json))?;
         }
         McpScope::Local => {
             let path = ctx.home.join(".claude.json");
             let mut json = read_json_or_object(&path)?;
-            let obj = json.as_object_mut_or_insert();
-            let projects = obj
+            let obj = ensure_json_object(&mut json);
+            let projects_value = obj
                 .entry("projects".to_string())
-                .or_insert_with(|| JsonValue::Object(BTreeMap::new()))
-                .as_object_mut_or_insert();
+                .or_insert_with(json_object);
+            let projects = ensure_json_object(projects_value);
             let project = projects
                 .entry(target.display().to_string())
-                .or_insert_with(|| JsonValue::Object(BTreeMap::new()));
+                .or_insert_with(json_object);
             merge_mcp_servers(project, &names_to_replace, managed);
-            fs::write(path, json.to_pretty_string())?;
+            fs::write(path, json_to_pretty(&json))?;
         }
         McpScope::Project => {
             let path = target.join(".mcp.json");
             let mut json = read_json_or_object(&path)?;
             merge_mcp_servers(&mut json, &names_to_replace, managed);
-            fs::write(path, json.to_pretty_string())?;
+            fs::write(path, json_to_pretty(&json))?;
         }
     }
     Ok(())
@@ -1464,9 +1487,9 @@ fn compile_mcp_for_target(
 
 fn read_json_or_object(path: &Path) -> Result<JsonValue> {
     if path.exists() {
-        JsonValue::parse_file(path)
+        parse_json_file(path)
     } else {
-        Ok(JsonValue::Object(BTreeMap::new()))
+        Ok(json_object())
     }
 }
 
@@ -1475,11 +1498,11 @@ fn merge_mcp_servers(
     all_managed_names: &BTreeSet<String>,
     managed: BTreeMap<String, JsonValue>,
 ) {
-    let obj = json.as_object_mut_or_insert();
-    let servers = obj
+    let obj = ensure_json_object(json);
+    let servers_value = obj
         .entry("mcpServers".to_string())
-        .or_insert_with(|| JsonValue::Object(BTreeMap::new()))
-        .as_object_mut_or_insert();
+        .or_insert_with(json_object);
+    let servers = ensure_json_object(servers_value);
     for name in all_managed_names {
         servers.remove(name);
     }
@@ -1489,11 +1512,13 @@ fn merge_mcp_servers(
 }
 
 fn backup_id() -> String {
-    let millis = SystemTime::now()
+    static BACKUP_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_millis();
-    format!("backup-{millis}")
+        .as_nanos();
+    let seq = BACKUP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("backup-{nanos}-{}-{seq}", std::process::id())
 }
 
 #[derive(Debug)]
@@ -1604,8 +1629,14 @@ fn remove_path_if_symlink(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn relative_to(path: &Path, base: &Path) -> PathBuf {
-    path.strip_prefix(base).unwrap_or(path).to_path_buf()
+fn relative_to(path: &Path, base: &Path) -> Result<PathBuf> {
+    path.strip_prefix(base).map(Path::to_path_buf).map_err(|_| {
+        MaaError::new(format!(
+            "{} is not inside {}",
+            path.display(),
+            base.display()
+        ))
+    })
 }
 
 #[cfg(unix)]
@@ -1640,311 +1671,29 @@ fn create_symlink(src: &Path, dst: &Path) -> Result<()> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum JsonValue {
-    Null,
-    Bool(bool),
-    Number(String),
-    String(String),
-    Array(Vec<JsonValue>),
-    Object(BTreeMap<String, JsonValue>),
+fn parse_json_file(path: &Path) -> Result<JsonValue> {
+    let text = fs::read_to_string(path)?;
+    serde_json::from_str(&text)
+        .map_err(|err| MaaError::new(format!("failed to parse JSON {}: {err}", path.display())))
 }
 
-impl JsonValue {
-    pub fn parse_file(path: &Path) -> Result<Self> {
-        let mut text = String::new();
-        fs::File::open(path)?.read_to_string(&mut text)?;
-        JsonParser::new(&text).parse()
-    }
-
-    pub fn get(&self, key: &str) -> Option<&JsonValue> {
-        match self {
-            JsonValue::Object(map) => map.get(key),
-            _ => None,
-        }
-    }
-
-    pub fn as_object(&self) -> Option<&BTreeMap<String, JsonValue>> {
-        match self {
-            JsonValue::Object(map) => Some(map),
-            _ => None,
-        }
-    }
-
-    fn as_object_mut_or_insert(&mut self) -> &mut BTreeMap<String, JsonValue> {
-        if !matches!(self, JsonValue::Object(_)) {
-            *self = JsonValue::Object(BTreeMap::new());
-        }
-        match self {
-            JsonValue::Object(map) => map,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn to_pretty_string(&self) -> String {
-        let mut out = String::new();
-        self.write_pretty(&mut out, 0);
-        out.push('\n');
-        out
-    }
-
-    fn write_pretty(&self, out: &mut String, indent: usize) {
-        match self {
-            JsonValue::Null => out.push_str("null"),
-            JsonValue::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
-            JsonValue::Number(v) => out.push_str(v),
-            JsonValue::String(v) => {
-                out.push('"');
-                for ch in v.chars() {
-                    match ch {
-                        '"' => out.push_str("\\\""),
-                        '\\' => out.push_str("\\\\"),
-                        '\n' => out.push_str("\\n"),
-                        '\r' => out.push_str("\\r"),
-                        '\t' => out.push_str("\\t"),
-                        other => out.push(other),
-                    }
-                }
-                out.push('"');
-            }
-            JsonValue::Array(items) => {
-                if items.is_empty() {
-                    out.push_str("[]");
-                    return;
-                }
-                out.push_str("[\n");
-                for (idx, item) in items.iter().enumerate() {
-                    out.push_str(&" ".repeat(indent + 2));
-                    item.write_pretty(out, indent + 2);
-                    if idx + 1 != items.len() {
-                        out.push(',');
-                    }
-                    out.push('\n');
-                }
-                out.push_str(&" ".repeat(indent));
-                out.push(']');
-            }
-            JsonValue::Object(map) => {
-                if map.is_empty() {
-                    out.push_str("{}");
-                    return;
-                }
-                out.push_str("{\n");
-                for (idx, (key, value)) in map.iter().enumerate() {
-                    out.push_str(&" ".repeat(indent + 2));
-                    JsonValue::String(key.clone()).write_pretty(out, indent + 2);
-                    out.push_str(": ");
-                    value.write_pretty(out, indent + 2);
-                    if idx + 1 != map.len() {
-                        out.push(',');
-                    }
-                    out.push('\n');
-                }
-                out.push_str(&" ".repeat(indent));
-                out.push('}');
-            }
-        }
-    }
+fn json_to_pretty(value: &JsonValue) -> String {
+    let mut text = serde_json::to_string_pretty(value).unwrap_or_else(|_| "null".to_string());
+    text.push('\n');
+    text
 }
 
-struct JsonParser<'a> {
-    chars: Vec<char>,
-    pos: usize,
-    source: &'a str,
+fn json_object() -> JsonValue {
+    JsonValue::Object(JsonMap::new())
 }
 
-impl<'a> JsonParser<'a> {
-    fn new(source: &'a str) -> Self {
-        Self {
-            chars: source.chars().collect(),
-            pos: 0,
-            source,
-        }
+fn ensure_json_object(value: &mut JsonValue) -> &mut JsonMap<String, JsonValue> {
+    if !value.is_object() {
+        *value = json_object();
     }
-
-    fn parse(mut self) -> Result<JsonValue> {
-        let value = self.parse_value()?;
-        self.skip_ws();
-        if self.pos != self.chars.len() {
-            return Err(MaaError::new("unexpected trailing JSON content"));
-        }
-        Ok(value)
-    }
-
-    fn parse_value(&mut self) -> Result<JsonValue> {
-        self.skip_ws();
-        match self.peek() {
-            Some('{') => self.parse_object(),
-            Some('[') => self.parse_array(),
-            Some('"') => self.parse_string().map(JsonValue::String),
-            Some('t') => {
-                self.expect_literal("true")?;
-                Ok(JsonValue::Bool(true))
-            }
-            Some('f') => {
-                self.expect_literal("false")?;
-                Ok(JsonValue::Bool(false))
-            }
-            Some('n') => {
-                self.expect_literal("null")?;
-                Ok(JsonValue::Null)
-            }
-            Some('-' | '0'..='9') => self.parse_number().map(JsonValue::Number),
-            Some(ch) => Err(MaaError::new(format!("unexpected JSON character: {ch}"))),
-            None => Err(MaaError::new("unexpected end of JSON")),
-        }
-    }
-
-    fn parse_object(&mut self) -> Result<JsonValue> {
-        self.bump();
-        let mut map = BTreeMap::new();
-        loop {
-            self.skip_ws();
-            if self.peek() == Some('}') {
-                self.bump();
-                break;
-            }
-            let key = self.parse_string()?;
-            self.skip_ws();
-            self.expect(':')?;
-            let value = self.parse_value()?;
-            map.insert(key, value);
-            self.skip_ws();
-            match self.peek() {
-                Some(',') => {
-                    self.bump();
-                }
-                Some('}') => {
-                    self.bump();
-                    break;
-                }
-                _ => return Err(MaaError::new("expected comma or object close")),
-            }
-        }
-        Ok(JsonValue::Object(map))
-    }
-
-    fn parse_array(&mut self) -> Result<JsonValue> {
-        self.bump();
-        let mut items = Vec::new();
-        loop {
-            self.skip_ws();
-            if self.peek() == Some(']') {
-                self.bump();
-                break;
-            }
-            items.push(self.parse_value()?);
-            self.skip_ws();
-            match self.peek() {
-                Some(',') => {
-                    self.bump();
-                }
-                Some(']') => {
-                    self.bump();
-                    break;
-                }
-                _ => return Err(MaaError::new("expected comma or array close")),
-            }
-        }
-        Ok(JsonValue::Array(items))
-    }
-
-    fn parse_string(&mut self) -> Result<String> {
-        self.expect('"')?;
-        let mut out = String::new();
-        while let Some(ch) = self.bump() {
-            match ch {
-                '"' => return Ok(out),
-                '\\' => match self.bump() {
-                    Some('"') => out.push('"'),
-                    Some('\\') => out.push('\\'),
-                    Some('/') => out.push('/'),
-                    Some('b') => out.push('\u{0008}'),
-                    Some('f') => out.push('\u{000c}'),
-                    Some('n') => out.push('\n'),
-                    Some('r') => out.push('\r'),
-                    Some('t') => out.push('\t'),
-                    Some('u') => {
-                        let mut code = String::new();
-                        for _ in 0..4 {
-                            code.push(
-                                self.bump()
-                                    .ok_or_else(|| MaaError::new("unterminated unicode escape"))?,
-                            );
-                        }
-                        let value = u16::from_str_radix(&code, 16)
-                            .map_err(|_| MaaError::new("invalid unicode escape"))?;
-                        if let Some(decoded) = char::from_u32(value as u32) {
-                            out.push(decoded);
-                        }
-                    }
-                    Some(other) => return Err(MaaError::new(format!("invalid escape: {other}"))),
-                    None => return Err(MaaError::new("unterminated escape")),
-                },
-                other => out.push(other),
-            }
-        }
-        Err(MaaError::new("unterminated string"))
-    }
-
-    fn parse_number(&mut self) -> Result<String> {
-        let start = self.pos;
-        if self.peek() == Some('-') {
-            self.bump();
-        }
-        while matches!(self.peek(), Some('0'..='9')) {
-            self.bump();
-        }
-        if self.peek() == Some('.') {
-            self.bump();
-            while matches!(self.peek(), Some('0'..='9')) {
-                self.bump();
-            }
-        }
-        if matches!(self.peek(), Some('e' | 'E')) {
-            self.bump();
-            if matches!(self.peek(), Some('+' | '-')) {
-                self.bump();
-            }
-            while matches!(self.peek(), Some('0'..='9')) {
-                self.bump();
-            }
-        }
-        Ok(self.chars[start..self.pos].iter().collect())
-    }
-
-    fn expect_literal(&mut self, literal: &str) -> Result<()> {
-        for expected in literal.chars() {
-            self.expect(expected)?;
-        }
-        Ok(())
-    }
-
-    fn expect(&mut self, expected: char) -> Result<()> {
-        match self.bump() {
-            Some(ch) if ch == expected => Ok(()),
-            _ => Err(MaaError::new(format!(
-                "expected '{expected}' in JSON: {}",
-                self.source
-            ))),
-        }
-    }
-
-    fn skip_ws(&mut self) {
-        while matches!(self.peek(), Some(' ' | '\n' | '\r' | '\t')) {
-            self.bump();
-        }
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
-    }
-
-    fn bump(&mut self) -> Option<char> {
-        let ch = self.peek()?;
-        self.pos += 1;
-        Some(ch)
-    }
+    value
+        .as_object_mut()
+        .expect("value was just forced to object")
 }
 
 #[cfg(test)]
@@ -1959,10 +1708,91 @@ mod tests {
 
     #[test]
     fn parses_and_preserves_json_objects() {
-        let json = JsonParser::new(r#"{"mcpServers":{"github":{"command":"npx","args":["x"]}}}"#)
-            .parse()
-            .unwrap();
+        let json: JsonValue =
+            serde_json::from_str(r#"{"mcpServers":{"github":{"command":"npx","args":["x"]}}}"#)
+                .unwrap();
         assert!(json.get("mcpServers").is_some());
-        assert!(json.to_pretty_string().contains("\"github\""));
+        assert!(json_to_pretty(&json).contains("\"github\""));
+    }
+
+    #[test]
+    fn serde_json_handles_unicode_surrogate_pairs() {
+        let json: JsonValue = serde_json::from_str(r#"{"emoji":"\uD83D\uDE00"}"#).unwrap();
+        assert_eq!(json["emoji"], "😀");
+    }
+
+    #[test]
+    fn config_yaml_supports_comments_and_max_depth() {
+        let root = test_dir("config-yaml");
+        let ctx = Context::new(root.clone());
+        fs::create_dir_all(&ctx.asset_center).unwrap();
+        fs::create_dir_all(root.join("workspace with spaces")).unwrap();
+        fs::write(
+            ctx.asset_center.join("config.yaml"),
+            "scan_roots:\n  - \"~/workspace with spaces\" # comment\nmax_depth: 2\n",
+        )
+        .unwrap();
+        assert_eq!(scan_max_depth(&ctx).unwrap(), 2);
+        assert_eq!(
+            scan_roots(&ctx).unwrap(),
+            vec![root.join("workspace with spaces")]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn registry_round_trips_as_yaml() {
+        let root = test_dir("registry-yaml");
+        let ctx = Context::new(root.clone());
+        init_apply(&ctx).unwrap();
+        let mut registry = Registry::default();
+        registry.assets.insert(
+            AssetId::new(AssetType::Command, "commit"),
+            AssetRecord {
+                path: PathBuf::from("assets/commands/commit.md"),
+                file_name: Some("commit.md".to_string()),
+            },
+        );
+        registry.mounts.insert(
+            AssetId::new(AssetType::Command, "commit"),
+            vec![MountRecord {
+                target: root.clone(),
+                scope: None,
+            }],
+        );
+        save_registry(&ctx, &registry).unwrap();
+        let assets = fs::read_to_string(ctx.asset_center.join("assets.yaml")).unwrap();
+        assert!(assets.contains("commands:"));
+        let loaded = load_registry(&ctx).unwrap();
+        assert!(loaded
+            .assets
+            .contains_key(&AssetId::new(AssetType::Command, "commit")));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn backup_ids_are_not_equal_for_quick_successive_calls() {
+        let first = backup_id();
+        let second = backup_id();
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn relative_to_rejects_paths_outside_base() {
+        let err = relative_to(Path::new("/tmp/outside"), Path::new("/var/base")).unwrap_err();
+        assert!(err.to_string().contains("is not inside"));
+    }
+
+    fn test_dir(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "my-agent-assets-test-{name}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
     }
 }
