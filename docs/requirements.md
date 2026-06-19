@@ -89,3 +89,5 @@ checkout.
 - `restore --apply` restores fake runtime paths from backup.
 - Tests and e2e scripts never access real `~/.claude`, `~/.claude.json`, or
   `~/.my-agent-assets`.
+- Restore rejects unsafe backup ids and manifests that reference paths outside
+  allowed runtime roots.

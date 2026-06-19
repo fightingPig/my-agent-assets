@@ -57,3 +57,6 @@ fake-home/.my-agent-assets/.git
 - MCP conflict tests must verify that scan displays both JSON bodies, default
   apply fails without a decision, and rename imports without rewriting the
   original runtime JSON source.
+- Security tests must cover restore path traversal rejection, malformed backup
+  manifests, git output sanitization, YAML config parsing, and registry
+  round-tripping.

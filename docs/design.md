@@ -75,6 +75,10 @@ fields and unmanaged MCP servers.
 JSON parsing and formatting uses `serde_json`; config and registry files use
 `serde_yaml`.
 
+Backups are restored only after validating the backup id and manifest paths.
+Restore targets must be inside the configured home or scan roots, and backup
+entries must point inside the selected backup directory.
+
 During scan/import, MCP configs are extracted into the asset center and mount
 records are created, but the original Claude JSON source is not deleted and is
 not immediately rewritten. Explicit MCP mount/unmount operations compile the
@@ -111,3 +115,6 @@ maa sync push
 ```
 
 `scan` never performs hidden network or Git operations.
+
+Git command output is sanitized before being returned to avoid leaking embedded
+credentials from remotes.

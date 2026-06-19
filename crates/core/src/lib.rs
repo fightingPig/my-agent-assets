@@ -3,6 +3,7 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -291,7 +292,7 @@ struct DiskAssetGroups {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DiskAssetRecord {
-    path: PathBuf,
+    path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     file_name: Option<String>,
     #[serde(default)]
@@ -378,9 +379,8 @@ pub fn init_apply(ctx: &Context) -> Result<Plan> {
     write_if_missing(
         &ctx.asset_center.join("config.yaml"),
         &format!(
-            "asset_center: {}\ngit_repo:\nscan_roots:\n  - {}/workspace\nmax_depth: 5\nruntime:\n  provider: claude\n",
-            ctx.asset_center.display(),
-            ctx.home.display()
+            "asset_center: {}\ngit_repo:\nscan_roots: []\nmax_depth: 5\nruntime:\n  provider: claude\n",
+            ctx.asset_center.display()
         ),
     )?;
     write_if_missing(&ctx.asset_center.join("assets.yaml"), "assets: {}\n")?;
@@ -524,7 +524,7 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
                     }
                     ConflictStrategy::Overwrite => {
                         let asset_path = ctx.asset_center.join(&existing.path);
-                        fs::write(&asset_path, json_to_pretty(&incoming_json))?;
+                        write_text_atomic(&asset_path, &json_to_pretty(&incoming_json)?)?;
                         let scope = asset.mcp_scope.clone().unwrap_or(McpScope::User);
                         add_mount_if_missing(
                             &mut registry,
@@ -564,7 +564,9 @@ pub fn scan_apply(ctx: &Context, conflict_strategy: ConflictStrategy) -> Result<
                 message: "skipped existing non-MCP asset; conflict decisions are not automatic"
                     .to_string(),
                 risk: "medium",
-                details: Vec::new(),
+                details: vec![
+                    "resolve manually: remove the existing asset or rename the runtime asset before scanning again".to_string(),
+                ],
             });
             continue;
         }
@@ -776,8 +778,8 @@ pub fn mount_apply(
                     target: target.clone(),
                     scope: Some(mcp_scope.clone()),
                 });
-            save_registry(ctx, &registry)?;
             compile_mcp_for_target(ctx, &registry, &mcp_scope, &target, &[])?;
+            save_registry(ctx, &registry)?;
             return Ok(plan);
         }
     }
@@ -863,12 +865,9 @@ pub fn remove_apply(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan> 
 }
 
 pub fn restore_plan(ctx: &Context, backup_id: &str) -> Result<Plan> {
-    let manifest = BackupManifest::load(
-        &ctx.asset_center
-            .join("backups")
-            .join(backup_id)
-            .join("manifest.txt"),
-    )?;
+    let backup_root = backup_root_for(ctx, backup_id)?;
+    let manifest = BackupManifest::load(&backup_root.join("manifest.txt"))?;
+    validate_restore_manifest(ctx, &backup_root, &manifest)?;
     let mut plan = Plan::new("Restore plan");
     for entry in manifest.entries {
         plan.push(PlanItem {
@@ -886,12 +885,9 @@ pub fn restore_plan(ctx: &Context, backup_id: &str) -> Result<Plan> {
 
 pub fn restore_apply(ctx: &Context, backup_id: &str) -> Result<Plan> {
     let plan = restore_plan(ctx, backup_id)?;
-    let manifest = BackupManifest::load(
-        &ctx.asset_center
-            .join("backups")
-            .join(backup_id)
-            .join("manifest.txt"),
-    )?;
+    let backup_root = backup_root_for(ctx, backup_id)?;
+    let manifest = BackupManifest::load(&backup_root.join("manifest.txt"))?;
+    validate_restore_manifest(ctx, &backup_root, &manifest)?;
     for entry in manifest.entries {
         if entry.original.exists() {
             remove_path(&entry.original)?;
@@ -910,15 +906,16 @@ pub fn restore_apply(ctx: &Context, backup_id: &str) -> Result<Plan> {
 
 pub fn sync_command(ctx: &Context, op: &str) -> Result<String> {
     ensure_initialized(ctx)?;
-    let args = match op {
-        "pull" => ["pull"].as_slice(),
-        "push" => ["push"].as_slice(),
+    let args: &[&str] = match op {
+        "pull" => &["--no-pager", "-c", "pull.ff=only", "pull", "--ff-only"],
+        "push" => &["--no-pager", "-c", "push.default=simple", "push"],
         other => return Err(MaaError::new(format!("unknown sync operation: {other}"))),
     };
     let output = Command::new("git")
         .args(args)
         .current_dir(&ctx.asset_center)
-        .output()?;
+        .output()
+        .map_err(git_command_error)?;
     let mut text = String::new();
     text.push_str(&String::from_utf8_lossy(&output.stdout));
     text.push_str(&String::from_utf8_lossy(&output.stderr));
@@ -930,27 +927,42 @@ pub fn sync_command(ctx: &Context, op: &str) -> Result<String> {
 }
 
 fn sanitize_command_output(text: &str) -> String {
-    text.split_whitespace()
+    text.lines()
+        .map(sanitize_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn sanitize_line(line: &str) -> String {
+    line.split_whitespace()
         .map(sanitize_token)
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 fn sanitize_token(token: &str) -> String {
-    let mut value = token.to_string();
-    for marker in ["gho_", "ghp_", "github_pat_"] {
-        if let Some(pos) = value.find(marker) {
-            value.truncate(pos + marker.len());
-            value.push_str("***");
-            return value;
+    for scheme in ["https://", "http://", "ssh://"] {
+        if let Some(rest) = token.strip_prefix(scheme) {
+            if let Some(at) = rest.find('@') {
+                return format!("{scheme}***@{}", &rest[at + 1..]);
+            }
         }
     }
-    if let Some(rest) = value.strip_prefix("https://") {
-        if let Some(at) = rest.find('@') {
-            return format!("https://***@{}", &rest[at + 1..]);
+    for marker in ["gho_", "ghp_", "github_pat_", "glpat-"] {
+        if let Some(pos) = token.find(marker) {
+            let prefix = &token[..pos + marker.len()];
+            return format!("{prefix}***");
         }
     }
-    value
+    token.to_string()
+}
+
+fn git_command_error(err: std::io::Error) -> MaaError {
+    if err.kind() == ErrorKind::NotFound {
+        MaaError::new("Git is not installed or not in PATH. Git is required for init and sync.")
+    } else {
+        MaaError::new(err.to_string())
+    }
 }
 
 fn imported_item(id: &AssetId, source: &Path, target: &Path) -> PlanItem {
@@ -980,7 +992,7 @@ fn import_new_mcp_asset(
     if let Some(parent) = asset_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(&asset_path, json_to_pretty(&config))?;
+    write_text_atomic(&asset_path, &json_to_pretty(&config)?)?;
     registry.assets.insert(
         id.clone(),
         AssetRecord {
@@ -1053,11 +1065,11 @@ fn mcp_conflict_details(
     Ok(vec![
         format!(
             "asset-center-json:\n{}",
-            json_to_pretty(&existing_json).trim_end()
+            json_to_pretty(&existing_json)?.trim_end()
         ),
         format!(
             "scanned-runtime-json:\n{}",
-            json_to_pretty(&incoming_json).trim_end()
+            json_to_pretty(&incoming_json)?.trim_end()
         ),
         "resolve with: --on-conflict skip | --on-conflict overwrite | --on-conflict rename --rename-to <new-name>".to_string(),
     ])
@@ -1090,7 +1102,8 @@ fn init_asset_center_git(ctx: &Context) -> Result<()> {
     let output = Command::new("git")
         .arg("init")
         .current_dir(&ctx.asset_center)
-        .output()?;
+        .output()
+        .map_err(git_command_error)?;
     if !output.status.success() {
         let mut message = String::from("failed to initialize asset center git repository\n");
         message.push_str(&String::from_utf8_lossy(&output.stdout));
@@ -1122,7 +1135,7 @@ fn discover(ctx: &Context) -> Result<Vec<DiscoveredAsset>> {
     let max_depth = scan_max_depth(ctx)?;
     for root in scan_roots(ctx)? {
         discover_projects(&root, 0, max_depth, &mut out)?;
-        discover_project_mcp(&root, &mut out)?;
+        discover_project_mcp(&root, 0, max_depth, &mut out)?;
     }
     Ok(out)
 }
@@ -1266,7 +1279,15 @@ fn discover_user_mcp(ctx: &Context, out: &mut Vec<DiscoveredAsset>) -> Result<()
     Ok(())
 }
 
-fn discover_project_mcp(root: &Path, out: &mut Vec<DiscoveredAsset>) -> Result<()> {
+fn discover_project_mcp(
+    root: &Path,
+    depth: usize,
+    max_depth: usize,
+    out: &mut Vec<DiscoveredAsset>,
+) -> Result<()> {
+    if depth > max_depth || should_skip_dir(root) {
+        return Ok(());
+    }
     let path = root.join(".mcp.json");
     if path.exists() {
         let json = parse_json_file(&path)?;
@@ -1289,7 +1310,7 @@ fn discover_project_mcp(root: &Path, out: &mut Vec<DiscoveredAsset>) -> Result<(
     for entry in entries {
         let path = entry?.path();
         if path.is_dir() && !should_skip_dir(&path) && !is_symlink(&path) {
-            discover_project_mcp(&path, out)?;
+            discover_project_mcp(&path, depth + 1, max_depth, out)?;
         }
     }
     Ok(())
@@ -1298,7 +1319,7 @@ fn discover_project_mcp(root: &Path, out: &mut Vec<DiscoveredAsset>) -> Result<(
 fn should_skip_dir(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|v| v.to_str()),
-        Some(".git" | "node_modules" | "dist" | "build" | "target" | ".venv")
+        Some(".git" | "node_modules" | "dist" | "build" | "target" | ".venv" | "__pycache__")
     )
 }
 
@@ -1333,7 +1354,7 @@ fn save_registry(ctx: &Context, registry: &Registry) -> Result<()> {
     let mut assets = DiskAssetsFile::default();
     for (id, record) in &registry.assets {
         let disk = DiskAssetRecord {
-            path: record.path.clone(),
+            path: path_to_portable(&record.path),
             file_name: record.file_name.clone(),
             aliases: Vec::new(),
         };
@@ -1343,9 +1364,9 @@ fn save_registry(ctx: &Context, registry: &Registry) -> Result<()> {
             AssetType::Mcp => assets.assets.mcps.insert(id.name.clone(), disk),
         };
     }
-    fs::write(
-        ctx.asset_center.join("assets.yaml"),
-        serde_yaml::to_string(&assets)
+    write_text_atomic(
+        &ctx.asset_center.join("assets.yaml"),
+        &serde_yaml::to_string(&assets)
             .map_err(|err| MaaError::new(format!("failed to write assets.yaml: {err}")))?,
     )?;
 
@@ -1381,11 +1402,28 @@ fn save_registry(ctx: &Context, registry: &Registry) -> Result<()> {
             }
         }
     }
-    fs::write(
-        ctx.asset_center.join("mounts.yaml"),
-        serde_yaml::to_string(&mounts)
+    write_text_atomic(
+        &ctx.asset_center.join("mounts.yaml"),
+        &serde_yaml::to_string(&mounts)
             .map_err(|err| MaaError::new(format!("failed to write mounts.yaml: {err}")))?,
     )?;
+    Ok(())
+}
+
+fn write_text_atomic(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    fs::write(&tmp, content)?;
+    fs::rename(&tmp, path)?;
     Ok(())
 }
 
@@ -1398,7 +1436,7 @@ fn load_asset_group(
         registry.assets.insert(
             AssetId::new(kind.clone(), name),
             AssetRecord {
-                path: record.path,
+                path: PathBuf::from(record.path),
                 file_name: record.file_name,
             },
         );
@@ -1459,7 +1497,7 @@ fn compile_mcp_for_target(
             let path = ctx.home.join(".claude.json");
             let mut json = read_json_or_object(&path)?;
             merge_mcp_servers(&mut json, &names_to_replace, managed);
-            fs::write(path, json_to_pretty(&json))?;
+            write_text_atomic(&path, &json_to_pretty(&json)?)?;
         }
         McpScope::Local => {
             let path = ctx.home.join(".claude.json");
@@ -1473,13 +1511,13 @@ fn compile_mcp_for_target(
                 .entry(target.display().to_string())
                 .or_insert_with(json_object);
             merge_mcp_servers(project, &names_to_replace, managed);
-            fs::write(path, json_to_pretty(&json))?;
+            write_text_atomic(&path, &json_to_pretty(&json)?)?;
         }
         McpScope::Project => {
             let path = target.join(".mcp.json");
             let mut json = read_json_or_object(&path)?;
             merge_mcp_servers(&mut json, &names_to_replace, managed);
-            fs::write(path, json_to_pretty(&json))?;
+            write_text_atomic(&path, &json_to_pretty(&json)?)?;
         }
     }
     Ok(())
@@ -1559,23 +1597,89 @@ impl BackupManifest {
         let text = fs::read_to_string(path)?;
         let mut id = String::new();
         let mut entries = Vec::new();
-        for line in text.lines() {
+        for (idx, line) in text.lines().enumerate() {
             if let Some(rest) = line.strip_prefix("id|") {
                 id = rest.to_string();
+                continue;
             }
             if let Some(rest) = line.strip_prefix("entry|") {
                 let parts: Vec<&str> = rest.split('|').collect();
-                if parts.len() == 3 {
-                    entries.push(BackupEntry {
-                        kind: parts[0].to_string(),
-                        original: PathBuf::from(parts[1]),
-                        backup: PathBuf::from(parts[2]),
-                    });
+                if parts.len() != 3 || !matches!(parts[0], "dir" | "file") {
+                    return Err(MaaError::new(format!(
+                        "malformed backup manifest line {}: {}",
+                        idx + 1,
+                        line
+                    )));
                 }
+                entries.push(BackupEntry {
+                    kind: parts[0].to_string(),
+                    original: PathBuf::from(parts[1]),
+                    backup: PathBuf::from(parts[2]),
+                });
+                continue;
             }
+            if !line.trim().is_empty() {
+                return Err(MaaError::new(format!(
+                    "malformed backup manifest line {}: {}",
+                    idx + 1,
+                    line
+                )));
+            }
+        }
+        if id.is_empty() {
+            return Err(MaaError::new("backup manifest missing id"));
         }
         Ok(Self { id, entries })
     }
+}
+
+fn backup_root_for(ctx: &Context, backup_id: &str) -> Result<PathBuf> {
+    validate_backup_id(backup_id)?;
+    Ok(ctx.asset_center.join("backups").join(backup_id))
+}
+
+fn validate_backup_id(backup_id: &str) -> Result<()> {
+    if backup_id.is_empty()
+        || backup_id.contains("..")
+        || backup_id
+            .chars()
+            .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'))
+    {
+        return Err(MaaError::new(format!("invalid backup id: {backup_id}")));
+    }
+    Ok(())
+}
+
+fn validate_restore_manifest(
+    ctx: &Context,
+    backup_root: &Path,
+    manifest: &BackupManifest,
+) -> Result<()> {
+    let mut allowed_original_roots = vec![ctx.home.clone()];
+    allowed_original_roots.extend(scan_roots(ctx)?);
+    for entry in &manifest.entries {
+        if !is_within_any(&entry.original, &allowed_original_roots) {
+            return Err(MaaError::new(format!(
+                "restore target is outside allowed runtime roots: {}",
+                entry.original.display()
+            )));
+        }
+        if !is_within(&entry.backup, backup_root) {
+            return Err(MaaError::new(format!(
+                "restore backup path is outside backup root: {}",
+                entry.backup.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn is_within_any(path: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| is_within(path, root))
+}
+
+fn is_within(path: &Path, root: &Path) -> bool {
+    path == root || path.starts_with(root)
 }
 
 fn backup_path(path: &Path, backup_root: &Path, manifest: &mut BackupManifest) -> Result<()> {
@@ -1639,6 +1743,13 @@ fn relative_to(path: &Path, base: &Path) -> Result<PathBuf> {
     })
 }
 
+fn path_to_portable(path: &Path) -> String {
+    path.iter()
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 #[cfg(unix)]
 fn create_symlink(src: &Path, dst: &Path) -> Result<()> {
     std::os::unix::fs::symlink(src, dst).map_err(|err| {
@@ -1677,10 +1788,11 @@ fn parse_json_file(path: &Path) -> Result<JsonValue> {
         .map_err(|err| MaaError::new(format!("failed to parse JSON {}: {err}", path.display())))
 }
 
-fn json_to_pretty(value: &JsonValue) -> String {
-    let mut text = serde_json::to_string_pretty(value).unwrap_or_else(|_| "null".to_string());
+fn json_to_pretty(value: &JsonValue) -> Result<String> {
+    let mut text = serde_json::to_string_pretty(value)
+        .map_err(|err| MaaError::new(format!("failed to serialize JSON: {err}")))?;
     text.push('\n');
-    text
+    Ok(text)
 }
 
 fn json_object() -> JsonValue {
@@ -1712,7 +1824,7 @@ mod tests {
             serde_json::from_str(r#"{"mcpServers":{"github":{"command":"npx","args":["x"]}}}"#)
                 .unwrap();
         assert!(json.get("mcpServers").is_some());
-        assert!(json_to_pretty(&json).contains("\"github\""));
+        assert!(json_to_pretty(&json).unwrap().contains("\"github\""));
     }
 
     #[test]
@@ -1781,6 +1893,48 @@ mod tests {
     fn relative_to_rejects_paths_outside_base() {
         let err = relative_to(Path::new("/tmp/outside"), Path::new("/var/base")).unwrap_err();
         assert!(err.to_string().contains("is not inside"));
+    }
+
+    #[test]
+    fn restore_rejects_path_traversal_backup_ids() {
+        let root = test_dir("restore-traversal");
+        let ctx = Context::new(root.clone());
+        init_apply(&ctx).unwrap();
+        let err = restore_plan(&ctx, "../../bad").unwrap_err();
+        assert!(err.to_string().contains("invalid backup id"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn restore_rejects_manifest_paths_outside_allowed_roots() {
+        let root = test_dir("restore-manifest");
+        let ctx = Context::new(root.clone());
+        init_apply(&ctx).unwrap();
+        let backup_root = ctx.asset_center.join("backups/backup-safe");
+        fs::create_dir_all(&backup_root).unwrap();
+        fs::write(backup_root.join("item-0"), "secret").unwrap();
+        fs::write(
+            backup_root.join("manifest.txt"),
+            format!(
+                "id|backup-safe\nentry|file|/tmp/outside-target|{}\n",
+                backup_root.join("item-0").display()
+            ),
+        )
+        .unwrap();
+        let err = restore_plan(&ctx, "backup-safe").unwrap_err();
+        assert!(err.to_string().contains("outside allowed runtime roots"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sanitizes_git_output_without_collapsing_lines() {
+        let output = "remote https://ghp_secret@example.com/repo.git\nfatal token glpat-secret";
+        let sanitized = sanitize_command_output(output);
+        assert!(sanitized.contains("https://***@example.com/repo.git"));
+        assert!(sanitized.contains("glpat-***"));
+        assert!(sanitized.contains('\n'));
+        assert!(!sanitized.contains("ghp_secret"));
+        assert!(!sanitized.contains("glpat-secret"));
     }
 
     fn test_dir(name: &str) -> PathBuf {

@@ -10,7 +10,7 @@ PROJECT_A="$FAKE_WORKSPACE/project-a"
 cleanup() {
   rm -rf "$TMP_ROOT"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 assert_file() {
   test -f "$1" || {

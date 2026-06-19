@@ -15,7 +15,7 @@ fn main() {
 
 fn run() -> Result<()> {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    if args.is_empty() || has_flag(&args, "--help") || has_flag(&args, "-h") {
+    if args.is_empty() || matches!(args.first().map(String::as_str), Some("--help" | "-h")) {
         print_help();
         return Ok(());
     }
@@ -30,6 +30,10 @@ fn run() -> Result<()> {
     let ctx = Context::new(home);
     let apply = take_flag(&mut args, "--apply");
     let command = args.remove(0);
+    if take_flag(&mut args, "--help") || take_flag(&mut args, "-h") {
+        print_command_help(&command);
+        return Ok(());
+    }
 
     match command.as_str() {
         "init" => {
@@ -143,6 +147,20 @@ Environment:\n  MY_AGENT_ASSETS_HOME overrides the runtime home. Defaults to HOM
     );
 }
 
+fn print_command_help(command: &str) {
+    match command {
+        "scan" => println!(
+            "Usage:\n  maa scan [--apply] [--on-conflict skip|overwrite|rename] [--rename-to <new-name>]\n\n\
+Default behavior prints a plan only. --apply executes. MCP JSON conflicts require an explicit --on-conflict decision."
+        ),
+        "mount" => println!(
+            "Usage:\n  maa mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]"
+        ),
+        "restore" => println!("Usage:\n  maa restore <backup-id> [--apply]"),
+        _ => print_help(),
+    }
+}
+
 fn default_home() -> Option<PathBuf> {
     env::var("HOME")
         .ok()
@@ -193,10 +211,6 @@ fn next_arg(args: &mut Vec<String>, label: &str) -> Result<String> {
     } else {
         Ok(args.remove(0))
     }
-}
-
-fn has_flag(args: &[String], flag: &str) -> bool {
-    args.iter().any(|arg| arg == flag)
 }
 
 fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {

@@ -12,7 +12,7 @@ BRANCH="e2e-$(date +%s)-$$"
 cleanup() {
   rm -rf "$TMP_ROOT"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 if [[ -z "$REMOTE_URL" ]]; then
   echo "MAA_REMOTE_URL is required" >&2
