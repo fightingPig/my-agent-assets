@@ -20,3 +20,21 @@ cargo run -p my-agent-assets-cli --bin maa -- --help
 ./scripts/e2e_fake_runtime.sh
 ```
 
+## macOS Desktop Preview
+
+The first GUI milestone is an installable, home-page-only Tauri preview. It
+uses mock content and does not read Claude runtime or asset-center data.
+
+```bash
+cd apps/desktop
+npm install
+npm run typecheck
+npm test
+npm run build
+```
+
+Build artifacts are written to `target/release/bundle/`. The local preview can
+be installed at `~/Applications/My Agent Assets.app`.
+
+Layout reference screenshots are stored in `docs/screenshots/` for the default
+and minimum supported window sizes.
