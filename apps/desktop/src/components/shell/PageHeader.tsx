@@ -1,19 +1,21 @@
 import { Plus, Search, ShieldCheck } from "lucide-react";
+import type { PageMetadata } from "../../app/pages";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 
 type PageHeaderProps = {
+  page: PageMetadata;
   shortcuts: {
     globalSearch: string;
     pageSearch: string;
   };
 };
 
-export function PageHeader({ shortcuts }: PageHeaderProps) {
+export function PageHeader({ page, shortcuts }: PageHeaderProps) {
   return (
     <div className="page-header">
       <div className="page-heading">
-        <h1>首页</h1>
-        <p className="page-subtitle">集中查看资产、项目和本地运行环境。</p>
+        <h1>{page.title}</h1>
+        <p className="page-subtitle">{page.subtitle}</p>
       </div>
       <div className="page-header-actions">
         <button

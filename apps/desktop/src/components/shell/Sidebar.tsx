@@ -1,5 +1,6 @@
 import {
   ArchiveRestore,
+  AlertTriangle,
   Blocks,
   BookOpen,
   Command,
@@ -13,34 +14,32 @@ import {
   TerminalSquare,
   type LucideIcon,
 } from "lucide-react";
+import { getSidebarPageGroups, type PageId } from "../../app/pages";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 
-type NavItem = { label: string; icon: LucideIcon; active?: boolean };
+// Keep detail-page entries so adding a new PageId also requires an explicit icon decision.
+const pageIcons: Record<PageId, LucideIcon> = {
+  dashboard: Home,
+  skills: BookOpen,
+  commands: TerminalSquare,
+  mcp: Blocks,
+  "asset-detail": BookOpen,
+  projects: FolderKanban,
+  "project-detail": FolderKanban,
+  scan: ScanSearch,
+  mounts: Link2,
+  conflicts: AlertTriangle,
+  backups: ArchiveRestore,
+  sync: RefreshCw,
+  settings: Settings,
+};
 
-const navGroups: { label: string; items: NavItem[] }[] = [
-  { label: "概览", items: [{ label: "首页", icon: Home, active: true }] },
-  {
-    label: "资产中心",
-    items: [
-      { label: "Skills", icon: BookOpen },
-      { label: "Commands", icon: TerminalSquare },
-      { label: "MCP Servers", icon: Blocks },
-    ],
-  },
-  { label: "项目", items: [{ label: "项目列表", icon: FolderKanban }] },
-  {
-    label: "运行",
-    items: [
-      { label: "扫描导入", icon: ScanSearch },
-      { label: "挂载管理", icon: Link2 },
-      { label: "备份恢复", icon: ArchiveRestore },
-      { label: "Git 同步", icon: RefreshCw },
-    ],
-  },
-  { label: "系统", items: [{ label: "设置", icon: Settings }] },
-];
+type SidebarProps = {
+  activePage: PageId;
+  onPageChange: (page: PageId) => void;
+};
 
-export function Sidebar() {
+export function Sidebar({ activePage, onPageChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
@@ -48,21 +47,23 @@ export function Sidebar() {
         <span>My Agent Assets</span>
       </div>
       <nav aria-label="主导航">
-        {navGroups.map((group) => (
-          <section className="nav-group" key={group.label}>
-            <div className="nav-label">{group.label}</div>
-            {group.items.map((item) => {
-              const Icon = item.icon;
+        {getSidebarPageGroups().map(({ group, pages }) => (
+          <section className="nav-group" key={group}>
+            <div className="nav-label">{group}</div>
+            {pages.map((page) => {
+              const Icon = pageIcons[page.id];
               return (
                 <button
-                  className={`nav-item ${item.active ? "active" : ""}`}
-                  disabled={!item.active}
-                  key={item.label}
+                  className={`nav-item ${activePage === page.id ? "active" : ""}`}
+                  disabled={!page.enabled}
+                  key={page.id}
+                  onClick={() => onPageChange(page.id)}
                   style={NO_DRAG_REGION_STYLE}
-                  title={item.active ? item.label : `${item.label}将在确认首页后实现`}
+                  title={page.sidebarLabel}
+                  aria-current={activePage === page.id ? "page" : undefined}
                 >
                   <Icon size={17} />
-                  <span>{item.label}</span>
+                  <span>{page.sidebarLabel}</span>
                 </button>
               );
             })}

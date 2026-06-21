@@ -1,6 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { CurrentPage } from "./app/CurrentPage";
+import { PAGE_REGISTRY } from "./app/pages";
 import styles from "./styles.css?raw";
 
 const { invoke, startDragging } = vi.hoisted(() => ({
@@ -48,10 +50,66 @@ describe("macOS preview home", () => {
     expect(await screen.findByText("已连接")).toBeInTheDocument();
   });
 
-  it("keeps future navigation disabled", () => {
+  it("switches every visible primary page and updates PageHeader", () => {
+    const { container } = render(<App />);
+    const pageHeader = container.querySelector<HTMLElement>(".page-header")!;
+    const visiblePages = PAGE_REGISTRY.filter((page) => page.sidebarVisible);
+
+    expect(visiblePages).toHaveLength(11);
+    for (const page of visiblePages) {
+      const navButton = screen.getByRole("button", { name: page.sidebarLabel });
+      expect(navButton).toBeEnabled();
+      fireEvent.click(navButton);
+      expect(navButton).toHaveAttribute("aria-current", "page");
+      expect(within(pageHeader).getByRole("heading", { name: page.title })).toBeInTheDocument();
+      expect(within(pageHeader).getByText(page.subtitle)).toBeInTheDocument();
+    }
+  });
+
+  it("keeps detail pages out of primary sidebar navigation", () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: "Skills" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "首页" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "资产详情" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "项目详情" })).not.toBeInTheDocument();
+  });
+
+  it("renders the required static skeleton content", () => {
+    render(<App />);
+    const expectedContent = [
+      ["Skills", "review"],
+      ["Commands", "deploy-prod"],
+      ["MCP Servers", "PostgreSQL"],
+      ["项目列表", "project-a"],
+      ["扫描导入", "导入确认"],
+      ["挂载管理", "3. 预览挂载计划"],
+      ["冲突处理", "差异预览"],
+      ["备份恢复", "恢复影响预览"],
+      ["同步", "本地 Git 仓库"],
+      ["设置", "CLI 设置"],
+    ];
+
+    for (const [navigation, content] of expectedContent) {
+      fireEvent.click(screen.getByRole("button", { name: navigation }));
+      expect(screen.getByText(content)).toBeInTheDocument();
+    }
+  });
+
+  it("keeps identity and authentication concepts out of rendered pages", () => {
+    const { container } = render(<App />);
+    const forbidden = ["账号", "用户中心", "OAuth", "绑定 GitHub", "云账号", "团队空间", "订阅", "Billing"];
+
+    for (const page of PAGE_REGISTRY.filter((item) => item.sidebarVisible)) {
+      fireEvent.click(screen.getByRole("button", { name: page.sidebarLabel }));
+      const text = container.textContent ?? "";
+      for (const phrase of forbidden) expect(text).not.toContain(phrase);
+    }
+  });
+
+  it("provides static detail page skeletons outside sidebar navigation", () => {
+    const appInfo = { name: "My Agent Assets", version: "0.1.0", platform: "macOS", arch: "arm64", backendReady: true };
+    const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} />);
+    expect(screen.getByText("内容预览")).toBeInTheDocument();
+    rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} />);
+    expect(screen.getByText("项目资产")).toBeInTheDocument();
   });
 
   it("uses a two-column native overlay area without business controls", () => {

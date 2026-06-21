@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { CurrentPage } from "./app/CurrentPage";
+import { getPageById, type PageId } from "./app/pages";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
 import {
@@ -7,7 +9,7 @@ import {
   getPlatformShortcuts,
   isTauriRuntime,
 } from "./lib/platform";
-import { DashboardPage, type AppInfo } from "./pages/DashboardPage";
+import type { AppInfo } from "./pages/DashboardPage";
 
 const fallbackInfo: AppInfo = {
   name: "My Agent Assets",
@@ -19,8 +21,10 @@ const fallbackInfo: AppInfo = {
 
 function App() {
   const [appInfo, setAppInfo] = useState<AppInfo>(fallbackInfo);
+  const [activePage, setActivePage] = useState<PageId>("dashboard");
   const platform = getDesktopPlatform();
   const shortcuts = getPlatformShortcuts(platform);
+  const currentPage = getPageById(activePage);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -28,9 +32,9 @@ function App() {
   }, []);
 
   return (
-    <AppFrame platform={platform}>
-      <PageHeader shortcuts={shortcuts} />
-      <DashboardPage appInfo={appInfo} />
+    <AppFrame platform={platform} activePage={activePage} onPageChange={setActivePage}>
+      <PageHeader page={currentPage} shortcuts={shortcuts} />
+      <CurrentPage activePage={activePage} appInfo={appInfo} />
     </AppFrame>
   );
 }

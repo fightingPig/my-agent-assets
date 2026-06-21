@@ -26,6 +26,36 @@ Out of scope for V1:
 - Team collaboration
 - Cloud account
 
+## No Login / No Account
+
+My Agent Assets V1 does not require login.
+
+Do not implement:
+
+- Login page
+- Signup page
+- Account center
+- User avatar menu
+- OAuth flow
+- GitHub login
+- Cloud sync login
+- Team workspace
+- Subscription or billing UI
+
+The app is local-first.
+
+All core features must work without an account.
+
+Git sync, if shown in the UI, means repository-based sync using the user’s local Git configuration.
+
+Do not design Git sync as account login, cloud account binding, or GitHub OAuth login.
+
+Settings must not include account login, cloud account, billing, team, or subscription sections.
+
+Do not add authentication dependencies or authentication-related Tauri commands.
+
+Connection status in the UI should mean local environment status, local Git repository status, or preview/mock status. It must not mean user account status.
+
 ## Tech Stack
 
 Use a single codebase:
