@@ -79,9 +79,9 @@ describe("macOS preview home", () => {
       ["Commands", "deploy-prod"],
       ["MCP Servers", "PostgreSQL"],
       ["项目列表", "project-a"],
-      ["扫描导入", "导入确认"],
-      ["挂载管理", "3. 预览挂载计划"],
-      ["冲突处理", "差异预览"],
+      ["扫描导入", "导入预览"],
+      ["挂载管理", "预览挂载计划"],
+      ["冲突处理", "需要逐项确认处理方式"],
       ["备份恢复", "恢复影响预览"],
       ["同步", "本地 Git 仓库"],
       ["设置", "CLI 设置"],
@@ -107,9 +107,9 @@ describe("macOS preview home", () => {
   it("provides static detail page skeletons outside sidebar navigation", () => {
     const appInfo = { name: "My Agent Assets", version: "0.1.0", platform: "macOS", arch: "arm64", backendReady: true };
     const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} />);
-    expect(screen.getByText("内容预览")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
     rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} />);
-    expect(screen.getByText("项目资产")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
   });
 
   it("uses a two-column native overlay area without business controls", () => {

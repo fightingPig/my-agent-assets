@@ -20,6 +20,9 @@ describe("Asset Center static UI", () => {
     fireEvent.click(dbReview);
     expect(dbReview).toHaveAttribute("aria-selected", "true");
     expect(within(inspector).getByRole("heading", { name: "db-review" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "api-design" })).toBeInTheDocument();
+    expect(within(inspector).getByText("最近更新")).toBeInTheDocument();
+    expect(within(inspector).getByText(/挂载 \/ 使用摘要/)).toBeInTheDocument();
   });
 
   it("filters static Commands with search and status controls", () => {
@@ -41,11 +44,19 @@ describe("Asset Center static UI", () => {
     expect(screen.getByText("暂无可检查资产")).toBeInTheDocument();
   });
 
+  it("includes format-code with complete row metadata", () => {
+    render(<CommandsListPage />);
+    const row = screen.getByRole("option", { name: "format-code" });
+    expect(row).toHaveTextContent("格式化项目代码");
+    expect(row).toHaveTextContent("代码质量");
+    expect(row).toHaveTextContent("6 月 17 日");
+    expect(row).toHaveTextContent("1 个挂载");
+  });
+
   it("uses only local MCP examples and updates JSON details", () => {
     const { container } = render(<McpServersListPage />);
-    for (const name of ["PostgreSQL", "Redis", "Filesystem", "SQLite"]) {
-      expect(screen.getAllByText(name).length).toBeGreaterThan(0);
-    }
+    const options = within(screen.getByRole("listbox", { name: "MCP Servers选择" })).getAllByRole("option");
+    expect(options.map((option) => option.getAttribute("aria-label"))).toEqual(["PostgreSQL", "Redis", "Filesystem", "SQLite"]);
 
     fireEvent.click(screen.getByRole("option", { name: "Filesystem" }));
     expect(screen.getByText(/filesystem-mcp/)).toBeInTheDocument();

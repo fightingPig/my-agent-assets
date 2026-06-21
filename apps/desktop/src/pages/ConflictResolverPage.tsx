@@ -1,19 +1,47 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Blocks, BookOpen } from "lucide-react";
+import { useState } from "react";
+import { StaticActionButton } from "../components/ui/StaticActionButton";
+import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+
+const conflicts = [
+  {
+    id: "postgresql",
+    name: "PostgreSQL",
+    type: "MCP Server",
+    reason: "同名配置内容不同",
+    source: "project-a/.mcp.json",
+    icon: Blocks,
+    existing: `{\n  "command": "postgres-mcp",\n  "args": ["--read-only"]\n}`,
+    incoming: `{\n  "command": "postgres-mcp",\n  "args": ["--schema", "public"]\n}`,
+  },
+  {
+    id: "review",
+    name: "review",
+    type: "Skill",
+    reason: "资产中心已存在同名 Skill",
+    source: "my-app/.claude/skills/review",
+    icon: BookOpen,
+    existing: "# Review\n\n检查正确性、风险和测试覆盖。",
+    incoming: "# Review\n\n检查架构、性能和安全边界。",
+  },
+];
 
 export function ConflictResolverPage() {
+  const [selectedId, setSelectedId] = useState(conflicts[0].id);
+  const selected = conflicts.find((conflict) => conflict.id === selectedId)!;
+
   return (
-    <div className="conflict-layout">
-      <section className="panel skeleton-panel">
-        <div className="panel-header"><div><h2>待处理冲突</h2><p>2 项静态预览</p></div><span className="status-badge warning">需要确认</span></div>
-        <div className="skeleton-list compact">
-          <div className="skeleton-row selected"><div className="skeleton-icon warning"><AlertTriangle size={17} /></div><div className="skeleton-copy"><strong>github</strong><span>MCP · 内容不同</span></div></div>
-          <div className="skeleton-row"><div className="skeleton-icon warning"><AlertTriangle size={17} /></div><div className="skeleton-copy"><strong>review</strong><span>Skill · 名称重复</span></div></div>
-        </div>
+    <div className="master-detail-workspace conflict-workspace">
+      <section className="panel master-list-panel">
+        <div className="section-heading"><div><h3>待处理冲突</h3><p>需要逐项确认处理方式</p></div><span className="status-badge warning">{conflicts.length} 项</span></div>
+        <div className="master-select-list" role="listbox" aria-label="冲突选择">{conflicts.map(({ id, name, type, reason, icon: Icon }) => <button aria-label={name} aria-selected={selectedId === id} className={selectedId === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedId(id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon warning"><Icon size={16} /></span><span><strong>{name}</strong><small>{type} · {reason}</small></span><AlertTriangle size={15} /></button>)}</div>
       </section>
-      <section className="panel diff-panel">
-        <div className="panel-header"><div><h2>差异预览</h2><p>资产中心与扫描结果</p></div></div>
-        <div className="diff-placeholder"><div><strong>资产中心</strong><code>{`{ "command": "existing" }`}</code></div><div><strong>扫描结果</strong><code>{`{ "command": "incoming" }`}</code></div></div>
-        <div className="skeleton-actions"><button className="text-button" type="button">跳过</button><button className="text-button" type="button">重命名</button><button className="primary-button" type="button">覆盖</button></div>
+      <section className="panel master-inspector-panel">
+        <div className="section-heading"><div><h3>{selected.name}</h3><p>{selected.reason}</p></div><span className="asset-status warning">需要确认</span></div>
+        <dl className="entity-field-list compact"><div><dt>资产类型</dt><dd>{selected.type}</dd></div><div><dt>扫描来源</dt><dd>{selected.source}</dd></div></dl>
+        <div className="side-by-side-diff"><div><strong>资产中心</strong><pre><code>{selected.existing}</code></pre></div><div><strong>扫描结果</strong><pre><code>{selected.incoming}</code></pre></div></div>
+        <div className="resolution-options"><div><strong>跳过</strong><span>保留资产中心内容</span></div><div><strong>重命名</strong><span>以新名称导入当前内容</span></div><div><strong>覆盖</strong><span>使用扫描结果替换现有内容</span></div></div>
+        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">跳过</StaticActionButton><StaticActionButton className="asset-secondary-action">重命名</StaticActionButton><StaticActionButton className="asset-business-action">覆盖</StaticActionButton></div>
       </section>
     </div>
   );

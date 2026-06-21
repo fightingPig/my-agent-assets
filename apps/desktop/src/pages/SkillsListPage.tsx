@@ -2,15 +2,10 @@ import { BookOpen } from "lucide-react";
 import {
   AssetCenterLayout,
   InspectorCode,
-  InspectorFields,
-  InspectorSection,
-  InspectorTags,
   type AssetCenterItem,
 } from "../components/assets/AssetCenterLayout";
 
 type SkillItem = AssetCenterItem & {
-  updated: string;
-  mounts: readonly string[];
   preview: string;
 };
 
@@ -18,6 +13,8 @@ const skills: readonly SkillItem[] = [
   {
     id: "review",
     name: "review",
+    title: "代码审查工作流",
+    category: "工程质量",
     summary: "统一代码审查流程与输出格式",
     status: "已挂载",
     statusTone: "success",
@@ -32,6 +29,8 @@ const skills: readonly SkillItem[] = [
   {
     id: "db-review",
     name: "db-review",
+    title: "数据库变更审查",
+    category: "数据工程",
     summary: "数据库变更与查询质量检查",
     status: "已挂载",
     statusTone: "success",
@@ -46,6 +45,8 @@ const skills: readonly SkillItem[] = [
   {
     id: "react-review",
     name: "react-review",
+    title: "React 组件审查",
+    category: "前端工程",
     summary: "React 组件质量与交互检查",
     status: "未挂载",
     statusTone: "neutral",
@@ -57,6 +58,22 @@ const skills: readonly SkillItem[] = [
     preview: "# React Review\n\n检查状态边界、可访问性和渲染性能。",
     searchTerms: ["React", "组件"],
   },
+  {
+    id: "api-design",
+    name: "api-design",
+    title: "API 设计评审",
+    category: "架构设计",
+    summary: "检查 API 契约、一致性与演进兼容性",
+    status: "已挂载",
+    statusTone: "success",
+    scope: "项目级",
+    path: "assets/skills/api-design",
+    icon: BookOpen,
+    updated: "今天 08:45",
+    mounts: ["my-app/.claude/skills/api-design"],
+    preview: "# API Design\n\n检查资源建模、错误语义、版本策略和兼容边界。",
+    searchTerms: ["API", "契约", "架构"],
+  },
 ];
 
 export function SkillsListPage() {
@@ -67,18 +84,7 @@ export function SkillsListPage() {
       items={skills}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
       renderInspector={(skill) => (
-        <>
-          <InspectorFields fields={[
-            { label: "类型", value: "Skill" },
-            { label: "作用域", value: skill.scope },
-            { label: "资产路径", value: skill.path },
-            { label: "最近更新", value: skill.updated },
-          ]} />
-          <InspectorSection title="挂载目标">
-            {skill.mounts.length > 0 ? <InspectorTags tags={skill.mounts} /> : <p className="asset-muted-copy">当前没有挂载目标。</p>}
-          </InspectorSection>
-          <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
-        </>
+        <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
       )}
     />
   );

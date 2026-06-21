@@ -216,11 +216,13 @@ src/
 ├── components/
 │   ├── assets/
 │   │   └── AssetCenterLayout.tsx
-│   └── shell/
-│       ├── AppFrame.tsx
-│       ├── MacOverlayDragArea.tsx
-│       ├── Sidebar.tsx
-│       └── PageHeader.tsx
+│   ├── shell/
+│   │   ├── AppFrame.tsx
+│   │   ├── MacOverlayDragArea.tsx
+│   │   ├── Sidebar.tsx
+│   │   └── PageHeader.tsx
+│   └── ui/
+│       └── StaticActionButton.tsx
 ├── lib/
 │   └── platform.ts
 ├── pages/
@@ -231,6 +233,7 @@ src/
 │   ├── AssetDetailPage.tsx
 │   ├── ProjectsListPage.tsx
 │   ├── ProjectDetailPage.tsx
+│   ├── project-data.ts
 │   ├── ScanImportPage.tsx
 │   ├── MountManagerPage.tsx
 │   ├── ConflictResolverPage.tsx

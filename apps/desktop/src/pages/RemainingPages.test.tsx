@@ -1,0 +1,114 @@
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { AssetDetailPage } from "./AssetDetailPage";
+import { BackupRestorePage } from "./BackupRestorePage";
+import { ConflictResolverPage } from "./ConflictResolverPage";
+import { MountManagerPage } from "./MountManagerPage";
+import { ProjectDetailPage } from "./ProjectDetailPage";
+import { ProjectsListPage } from "./ProjectsListPage";
+import { ScanImportPage } from "./ScanImportPage";
+import { SettingsPage } from "./SettingsPage";
+import { SyncPage } from "./SyncPage";
+
+afterEach(cleanup);
+
+describe("remaining V1 static pages", () => {
+  it("filters projects and updates the selected inspector", () => {
+    render(<ProjectsListPage />);
+    const inspector = screen.getByRole("complementary", { name: "项目检查器" });
+    const projectA = screen.getByRole("option", { name: "project-a" });
+    expect(projectA).toHaveAttribute("aria-selected", "true");
+    expect(within(inspector).getByRole("heading", { name: "project-a" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("option", { name: "my-app" }));
+    expect(within(inspector).getByRole("heading", { name: "my-app" })).toBeInTheDocument();
+    expect(within(inspector).getByText("产品主应用")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索项目" }), { target: { value: "design" } });
+    expect(screen.getByRole("option", { name: "design-system" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索项目" }), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "项目状态筛选" }), { target: { value: "正常" } });
+    expect(screen.getByRole("option", { name: "project-a" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "my-app" })).not.toBeInTheDocument();
+  });
+
+  it("renders project and asset detail workspaces", () => {
+    const { rerender } = render(<ProjectDetailPage />);
+    for (const heading of ["项目概览", "本地环境", "已挂载资产", "最近活动", "挂载计划预览"]) {
+      expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
+    }
+    rerender(<AssetDetailPage />);
+    expect(screen.getByRole("heading", { name: "资产信息" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "挂载目标" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
+  });
+
+  it("updates only the local Scan scope selection", () => {
+    render(<ScanImportPage />);
+    const userScope = screen.getByRole("button", { name: /用户级/ });
+    const projectScope = screen.getByRole("button", { name: /项目级/ });
+    expect(userScope).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(projectScope);
+    expect(projectScope).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("当前范围：项目级")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "导入预览表" })).toBeInTheDocument();
+    expect(screen.getByText("发现 1 项命名冲突")).toBeInTheDocument();
+  });
+
+  it("updates the Mount asset and target preview", () => {
+    render(<MountManagerPage />);
+    const deploy = screen.getByRole("button", { name: /deploy-prod/ });
+    const myApp = screen.getByRole("button", { name: /my-app/ });
+    fireEvent.click(deploy);
+    fireEvent.click(myApp);
+    expect(deploy).toHaveAttribute("aria-pressed", "true");
+    expect(myApp).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByText("deploy-prod").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("my-app").length).toBeGreaterThan(1);
+    expect(screen.getByText("执行前将创建本地备份")).toBeInTheDocument();
+  });
+
+  it("switches Conflict and Backup master-detail selections", () => {
+    const { rerender } = render(<ConflictResolverPage />);
+    fireEvent.click(screen.getByRole("option", { name: "review" }));
+    expect(screen.getByText("资产中心已存在同名 Skill")).toBeInTheDocument();
+    expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument();
+
+    rerender(<BackupRestorePage />);
+    fireEvent.click(screen.getByRole("option", { name: "backup-20260620-0915" }));
+    expect(screen.getAllByText("挂载变更前").length).toBeGreaterThan(1);
+    expect(screen.getByText("恢复 2 项路径，移除 1 个新软链接")).toBeInTheDocument();
+    expect(screen.getByText("恢复前将再次创建备份")).toBeInTheDocument();
+  });
+
+  it("renders local Git sync status and history", () => {
+    render(<SyncPage />);
+    expect(screen.getByRole("heading", { name: "本地 Git 仓库" })).toBeInTheDocument();
+    expect(screen.getByText("Ahead")).toBeInTheDocument();
+    expect(screen.getByText("Behind")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "同步历史" })).toBeInTheDocument();
+    expect(screen.getByText("远程仓库包含 1 个新提交")).toBeInTheDocument();
+  });
+
+  it("renders only the seven allowed Settings sections with static controls", () => {
+    const { container } = render(<SettingsPage />);
+    for (const section of ["路径设置", "扫描设置", "安全设置", "同步设置", "外观设置", "日志设置", "CLI 设置"]) {
+      expect(screen.getByRole("heading", { name: section })).toBeInTheDocument();
+    }
+    const controls = Array.from(container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input,select"));
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.every((control) => control.disabled || (control instanceof HTMLInputElement && control.readOnly))).toBe(true);
+  });
+
+  it("keeps forbidden product concepts out of rendered UI", () => {
+    const pages = [ProjectsListPage, ProjectDetailPage, AssetDetailPage, ScanImportPage, MountManagerPage, ConflictResolverPage, BackupRestorePage, SyncPage, SettingsPage];
+    const forbidden = ["登录", "账号", "OAuth", "云账号", "团队空间", "订阅", "Billing", "GitHub 绑定"];
+    for (const Page of pages) {
+      const { container, unmount } = render(<Page />);
+      for (const phrase of forbidden) expect(container.textContent).not.toContain(phrase);
+      unmount();
+    }
+  });
+});

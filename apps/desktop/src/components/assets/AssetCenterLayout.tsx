@@ -1,12 +1,17 @@
 import { ChevronRight, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
+import { StaticActionButton } from "../ui/StaticActionButton";
 
 export type AssetStatusTone = "success" | "warning" | "neutral";
 
 export type AssetCenterItem = {
   id: string;
   name: string;
+  title: string;
+  category: string;
+  updated: string;
+  mounts: readonly string[];
   summary: string;
   status: string;
   statusTone: AssetStatusTone;
@@ -30,7 +35,17 @@ export type InspectorField = {
 };
 
 function matchesSearch(item: AssetCenterItem, query: string) {
-  const searchable = [item.name, item.summary, item.scope, item.path, ...(item.searchTerms ?? [])]
+  const searchable = [
+    item.name,
+    item.title,
+    item.category,
+    item.updated,
+    item.summary,
+    item.scope,
+    item.path,
+    ...item.mounts,
+    ...(item.searchTerms ?? []),
+  ]
     .join(" ")
     .toLocaleLowerCase();
   return searchable.includes(query.trim().toLocaleLowerCase());
@@ -109,9 +124,10 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
                 <span className="asset-list-icon"><Icon size={17} /></span>
                 <span className="asset-list-copy">
                   <strong>{item.name}</strong>
-                  <small>{item.summary}</small>
-                  <span>{item.scope} · {item.path}</span>
+                  <small>{item.title}</small>
+                  <span>{item.category} · {item.updated}</span>
                 </span>
+                <span className="asset-usage-count">{item.mounts.length} 个挂载</span>
                 <span className={`asset-status ${item.statusTone}`}>{item.status}</span>
                 <ChevronRight className="asset-row-chevron" size={15} />
               </button>
@@ -133,14 +149,28 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
             <div className="asset-inspector-header">
               <div className="asset-inspector-title">
                 <span className="asset-list-icon"><selectedItem.icon size={18} /></span>
-                <div><small>{itemLabel}详情</small><h2>{selectedItem.name}</h2></div>
+                <div><small>{selectedItem.title}</small><h2>{selectedItem.name}</h2></div>
               </div>
               <span className={`asset-status ${selectedItem.statusTone}`}>{selectedItem.status}</span>
             </div>
-            <div className="asset-inspector-content">{renderInspector(selectedItem)}</div>
+            <div className="asset-inspector-content">
+              <p className="asset-inspector-summary">{selectedItem.summary}</p>
+              <InspectorFields fields={[
+                { label: "类型 / 分类", value: `${itemLabel} · ${selectedItem.category}` },
+                { label: "作用域", value: selectedItem.scope },
+                { label: "来源路径", value: selectedItem.path },
+                { label: "最近更新", value: selectedItem.updated },
+              ]} />
+              <InspectorSection title={`挂载 / 使用摘要 · ${selectedItem.mounts.length}`}>
+                {selectedItem.mounts.length > 0
+                  ? <InspectorTags tags={selectedItem.mounts} />
+                  : <p className="asset-muted-copy">当前没有挂载目标。</p>}
+              </InspectorSection>
+              {renderInspector(selectedItem)}
+            </div>
             <div className="asset-inspector-actions">
-              <button aria-disabled="true" className="asset-secondary-action" data-no-drag="true" disabled style={NO_DRAG_REGION_STYLE} type="button">更多操作</button>
-              <button aria-disabled="true" className="asset-business-action" data-no-drag="true" disabled style={NO_DRAG_REGION_STYLE} type="button">{actionLabel}</button>
+              <StaticActionButton className="asset-secondary-action">更多操作</StaticActionButton>
+              <StaticActionButton className="asset-business-action">{actionLabel}</StaticActionButton>
             </div>
           </>
         ) : (

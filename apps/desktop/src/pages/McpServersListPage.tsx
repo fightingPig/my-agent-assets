@@ -19,6 +19,10 @@ const servers: readonly McpItem[] = [
   {
     id: "postgresql",
     name: "PostgreSQL",
+    title: "PostgreSQL 数据访问",
+    category: "数据库",
+    updated: "今天 10:12",
+    mounts: ["project-a/.mcp.json"],
     summary: "本地数据库查询与结构检查",
     status: "配置正常",
     statusTone: "success",
@@ -34,6 +38,10 @@ const servers: readonly McpItem[] = [
   {
     id: "redis",
     name: "Redis",
+    title: "Redis 缓存检查",
+    category: "数据库",
+    updated: "昨天 18:30",
+    mounts: ["my-app/.mcp.json"],
     summary: "本地缓存键值与状态检查",
     status: "待检查",
     statusTone: "warning",
@@ -49,6 +57,10 @@ const servers: readonly McpItem[] = [
   {
     id: "filesystem",
     name: "Filesystem",
+    title: "本地文件访问",
+    category: "文件系统",
+    updated: "今天 09:05",
+    mounts: ["my-app/.mcp.json"],
     summary: "项目目录与文件内容访问",
     status: "配置正常",
     statusTone: "success",
@@ -64,6 +76,10 @@ const servers: readonly McpItem[] = [
   {
     id: "sqlite",
     name: "SQLite",
+    title: "SQLite 数据访问",
+    category: "数据库",
+    updated: "3 天前",
+    mounts: [],
     summary: "本地 SQLite 文件查询",
     status: "未启用",
     statusTone: "neutral",
@@ -89,9 +105,7 @@ export function McpServersListPage() {
         <>
           <InspectorFields fields={[
             { label: "Transport", value: server.transport },
-            { label: "作用域", value: server.scope },
             { label: "配置来源", value: server.source },
-            { label: "资产路径", value: server.path },
           ]} />
           <InspectorSection title="能力范围"><InspectorTags tags={server.capabilities} /></InspectorSection>
           <InspectorCode label="配置 JSON 预览">{server.preview}</InspectorCode>

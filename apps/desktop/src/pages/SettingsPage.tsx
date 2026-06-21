@@ -1,22 +1,19 @@
-import { FolderCog, ScanSearch, ShieldCheck, RefreshCw, Palette, FileText, TerminalSquare } from "lucide-react";
+import { FileText, FolderCog, Palette, RefreshCw, ScanSearch, ShieldCheck, TerminalSquare } from "lucide-react";
+import { StaticActionButton } from "../components/ui/StaticActionButton";
+import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
-const sections = [
-  { title: "路径设置", detail: "资产中心与项目扫描路径", icon: FolderCog },
-  { title: "扫描设置", detail: "扫描根目录与最大深度", icon: ScanSearch },
-  { title: "安全设置", detail: "计划确认与备份策略", icon: ShieldCheck },
-  { title: "同步设置", detail: "本地 Git 仓库同步偏好", icon: RefreshCw },
-  { title: "外观设置", detail: "主题与界面显示偏好", icon: Palette },
-  { title: "日志设置", detail: "本地日志级别与保留周期", icon: FileText },
-  { title: "CLI 设置", detail: "maa 命令行工具路径", icon: TerminalSquare },
-];
+const noDragControl = { ...NO_DRAG_REGION_STYLE };
 
 export function SettingsPage() {
   return (
-    <section className="panel skeleton-panel">
-      <div className="panel-header"><div><h2>应用设置</h2><p>所有设置均保存在本机</p></div><span className="healthy-badge">静态预览</span></div>
-      <div className="settings-grid">
-        {sections.map(({ title, detail, icon: Icon }) => <div className="settings-item" key={title}><span className="skeleton-icon"><Icon size={17} /></span><span className="skeleton-copy"><strong>{title}</strong><span>{detail}</span></span></div>)}
-      </div>
-    </section>
+    <div className="settings-workspace">
+      <section className="panel settings-section"><div className="settings-section-title"><FolderCog size={17} /><div><h3>路径设置</h3><p>本地资产中心与项目扫描位置</p></div></div><div className="settings-controls"><label><span>资产中心</span><input data-no-drag="true" readOnly style={noDragControl} value="~/.my-agent-assets" /></label><label><span>扫描根目录</span><input data-no-drag="true" readOnly style={noDragControl} value="~/workspace, ~/code" /></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><ScanSearch size={17} /><div><h3>扫描设置</h3><p>发现本地 Claude 资产的默认参数</p></div></div><div className="settings-controls two"><label><span>最大深度</span><input data-no-drag="true" readOnly style={noDragControl} value="5" /></label><label><span>默认范围</span><select data-no-drag="true" disabled style={noDragControl} value="user"><option value="user">用户级</option></select></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><ShieldCheck size={17} /><div><h3>安全设置</h3><p>计划确认与本地备份策略</p></div></div><div className="settings-toggle-list"><label><input checked data-no-drag="true" disabled style={noDragControl} type="checkbox" /><span><strong>变更前创建备份</strong><small>所有 apply 操作前生成 manifest</small></span></label><label><input checked data-no-drag="true" disabled style={noDragControl} type="checkbox" /><span><strong>默认仅生成计划</strong><small>必须显式确认后才执行</small></span></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><RefreshCw size={17} /><div><h3>同步设置</h3><p>本地 Git 仓库同步偏好</p></div></div><div className="settings-controls two"><label><span>默认分支</span><input data-no-drag="true" readOnly style={noDragControl} value="main" /></label><label><span>远程仓库</span><input data-no-drag="true" readOnly style={noDragControl} value="origin" /></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><Palette size={17} /><div><h3>外观设置</h3><p>桌面界面显示偏好</p></div></div><div className="settings-controls two"><label><span>主题</span><select data-no-drag="true" disabled style={noDragControl} value="system"><option value="system">跟随系统</option></select></label><label><span>界面密度</span><select data-no-drag="true" disabled style={noDragControl} value="compact"><option value="compact">紧凑</option></select></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><FileText size={17} /><div><h3>日志设置</h3><p>本地诊断日志与保留周期</p></div></div><div className="settings-controls two"><label><span>日志级别</span><select data-no-drag="true" disabled style={noDragControl} value="info"><option value="info">Info</option></select></label><label><span>保留周期</span><input data-no-drag="true" readOnly style={noDragControl} value="14 天" /></label></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><TerminalSquare size={17} /><div><h3>CLI 设置</h3><p>maa 命令行工具信息</p></div></div><div className="settings-controls two"><label><span>可执行文件</span><input data-no-drag="true" readOnly style={noDragControl} value="/usr/local/bin/maa" /></label><label><span>版本</span><input data-no-drag="true" readOnly style={noDragControl} value="0.1.0" /></label></div><div className="settings-actions"><StaticActionButton className="asset-secondary-action">检查 CLI</StaticActionButton><StaticActionButton className="asset-business-action">保存设置</StaticActionButton></div></section>
+    </div>
   );
 }
