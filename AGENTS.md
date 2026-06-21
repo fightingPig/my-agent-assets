@@ -203,27 +203,26 @@ For this phase:
 - Do not modify window config.
 - Do not modify AppShell window strategy.
 
-## Recommended Next Refactor
+## Current Frontend Structure
 
-Before implementing all pages, split the current large `App.tsx` into:
+The desktop frontend currently uses this structure:
 
 ```txt
 src/
 ├── App.tsx
+├── app/
+│   ├── CurrentPage.tsx
+│   └── pages.ts
 ├── components/
-│   ├── shell/
-│   │   ├── AppFrame.tsx
-│   │   ├── MacOverlayDragArea.tsx
-│   │   ├── Sidebar.tsx
-│   │   └── PageHeader.tsx
-│   └── ui/
-│       ├── Button.tsx
-│       ├── Card.tsx
-│       ├── DataTable.tsx
-│       ├── StatusBadge.tsx
-│       ├── Tabs.tsx
-│       ├── Stepper.tsx
-│       └── InspectorPanel.tsx
+│   ├── assets/
+│   │   └── AssetCenterLayout.tsx
+│   └── shell/
+│       ├── AppFrame.tsx
+│       ├── MacOverlayDragArea.tsx
+│       ├── Sidebar.tsx
+│       └── PageHeader.tsx
+├── lib/
+│   └── platform.ts
 ├── pages/
 │   ├── DashboardPage.tsx
 │   ├── SkillsListPage.tsx
@@ -238,15 +237,19 @@ src/
 │   ├── BackupRestorePage.tsx
 │   ├── SyncPage.tsx
 │   └── SettingsPage.tsx
-├── mock/
-│   └── mockData.ts
-└── styles/
-    └── styles.css
+├── mock-data.ts
+└── styles.css
 ```
 
-Keep the refactor behavior-preserving.
+`App.tsx` orchestrates platform state, page selection, `app_info`, and page composition.
 
-Do not redesign the app during this refactor.
+`app/pages.ts` owns page metadata and primary navigation visibility.
+
+`app/CurrentPage.tsx` maps page IDs to page components.
+
+Shell components own the frozen window layout and navigation frame.
+
+Page components may use local static data during the current frontend-only phase.
 
 ## Validation Before Full Page Work
 

@@ -6,7 +6,6 @@ type PageHeaderProps = {
   page: PageMetadata;
   shortcuts: {
     globalSearch: string;
-    pageSearch: string;
   };
 };
 
@@ -21,7 +20,7 @@ export function PageHeader({ page, shortcuts }: PageHeaderProps) {
         <button
           className="search-button"
           style={NO_DRAG_REGION_STYLE}
-          title={`页面搜索 ${shortcuts.pageSearch}`}
+          title={`全局搜索 ${shortcuts.globalSearch}`}
         >
           <Search size={16} />
           <span>搜索</span>

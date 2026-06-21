@@ -1,27 +1,102 @@
 import { Blocks } from "lucide-react";
+import {
+  AssetCenterLayout,
+  InspectorCode,
+  InspectorFields,
+  InspectorSection,
+  InspectorTags,
+  type AssetCenterItem,
+} from "../components/assets/AssetCenterLayout";
 
-const servers = [
-  { name: "PostgreSQL", detail: "本地配置 · stdio", status: "配置正常" },
-  { name: "Redis", detail: "本地配置 · stdio", status: "待检查" },
-  { name: "GitHub", detail: "项目配置 · stdio", status: "未启用" },
+type McpItem = AssetCenterItem & {
+  transport: string;
+  source: string;
+  capabilities: readonly string[];
+  preview: string;
+};
+
+const servers: readonly McpItem[] = [
+  {
+    id: "postgresql",
+    name: "PostgreSQL",
+    summary: "本地数据库查询与结构检查",
+    status: "配置正常",
+    statusTone: "success",
+    scope: "用户级",
+    path: "assets/mcps/postgresql.json",
+    icon: Blocks,
+    transport: "stdio",
+    source: "本地配置",
+    capabilities: ["查询", "Schema", "只读"],
+    preview: "{\n  \"command\": \"postgres-mcp\",\n  \"args\": [\"--read-only\"]\n}",
+    searchTerms: ["database", "数据库"],
+  },
+  {
+    id: "redis",
+    name: "Redis",
+    summary: "本地缓存键值与状态检查",
+    status: "待检查",
+    statusTone: "warning",
+    scope: "用户级",
+    path: "assets/mcps/redis.json",
+    icon: Blocks,
+    transport: "stdio",
+    source: "本地配置",
+    capabilities: ["键值", "缓存", "只读"],
+    preview: "{\n  \"command\": \"redis-mcp\",\n  \"args\": [\"--inspect\"]\n}",
+    searchTerms: ["cache", "缓存"],
+  },
+  {
+    id: "filesystem",
+    name: "Filesystem",
+    summary: "项目目录与文件内容访问",
+    status: "配置正常",
+    statusTone: "success",
+    scope: "项目级",
+    path: "assets/mcps/filesystem.json",
+    icon: Blocks,
+    transport: "stdio",
+    source: "项目配置",
+    capabilities: ["目录", "文件", "受限路径"],
+    preview: "{\n  \"command\": \"filesystem-mcp\",\n  \"args\": [\"./workspace\"]\n}",
+    searchTerms: ["files", "文件"],
+  },
+  {
+    id: "sqlite",
+    name: "SQLite",
+    summary: "本地 SQLite 文件查询",
+    status: "未启用",
+    statusTone: "neutral",
+    scope: "资产中心",
+    path: "assets/mcps/sqlite.json",
+    icon: Blocks,
+    transport: "stdio",
+    source: "本地配置",
+    capabilities: ["查询", "表结构", "本地文件"],
+    preview: "{\n  \"command\": \"sqlite-mcp\",\n  \"args\": [\"./data/app.db\"]\n}",
+    searchTerms: ["database", "本地文件"],
+  },
 ];
 
 export function McpServersListPage() {
   return (
-    <section className="panel skeleton-panel">
-      <div className="panel-header">
-        <div><h2>MCP 配置</h2><p>状态仅表示本地配置与连接检查结果</p></div>
-        <span className="healthy-badge">本地预览</span>
-      </div>
-      <div className="skeleton-list">
-        {servers.map((server) => (
-          <div className="skeleton-row" key={server.name}>
-            <div className="skeleton-icon"><Blocks size={17} /></div>
-            <div className="skeleton-copy"><strong>{server.name}</strong><span>{server.detail}</span></div>
-            <span className="status-badge neutral">{server.status}</span>
-          </div>
-        ))}
-      </div>
-    </section>
+    <AssetCenterLayout
+      actionLabel="挂载 MCP"
+      itemLabel="MCP Servers"
+      items={servers}
+      searchPlaceholder="搜索 MCP 名称、能力或配置路径"
+      renderInspector={(server) => (
+        <>
+          <InspectorFields fields={[
+            { label: "Transport", value: server.transport },
+            { label: "作用域", value: server.scope },
+            { label: "配置来源", value: server.source },
+            { label: "资产路径", value: server.path },
+          ]} />
+          <InspectorSection title="能力范围"><InspectorTags tags={server.capabilities} /></InspectorSection>
+          <InspectorCode label="配置 JSON 预览">{server.preview}</InspectorCode>
+        </>
+      )}
+    />
   );
 }

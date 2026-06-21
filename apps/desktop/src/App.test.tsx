@@ -89,7 +89,7 @@ describe("macOS preview home", () => {
 
     for (const [navigation, content] of expectedContent) {
       fireEvent.click(screen.getByRole("button", { name: navigation }));
-      expect(screen.getByText(content)).toBeInTheDocument();
+      expect(screen.getAllByText(content).length).toBeGreaterThan(0);
     }
   });
 
@@ -225,6 +225,6 @@ describe("Windows app shell", () => {
     expect(container.querySelector(".app-body")).toBeInTheDocument();
     expect(styles).toMatch(/\.platform-windows \.app-body,[^}]*\{\s*height:\s*100vh;/s);
     expect(screen.getByText("Ctrl+K")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /搜索/ })).toHaveAttribute("title", "页面搜索 Ctrl+F");
+    expect(screen.getByRole("button", { name: /搜索/ })).toHaveAttribute("title", "全局搜索 Ctrl+K");
   });
 });
