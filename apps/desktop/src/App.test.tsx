@@ -1,13 +1,22 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import styles from "./styles.css?raw";
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, startDragging } = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  startDragging: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ startDragging }),
+}));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function setNavigatorPlatform(userAgent: string, platform: string) {
   Object.defineProperty(navigator, "userAgent", { configurable: true, value: userAgent });
@@ -17,6 +26,7 @@ function setNavigatorPlatform(userAgent: string, platform: string) {
 describe("macOS preview home", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    startDragging.mockResolvedValue(undefined);
     setNavigatorPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "MacIntel");
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
@@ -55,6 +65,47 @@ describe("macOS preview home", () => {
     expect(container.querySelector(".traffic-lights")).not.toBeInTheDocument();
     expect(container.querySelector(".mac-window-controls")).not.toBeInTheDocument();
     expect(container.querySelector(".windows-controls")).not.toBeInTheDocument();
+    expect(overlay).not.toHaveAttribute("aria-hidden");
+  });
+
+  it("starts dragging on every primary pointer press", async () => {
+    const { container } = render(<App />);
+    const overlay = container.querySelector(".mac-overlay-drag-area")!;
+    fireEvent.pointerDown(overlay, { button: 0 });
+    fireEvent.pointerDown(overlay, { button: 0 });
+
+    await waitFor(() => expect(startDragging).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not drag for secondary or interactive pointer targets", () => {
+    const { container } = render(<App />);
+    const overlay = container.querySelector(".mac-overlay-drag-area")!;
+    fireEvent.pointerDown(overlay, { button: 2 });
+
+    const button = document.createElement("button");
+    overlay.appendChild(button);
+    fireEvent.pointerDown(button, { button: 0 });
+
+    const noDrag = document.createElement("div");
+    noDrag.dataset.noDrag = "true";
+    overlay.appendChild(noDrag);
+    fireEvent.pointerDown(noDrag, { button: 0 });
+
+    expect(startDragging).not.toHaveBeenCalled();
+  });
+
+  it("reports startDragging failures without throwing", async () => {
+    const error = new Error("drag unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    startDragging.mockRejectedValueOnce(error);
+    const { container } = render(<App />);
+
+    fireEvent.pointerDown(container.querySelector(".mac-overlay-drag-area")!, { button: 0 });
+
+    await waitFor(() => {
+      expect(consoleError).toHaveBeenCalledWith("[MacOverlayDragArea] startDragging failed", error);
+    });
+    consoleError.mockRestore();
   });
 
   it("fills the webview and keeps all business actions in PageHeader", () => {

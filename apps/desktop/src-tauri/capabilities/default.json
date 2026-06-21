@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Minimal permissions for the macOS preview window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }
