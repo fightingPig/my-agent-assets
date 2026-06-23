@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { CurrentPage } from "./app/CurrentPage";
+import type { AppInfo } from "./app/contracts";
 import { getPageById } from "./app/pages";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
 import { getPlatformShortcuts } from "./lib/platform";
-import type { AppInfo } from "./pages/DashboardPage";
 import "./styles.css";
 import { parseVisualQaQuery, VISUAL_QA_PAGES, type VisualQaPage } from "./visual-qa/config";
 import { collectVisualQaReport, type VisualQaPageReport } from "./visual-qa/diagnostics";

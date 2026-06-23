@@ -1,14 +1,6 @@
-use serde::Serialize;
+mod contracts;
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppInfo {
-    name: &'static str,
-    version: &'static str,
-    platform: &'static str,
-    arch: &'static str,
-    backend_ready: bool,
-}
+use contracts::AppInfo;
 
 #[tauri::command]
 fn app_info() -> AppInfo {

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { CurrentPage } from "./app/CurrentPage";
+import type { AppInfo } from "./app/contracts";
 import { getPageById, type PageId } from "./app/pages";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
@@ -9,7 +10,6 @@ import {
   getPlatformShortcuts,
   isTauriRuntime,
 } from "./lib/platform";
-import type { AppInfo } from "./pages/DashboardPage";
 
 const fallbackInfo: AppInfo = {
   name: "My Agent Assets",

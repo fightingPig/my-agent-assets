@@ -1,9 +1,10 @@
+import type { AppInfo } from "./contracts";
 import type { PageId } from "./pages";
 import { AssetDetailPage } from "../pages/AssetDetailPage";
 import { BackupRestorePage } from "../pages/BackupRestorePage";
 import { CommandsListPage } from "../pages/CommandsListPage";
 import { ConflictResolverPage } from "../pages/ConflictResolverPage";
-import { DashboardPage, type AppInfo } from "../pages/DashboardPage";
+import { DashboardPage } from "../pages/DashboardPage";
 import { McpServersListPage } from "../pages/McpServersListPage";
 import { MountManagerPage } from "../pages/MountManagerPage";
 import { ProjectDetailPage } from "../pages/ProjectDetailPage";

@@ -5,15 +5,8 @@ import {
   FolderKanban,
   ListChecks,
 } from "lucide-react";
+import type { AppInfo } from "../app/contracts";
 import { projects, recentActivity, stats, systemChecks } from "../mock-data";
-
-export type AppInfo = {
-  name: string;
-  version: string;
-  platform: string;
-  arch: string;
-  backendReady: boolean;
-};
 
 type DashboardPageProps = {
   appInfo: AppInfo;
