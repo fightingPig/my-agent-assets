@@ -203,6 +203,14 @@ For this phase:
 - Do not modify window config.
 - Do not modify AppShell window strategy.
 
+## Static GUI Freeze
+
+The V1 static GUI pages are implemented, and their current page layouts are frozen.
+
+Do not redesign static pages unless explicitly requested.
+
+Visual QA tooling is available and must be run before and after any future layout change.
+
 ## Current Frontend Structure
 
 The desktop frontend currently uses this structure:
