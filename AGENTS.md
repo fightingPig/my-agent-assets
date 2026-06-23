@@ -220,6 +220,7 @@ src/
 ├── App.tsx
 ├── app/
 │   ├── CurrentPage.tsx
+│   ├── contracts.ts
 │   └── pages.ts
 ├── components/
 │   ├── assets/
@@ -249,7 +250,12 @@ src/
 │   ├── SyncPage.tsx
 │   └── SettingsPage.tsx
 ├── mock-data.ts
-└── styles.css
+├── styles.css
+├── visual-qa.tsx
+└── visual-qa/
+    ├── config.ts
+    ├── diagnostics.ts
+    └── visual-qa.test.tsx
 ```
 
 `App.tsx` orchestrates platform state, page selection, `app_info`, and page composition.
@@ -258,9 +264,13 @@ src/
 
 `app/CurrentPage.tsx` maps page IDs to page components.
 
+`app/contracts.ts` defines the frontend TypeScript DTO boundary for future Tauri/Rust integration.
+
 Shell components own the frozen window layout and navigation frame.
 
 Page components may use local static data during the current frontend-only phase.
+
+`visual-qa/` contains reusable static GUI screenshot and layout diagnostics tooling.
 
 ## Validation Before Full Page Work
 

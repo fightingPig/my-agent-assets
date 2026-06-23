@@ -78,7 +78,7 @@ Generated artifacts are intentionally ignored by Git. Visual QA must be run befo
 Validated on 2026-06-23:
 
 - TypeScript typecheck passed.
-- All 38 Vitest tests passed.
+- The full Vitest suite passed at the time of freeze.
 - Renderer production build passed.
 - Visual QA generated 13 pages and 26 screenshots.
 - Visual QA reported 0 severe issues and 0 warnings.
