@@ -8,6 +8,7 @@
     "build": "tauri build",
     "dev:renderer": "vite",
     "build:renderer": "tsc -b && vite build",
+    "qa:visual": "node scripts/visual-qa.mjs",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "tauri": "tauri"
