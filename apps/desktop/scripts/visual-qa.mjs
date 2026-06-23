@@ -6,6 +6,7 @@ import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
+import { isExpectedVisualQaReport } from "./visual-qa-readiness.mjs";
 
 const desktopDir = resolve(import.meta.dirname, "..");
 const artifactDir = join(desktopDir, "artifacts", "visual-qa");
@@ -125,15 +126,40 @@ async function evaluate(client, expression) {
   return result.result.value;
 }
 
-async function waitForQaReport(client) {
+function reportIdentity(report) {
+  if (!report || typeof report !== "object") return null;
+  return {
+    pageId: report.pageId,
+    platform: report.platform,
+    width: report.viewport?.width,
+    height: report.viewport?.height,
+  };
+}
+
+async function clearQaReport(client) {
+  await evaluate(client, `
+    window.__VISUAL_QA_READY__ = false;
+    window.__VISUAL_QA_REPORT__ = undefined;
+  `);
+}
+
+async function waitForQaReport(client, expected) {
   const deadline = Date.now() + 15_000;
+  let lastObserved = null;
   while (Date.now() < deadline) {
-    if (await evaluate(client, "window.__VISUAL_QA_READY__ === true")) {
-      return await evaluate(client, "window.__VISUAL_QA_REPORT__");
+    const state = await evaluate(client, `({
+      ready: window.__VISUAL_QA_READY__ === true,
+      report: window.__VISUAL_QA_REPORT__ ?? null,
+    })`);
+    lastObserved = reportIdentity(state?.report);
+    if (state?.ready && isExpectedVisualQaReport(state.report, expected)) {
+      return state.report;
     }
     await delay(75);
   }
-  throw new Error("Visual QA page did not publish a report within 15 seconds.");
+  throw new Error(
+    `Visual QA page did not publish the expected report within 15 seconds. Expected ${JSON.stringify(expected)}; last observed ${JSON.stringify(lastObserved)}.`,
+  );
 }
 
 async function stopChild(child) {
@@ -188,8 +214,19 @@ async function main() {
     await client.send("Page.enable");
     await client.send("Runtime.enable");
 
+    const manifestViewport = { width: 1024, height: 768 };
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      ...manifestViewport,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await clearQaReport(client);
     await client.send("Page.navigate", { url: `${viteUrl}/visual-qa.html?platform=macos&page=dashboard` });
-    await waitForQaReport(client);
+    await waitForQaReport(client, {
+      pageId: "dashboard",
+      platform: "macos",
+      ...manifestViewport,
+    });
     const manifest = await evaluate(client, "window.__VISUAL_QA_MANIFEST__");
     if (!Array.isArray(manifest) || manifest.length !== 13) {
       throw new Error(`Expected 13 Visual QA pages, received ${manifest?.length ?? "none"}.`);
@@ -205,8 +242,14 @@ async function main() {
           mobile: false,
         });
         const url = `${viteUrl}/visual-qa.html?platform=macos&page=${encodeURIComponent(page.id)}`;
+        await clearQaReport(client);
         await client.send("Page.navigate", { url });
-        const report = await waitForQaReport(client);
+        const report = await waitForQaReport(client, {
+          pageId: page.id,
+          platform: "macos",
+          width: viewport.width,
+          height: viewport.height,
+        });
         await client.send("Runtime.evaluate", { expression: "window.scrollTo(0, 0)" });
         const screenshot = await client.send("Page.captureScreenshot", {
           format: "png",

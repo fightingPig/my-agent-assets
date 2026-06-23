@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CurrentPage } from "../app/CurrentPage";
 import { PAGE_REGISTRY } from "../app/pages";
 import entrySource from "../visual-qa.tsx?raw";
+import { isExpectedVisualQaReport } from "../../scripts/visual-qa-readiness.mjs";
 import { parseVisualQaQuery, VISUAL_QA_PAGES } from "./config";
 import { collectVisualQaReport, createVisualQaSummary, OVERFLOW_TOLERANCE } from "./diagnostics";
 
@@ -23,6 +24,23 @@ function setSize(element: Element, sizes: Partial<Record<"clientWidth" | "client
 }
 
 describe("Visual QA harness", () => {
+  it("accepts only reports matching the expected page, platform, and viewport", () => {
+    const expected = { pageId: "skills", platform: "macos", width: 1440, height: 900 };
+    const report = {
+      pageId: "skills",
+      platform: "macos",
+      viewport: { width: 1440, height: 900 },
+    };
+
+    expect(isExpectedVisualQaReport(report, expected)).toBe(true);
+    expect(isExpectedVisualQaReport(null, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({}, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({ ...report, pageId: "commands" }, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({ ...report, platform: "windows" }, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({ ...report, viewport: { width: 1180, height: 900 } }, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({ ...report, viewport: { width: 1440, height: 760 } }, expected)).toBe(false);
+  });
+
   it("covers every registered V1 page in registry order", () => {
     expect(VISUAL_QA_PAGES).toEqual(PAGE_REGISTRY.map(({ id, title }) => ({ id, title })));
     expect(VISUAL_QA_PAGES).toHaveLength(13);
