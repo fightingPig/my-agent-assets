@@ -1,25 +1,31 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { AriaAttributes, CSSProperties, ReactNode } from "react";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 
-type NativeButtonProps = Omit<
-  ButtonHTMLAttributes<HTMLButtonElement>,
-  "aria-disabled" | "disabled" | "onClick"
->;
-
-export type StaticActionButtonProps = NativeButtonProps & {
-  onClick?: never;
+export type StaticActionButtonProps = {
+  children: ReactNode;
+  className?: string;
+  title?: string;
+  "aria-label"?: AriaAttributes["aria-label"];
+  style?: CSSProperties;
 };
 
-export function StaticActionButton({ children, style, type = "button", ...props }: StaticActionButtonProps) {
+export function StaticActionButton({
+  children,
+  className,
+  title,
+  "aria-label": ariaLabel,
+  style,
+}: StaticActionButtonProps) {
   return (
     <button
-      {...props}
+      aria-label={ariaLabel}
       aria-disabled="true"
+      className={className}
       data-no-drag="true"
       disabled
-      onClick={undefined}
       style={{ ...style, ...NO_DRAG_REGION_STYLE }}
-      type={type}
+      title={title}
+      type="button"
     >
       {children}
     </button>

@@ -1,6 +1,14 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { StaticActionButton } from "./StaticActionButton";
+import type { CSSProperties } from "react";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { StaticActionButton, type StaticActionButtonProps } from "./StaticActionButton";
+
+type ForbiddenEventProp =
+  | "onClick"
+  | "onMouseDown"
+  | "onPointerDown"
+  | "onKeyDown"
+  | "onSubmit";
 
 describe("StaticActionButton", () => {
   it("always renders as a disabled no-drag control without a click handler", () => {
@@ -9,15 +17,17 @@ describe("StaticActionButton", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAttribute("data-no-drag", "true");
+    expect(button).toHaveAttribute("type", "button");
     expect(button.onclick).toBeNull();
 
-    const element = StaticActionButton({ children: "执行预览" });
+    const element = StaticActionButton({
+      children: "执行预览",
+      style: { WebkitAppRegion: "drag" } as CSSProperties,
+    });
     expect(element.props.style).toMatchObject({ WebkitAppRegion: "no-drag" });
   });
 
-  it("rejects onClick at the type boundary", () => {
-    // @ts-expect-error Static actions cannot receive behavior.
-    const invalid = <StaticActionButton onClick={() => undefined}>Invalid</StaticActionButton>;
-    expect(invalid.props.onClick).toBeTypeOf("function");
+  it("exposes no event handler props at the type boundary", () => {
+    expectTypeOf<Extract<keyof StaticActionButtonProps, ForbiddenEventProp>>().toEqualTypeOf<never>();
   });
 });
