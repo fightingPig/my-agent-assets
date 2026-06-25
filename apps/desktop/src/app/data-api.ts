@@ -10,6 +10,7 @@ import type {
   ImportApplyInput,
   ImportPreview,
   ListAssetsInput,
+  MountApplyInput,
   MountPreview,
   PreviewConflictsInput,
   PreviewImportInput,
@@ -143,6 +144,22 @@ export async function importApply(input: ImportApplyInput): Promise<ApplyResult>
     errors: ["import_apply could not run outside the Tauri runtime."],
   };
   const result = await invokeOrFallback<unknown>("import_apply", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
+    ? result as ApplyResult
+    : fallback;
+}
+
+export async function mountApply(input: MountApplyInput): Promise<ApplyResult> {
+  const fallback: ApplyResult = {
+    mode: input.mode,
+    ok: false,
+    previewId: input.previewId,
+    backup: null,
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; mount apply skipped."],
+    errors: ["mount_apply could not run outside the Tauri runtime."],
+  };
+  const result = await invokeOrFallback<unknown>("mount_apply", { input }, fallback);
   return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
     ? result as ApplyResult
     : fallback;

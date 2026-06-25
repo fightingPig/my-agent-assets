@@ -115,6 +115,40 @@ describe("read-only desktop data api", () => {
         backupBeforeApply: true,
       },
     });
+
+    invoke.mockResolvedValueOnce({
+      mode: "planOnly",
+      ok: true,
+      previewId: "preview-mount-1",
+      backup: null,
+      steps: [],
+      warnings: [],
+      errors: [],
+    });
+    await api.mountApply({
+      previewId: "preview-mount-1",
+      mode: "planOnly",
+      assetId: "skill:review",
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+      backupBeforeApply: true,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("mount_apply", {
+      input: {
+        previewId: "preview-mount-1",
+        mode: "planOnly",
+        assetId: "skill:review",
+        target: {
+          scope: "project",
+          runtimePath: "~/workspace/project-a/.claude/skills/review",
+          projectPath: "~/workspace/project-a",
+        },
+        backupBeforeApply: true,
+      },
+    });
   });
 
   it("returns safe fallbacks outside Tauri", async () => {
@@ -160,6 +194,22 @@ describe("read-only desktop data api", () => {
       previewId: "preview-import-1",
       warnings: ["Tauri runtime is unavailable; import apply skipped."],
       errors: ["import_apply could not run outside the Tauri runtime."],
+    });
+    await expect(api.mountApply({
+      previewId: "preview-mount-1",
+      mode: "apply",
+      assetId: "skill:review",
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+      backupBeforeApply: true,
+    })).resolves.toMatchObject({
+      ok: false,
+      previewId: "preview-mount-1",
+      warnings: ["Tauri runtime is unavailable; mount apply skipped."],
+      errors: ["mount_apply could not run outside the Tauri runtime."],
     });
     expect(invoke).not.toHaveBeenCalled();
   });

@@ -6,9 +6,9 @@ mod read_only;
 
 use contracts::{
     AppInfo, ApplyResult, AssetSummary, ConflictPreview, DesktopSettings, GitStatus,
-    ImportApplyInput, ImportPreview, ListAssetsInput, MountPreview, PreviewConflictsInput,
-    PreviewImportInput, PreviewMountInput, PreviewRestoreInput, ProjectSummary, RestorePreview,
-    ScanAssetsInput, ScanResult,
+    ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
+    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
+    ProjectSummary, RestorePreview, ScanAssetsInput, ScanResult,
 };
 
 #[tauri::command]
@@ -72,6 +72,11 @@ fn import_apply(input: ImportApplyInput) -> ApplyResult {
     apply::import_apply_command(input)
 }
 
+#[tauri::command]
+fn mount_apply(input: MountApplyInput) -> ApplyResult {
+    apply::mount_apply_command(input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,7 +91,8 @@ pub fn run() {
             preview_mount,
             preview_conflicts,
             preview_restore,
-            import_apply
+            import_apply,
+            mount_apply
         ])
         .run(tauri::generate_context!())
         .expect("error while running My Agent Assets");

@@ -1,6 +1,6 @@
 use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, AssetType, BackupManifestSummary,
-    ImportApplyInput, PlanStepKind, ScanScope,
+    ImportApplyInput, MountApplyInput, PlanStepKind, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
 use serde::Serialize;
@@ -29,6 +29,27 @@ pub fn import_apply_command(input: ImportApplyInput) -> ApplyResult {
 pub fn import_apply_for_home(home: &Path, input: ImportApplyInput) -> ApplyResult {
     let mut result = ImportApplyRunner::new(home, input);
     result.run()
+}
+
+#[tauri::command]
+pub fn mount_apply_command(input: MountApplyInput) -> ApplyResult {
+    match home_dir() {
+        Some(home) => mount_apply_for_home(&home, input),
+        None => ApplyResult {
+            mode: input.mode,
+            ok: false,
+            preview_id: input.preview_id,
+            backup: None,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec!["Could not resolve HOME for mount apply.".into()],
+        },
+    }
+}
+
+pub fn mount_apply_for_home(home: &Path, input: MountApplyInput) -> ApplyResult {
+    let mut runner = MountApplyRunner::new(home, input);
+    runner.run()
 }
 
 struct ImportApplyRunner<'a> {
@@ -211,7 +232,12 @@ impl<'a> ImportApplyRunner<'a> {
         }
 
         if self.backup.is_none() {
-            self.backup = Some(BackupBuilder::create(self.home, &self.input.preview_id)?);
+            self.backup = Some(BackupBuilder::create(
+                self.home,
+                &self.input.preview_id,
+                "import",
+                "Import apply backup",
+            )?);
         }
         if let Some(backup) = &mut self.backup {
             backup.add_path(destination)?;
@@ -244,6 +270,219 @@ impl<'a> ImportApplyRunner<'a> {
             message,
             affected_paths,
         });
+    }
+}
+
+struct MountApplyRunner<'a> {
+    home: &'a Path,
+    input: MountApplyInput,
+    steps: Vec<ApplyStepResult>,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+    backup: Option<BackupBuilder>,
+}
+
+impl<'a> MountApplyRunner<'a> {
+    fn new(home: &'a Path, input: MountApplyInput) -> Self {
+        Self {
+            home,
+            input,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec![],
+            backup: None,
+        }
+    }
+
+    fn run(&mut self) -> ApplyResult {
+        let intent = match MountIntent::from_input(self.home, &self.input) {
+            Ok(intent) => intent,
+            Err(error) => {
+                self.push_failed_step("解析挂载请求", error, vec![]);
+                return self.result();
+            }
+        };
+
+        if self.input.mode == ApplyMode::PlanOnly {
+            self.steps.push(ApplyStepResult {
+                step_id: format!("plan-mount-{}", sanitize_step_id(&self.input.asset_id)),
+                kind: PlanStepKind::Mount,
+                label: format!("预览挂载 {}", self.input.asset_id),
+                status: ApplyStepStatus::Skipped,
+                message: "Plan-only mode: no symlink was created.".into(),
+                affected_paths: vec![display_path(&intent.destination)],
+            });
+            return self.result();
+        }
+
+        if let Err(error) = self.apply_intent(&intent) {
+            self.push_failed_step(
+                "挂载资产",
+                error.to_string(),
+                vec![display_path(&intent.destination)],
+            );
+        }
+
+        self.result()
+    }
+
+    fn apply_intent(&mut self, intent: &MountIntent) -> io::Result<()> {
+        if intent.asset_type == AssetType::Mcp {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "MCP mount apply is reserved for the MCP compile milestone.",
+            ));
+        }
+        if !intent.source.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "Asset center path does not exist: {}",
+                    display_path(&intent.source)
+                ),
+            ));
+        }
+        if !intent.destination.starts_with(self.home) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Mount target must stay under resolved HOME: {}",
+                    display_path(&intent.destination)
+                ),
+            ));
+        }
+
+        self.backup_destination_if_needed(&intent.destination)?;
+        if let Some(parent) = intent.destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let temp = temp_path_for(&intent.destination);
+        if temp.exists() {
+            remove_path(&temp)?;
+        }
+        create_symlink(&intent.source, &temp)?;
+        verify_symlink_target(&temp, &intent.source)?;
+        replace_path(&temp, &intent.destination)?;
+        verify_symlink_target(&intent.destination, &intent.source)?;
+
+        self.steps.push(ApplyStepResult {
+            step_id: format!("mount-{}", sanitize_step_id(&self.input.asset_id)),
+            kind: PlanStepKind::Mount,
+            label: format!("挂载 {}", self.input.asset_id),
+            status: ApplyStepStatus::Success,
+            message: "Created runtime symlink to the asset center.".into(),
+            affected_paths: vec![display_path(&intent.destination)],
+        });
+        Ok(())
+    }
+
+    fn backup_destination_if_needed(&mut self, destination: &Path) -> io::Result<()> {
+        if !path_exists_no_follow(destination) {
+            return Ok(());
+        }
+        if !self.input.backup_before_apply {
+            self.warnings.push(format!(
+                "Replacing existing mount target without backup: {}",
+                display_path(destination)
+            ));
+            return Ok(());
+        }
+
+        if self.backup.is_none() {
+            self.backup = Some(BackupBuilder::create(
+                self.home,
+                &self.input.preview_id,
+                "mount",
+                "Mount apply backup",
+            )?);
+        }
+        if let Some(backup) = &mut self.backup {
+            backup.add_path(destination)?;
+            self.steps.push(ApplyStepResult {
+                step_id: format!("backup-{}", sanitize_step_id(&display_path(destination))),
+                kind: PlanStepKind::Backup,
+                label: "备份已有挂载目标".into(),
+                status: ApplyStepStatus::Success,
+                message: "Backed up existing mount target before replacement.".into(),
+                affected_paths: vec![display_path(destination)],
+            });
+        }
+        Ok(())
+    }
+
+    fn result(&mut self) -> ApplyResult {
+        let backup = match self.input.mode {
+            ApplyMode::PlanOnly => None,
+            ApplyMode::Apply => self.backup.take().and_then(|backup| match backup.finish() {
+                Ok(summary) => Some(summary),
+                Err(error) => {
+                    self.errors
+                        .push(format!("Could not write backup manifest: {}", error));
+                    None
+                }
+            }),
+        };
+
+        ApplyResult {
+            mode: self.input.mode.clone(),
+            ok: self.errors.is_empty(),
+            preview_id: self.input.preview_id.clone(),
+            backup,
+            steps: self.steps.clone(),
+            warnings: self.warnings.clone(),
+            errors: self.errors.clone(),
+        }
+    }
+
+    fn push_failed_step(
+        &mut self,
+        label: &str,
+        message: impl Into<String>,
+        affected_paths: Vec<String>,
+    ) {
+        let message = message.into();
+        self.errors.push(message.clone());
+        self.steps.push(ApplyStepResult {
+            step_id: format!("failed-{}", sanitize_step_id(&self.input.asset_id)),
+            kind: PlanStepKind::Mount,
+            label: label.into(),
+            status: ApplyStepStatus::Failed,
+            message,
+            affected_paths,
+        });
+    }
+}
+
+struct MountIntent {
+    asset_type: AssetType,
+    source: PathBuf,
+    destination: PathBuf,
+}
+
+impl MountIntent {
+    fn from_input(home: &Path, input: &MountApplyInput) -> Result<Self, String> {
+        let (asset_type, name) = parse_asset_id(&input.asset_id)?;
+        let asset_center = home.join(".my-agent-assets").join("assets");
+        let source = match asset_type {
+            AssetType::Skill => {
+                let skill_dir = asset_center.join("skills").join(&name);
+                let skill_file = asset_center.join("skills").join(format!("{}.md", name));
+                if skill_dir.exists() {
+                    skill_dir
+                } else {
+                    skill_file
+                }
+            }
+            AssetType::Command => asset_center.join("commands").join(format!("{}.md", name)),
+            AssetType::Mcp => asset_center.join("mcps").join(format!("{}.json", name)),
+        };
+
+        Ok(Self {
+            asset_type,
+            source,
+            destination: expand_tilde(&input.target.runtime_path, home),
+        })
     }
 }
 
@@ -337,10 +576,16 @@ struct BackupBuilder {
 }
 
 impl BackupBuilder {
-    fn create(home: &Path, preview_id: &str) -> io::Result<Self> {
+    fn create(
+        home: &Path,
+        preview_id: &str,
+        id_prefix: &str,
+        label_prefix: &str,
+    ) -> io::Result<Self> {
         let created_at = modified_time_iso(SystemTime::now());
         let id = format!(
-            "import-{}-{}",
+            "{}-{}-{}",
+            id_prefix,
             created_at
                 .replace([':', '-'], "")
                 .replace('T', "-")
@@ -352,7 +597,7 @@ impl BackupBuilder {
         let manifest_path = root.join("manifest.json");
         Ok(Self {
             id,
-            label: format!("Import apply backup for {}", preview_id),
+            label: format!("{} for {}", label_prefix, preview_id),
             created_at,
             root,
             manifest_path,
@@ -371,7 +616,12 @@ impl BackupBuilder {
             fs::create_dir_all(parent)?;
         }
 
-        let (kind, size_bytes) = if original.is_dir() {
+        let metadata = fs::symlink_metadata(original)?;
+        let (kind, size_bytes) = if metadata.file_type().is_symlink() {
+            let target = fs::read_link(original)?;
+            fs::write(&backup_path, target.to_string_lossy().as_bytes())?;
+            ("symlink".into(), fs::metadata(&backup_path)?.len())
+        } else if metadata.is_dir() {
             copy_dir_recursive(original, &backup_path)?;
             ("directory".into(), dir_size(original)?)
         } else {
@@ -471,18 +721,56 @@ fn write_file_verified(bytes: &[u8], destination: &Path) -> io::Result<()> {
 }
 
 fn replace_path(temp: &Path, destination: &Path) -> io::Result<()> {
-    if destination.exists() {
+    if path_exists_no_follow(destination) {
         remove_path(destination)?;
     }
     fs::rename(temp, destination)
 }
 
 fn remove_path(path: &Path) -> io::Result<()> {
-    if path.is_dir() {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
         fs::remove_dir_all(path)
     } else {
         fs::remove_file(path)
     }
+}
+
+fn path_exists_no_follow(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
+#[cfg(unix)]
+fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(source, destination)
+}
+
+#[cfg(windows)]
+fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
+    if source.is_dir() {
+        std::os::windows::fs::symlink_dir(source, destination)
+    } else {
+        std::os::windows::fs::symlink_file(source, destination)
+    }
+}
+
+fn verify_symlink_target(link: &Path, expected: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(link)?;
+    if !metadata.file_type().is_symlink() {
+        return Err(io::Error::other(format!(
+            "Mount target is not a symlink: {}",
+            display_path(link)
+        )));
+    }
+    let actual = fs::read_link(link)?;
+    if actual != expected {
+        return Err(io::Error::other(format!(
+            "Symlink verification failed. Expected {}, got {}.",
+            display_path(expected),
+            display_path(&actual)
+        )));
+    }
+    Ok(())
 }
 
 fn temp_path_for(destination: &Path) -> PathBuf {

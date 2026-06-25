@@ -1,6 +1,6 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. The first implementation is `import_apply`; mount, restore, and settings writes remain future work.
+This document defines the safety boundary for write/apply commands. `import_apply` and the first `mount_apply` slice are implemented; restore, settings writes, and MCP runtime compilation remain future work.
 
 ## Scope
 
@@ -44,7 +44,7 @@ The frontend and Rust contract layers define:
 - `MountApplyInput`
 - `RestoreApplyInput`
 
-`import_apply` is registered and uses these DTOs. Other apply DTOs remain reserved for future implementation.
+`import_apply` and `mount_apply` are registered and use these DTOs. Other apply DTOs remain reserved for future implementation.
 
 ## Backup Rule
 
@@ -142,16 +142,22 @@ If any step fails, later write steps must not continue unless explicitly marked 
 
 `import_apply` does not delete or modify runtime Claude files. MCP import extracts a server JSON object into the asset center and leaves the source config unchanged.
 
+`mount_apply` currently supports fake-HOME-tested Skill and Command symlink mounts:
+
+- Source assets are resolved from `~/.my-agent-assets/assets/skills` or `~/.my-agent-assets/assets/commands`
+- Mount targets must resolve under the backend's HOME
+- Existing mount targets are backed up before replacement when `backupBeforeApply` is true
+- `planOnly` mode creates no symlink and writes no files
+- MCP mount/compile is explicitly reserved for a separate milestone
+
 ## Still Forbidden
 
 These operations are still not implemented:
 
-- `mount_apply`
 - `restore_apply`
 - `settings_save`
 - Git pull
 - Git push
-- symlink creation
 - MCP runtime JSON writes
 - restore execution
 

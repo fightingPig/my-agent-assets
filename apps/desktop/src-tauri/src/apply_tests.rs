@@ -1,5 +1,8 @@
-use super::apply::import_apply_for_home;
-use super::contracts::{ApplyMode, ApplyStepStatus, ImportApplyInput, ScanScope};
+use super::apply::{import_apply_for_home, mount_apply_for_home};
+use super::contracts::{
+    ApplyMode, ApplyStepStatus, ImportApplyInput, MountApplyInput, MountTarget, RuntimeScope,
+    ScanScope,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -59,6 +62,25 @@ fn import_input(mode: ApplyMode, scope: ScanScope, asset_ids: Vec<&str>) -> Impo
         asset_ids: asset_ids.into_iter().map(String::from).collect(),
         conflict_resolutions: vec![],
         backup_before_apply: true,
+    }
+}
+
+fn mount_input(
+    mode: ApplyMode,
+    asset_id: &str,
+    runtime_path: String,
+    backup_before_apply: bool,
+) -> MountApplyInput {
+    MountApplyInput {
+        preview_id: "preview-mount-test".into(),
+        mode,
+        asset_id: asset_id.into(),
+        target: MountTarget {
+            scope: RuntimeScope::Project,
+            runtime_path,
+            project_path: Some("~/workspace/project-a".into()),
+        },
+        backup_before_apply,
     }
 }
 
@@ -203,4 +225,160 @@ fn import_apply_reports_missing_source_without_creating_destination() {
     assert!(!result.ok);
     assert_eq!(result.steps[0].status, ApplyStepStatus::Failed);
     assert!(!home.exists(".my-agent-assets/assets/commands/missing.md"));
+}
+
+#[test]
+fn mount_apply_plan_only_does_not_create_runtime_target() {
+    let home = TempHome::new("mount-plan-only");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::PlanOnly,
+            "skill:review",
+            "~/workspace/project-a/.claude/skills/review.md".into(),
+            true,
+        ),
+    );
+
+    assert!(result.ok, "{:?}", result.errors);
+    assert_eq!(result.steps.len(), 1);
+    assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
+    assert!(!home.exists("workspace/project-a/.claude/skills/review.md"));
+    assert!(result.backup.is_none());
+}
+
+#[test]
+fn mount_apply_creates_skill_symlink_from_asset_center() {
+    let home = TempHome::new("mount-skill");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    let target = home
+        .path()
+        .join("workspace/project-a/.claude/skills/review.md");
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "skill:review",
+            "~/workspace/project-a/.claude/skills/review.md".into(),
+            true,
+        ),
+    );
+
+    assert!(result.ok, "{:?}", result.errors);
+    assert_eq!(result.steps[0].status, ApplyStepStatus::Success);
+    assert_eq!(
+        fs::read_link(&target).expect("target should be a symlink"),
+        home.path().join(".my-agent-assets/assets/skills/review.md")
+    );
+    assert!(result.backup.is_none());
+}
+
+#[test]
+fn mount_apply_creates_command_symlink_and_backs_up_existing_target() {
+    let home = TempHome::new("mount-command-backup");
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Deploy");
+    home.write(
+        "workspace/project-a/.claude/commands/deploy.md",
+        "# Existing deploy",
+    );
+    let target = home
+        .path()
+        .join("workspace/project-a/.claude/commands/deploy.md");
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "command:deploy",
+            "~/workspace/project-a/.claude/commands/deploy.md".into(),
+            true,
+        ),
+    );
+
+    assert!(result.ok, "{:?}", result.errors);
+    assert_eq!(
+        fs::read_link(&target).expect("target should be a symlink"),
+        home.path()
+            .join(".my-agent-assets/assets/commands/deploy.md")
+    );
+    let backup = result.backup.expect("backup should be created");
+    assert_eq!(backup.entry_count, 1);
+    let backup_file = Path::new(&backup.manifest_path)
+        .parent()
+        .unwrap()
+        .join("files/workspace/project-a/.claude/commands/deploy.md");
+    assert_eq!(
+        fs::read_to_string(backup_file).expect("backup file should be readable"),
+        "# Existing deploy"
+    );
+}
+
+#[test]
+fn mount_apply_rejects_target_outside_home() {
+    let home = TempHome::new("mount-outside-home");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    let outside = std::env::temp_dir().join(format!(
+        "my-agent-assets-outside-target-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&outside);
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "skill:review",
+            outside.to_string_lossy().into_owned(),
+            true,
+        ),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("must stay under resolved HOME"));
+    assert!(!outside.exists());
+}
+
+#[test]
+fn mount_apply_reports_missing_asset_without_creating_target() {
+    let home = TempHome::new("mount-missing");
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "skill:missing",
+            "~/workspace/project-a/.claude/skills/missing.md".into(),
+            true,
+        ),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("Asset center path does not exist"));
+    assert!(!home.exists("workspace/project-a/.claude/skills/missing.md"));
+}
+
+#[test]
+fn mount_apply_leaves_mcp_compile_for_future_milestone() {
+    let home = TempHome::new("mount-mcp");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres"}"#,
+    );
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "mcp:PostgreSQL",
+            "~/workspace/project-a/.mcp.json".into(),
+            true,
+        ),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("MCP mount apply is reserved"));
+    assert!(!home.exists("workspace/project-a/.mcp.json"));
 }
