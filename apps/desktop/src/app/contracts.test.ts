@@ -12,6 +12,7 @@ import {
   RUNTIME_SCOPES,
   type PreviewImportInput,
   type ScanScope,
+  type GitStatus,
 } from "./contracts";
 
 describe("Tauri command contracts", () => {
@@ -52,5 +53,25 @@ describe("Tauri command contracts", () => {
     expect(input).not.toHaveProperty("scanId");
     expect(input).not.toHaveProperty("sessionId");
     expectTypeOf(input).toMatchTypeOf<PreviewImportInput>();
+  });
+
+  it("keeps GitStatus read-only repository fields explicit", () => {
+    const status = {
+      repositoryPath: "~/.my-agent-assets",
+      isRepository: false,
+      statusMessage: "Asset center directory does not exist.",
+      branch: "",
+      remote: null,
+      clean: true,
+      ahead: 0,
+      behind: 0,
+      changedFiles: [],
+      conflicts: [],
+      lastSyncedAt: null,
+    } satisfies GitStatus;
+
+    expect(status.isRepository).toBe(false);
+    expect(status.statusMessage).toBe("Asset center directory does not exist.");
+    expectTypeOf(status).toMatchTypeOf<GitStatus>();
   });
 });

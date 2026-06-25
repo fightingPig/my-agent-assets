@@ -151,6 +151,8 @@ export type RestorePreview = {
 
 export type GitStatus = {
   repositoryPath: string;
+  isRepository: boolean;
+  statusMessage: string;
   branch: string;
   remote: string | null;
   clean: boolean;

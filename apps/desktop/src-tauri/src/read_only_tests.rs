@@ -1,0 +1,296 @@
+use super::contracts::{
+    AssetStatus, AssetType, ListAssetsInput, RuntimeScope, ScanAssetsInput, ScanScope,
+};
+use super::read_only::{
+    git_status_for_home, list_assets_for_home, list_projects_for_home, scan_assets_for_home,
+    settings_for_home,
+};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+struct TempHome {
+    path: PathBuf,
+}
+
+impl TempHome {
+    fn new(name: &str) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be valid")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "my-agent-assets-desktop-{}-{}-{}",
+            name,
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&path).expect("temp home should be created");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn write(&self, relative: &str, content: &str) {
+        let path = self.path.join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("parent directory should be created");
+        }
+        fs::write(path, content).expect("file should be written");
+    }
+
+    fn mkdir(&self, relative: &str) {
+        fs::create_dir_all(self.path.join(relative)).expect("directory should be created");
+    }
+}
+
+impl Drop for TempHome {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn all_assets_input() -> ListAssetsInput {
+    ListAssetsInput { asset_type: None }
+}
+
+#[test]
+fn settings_load_returns_defaults_without_creating_files() {
+    let home = TempHome::new("settings");
+    let settings = settings_for_home(Some(home.path()));
+
+    assert_eq!(
+        settings.asset_center_path,
+        home.path().join(".my-agent-assets").to_string_lossy()
+    );
+    assert_eq!(settings.scan_roots.len(), 3);
+    assert_eq!(settings.max_depth, 5);
+    assert!(settings.backup_before_apply);
+    assert!(settings.plan_only_by_default);
+    assert_eq!(settings.git_default_branch, "main");
+    assert_eq!(settings.git_remote, "origin");
+    assert!(!home.path().join(".my-agent-assets").exists());
+}
+
+#[test]
+fn list_assets_returns_empty_when_asset_center_is_missing() {
+    let home = TempHome::new("missing-assets");
+    assert!(list_assets_for_home(home.path(), all_assets_input()).is_empty());
+    assert!(!home.path().join(".my-agent-assets").exists());
+}
+
+#[test]
+fn list_assets_reads_skills_commands_and_mcp_json_safely() {
+    let home = TempHome::new("assets");
+    home.write(
+        ".my-agent-assets/assets/skills/review/SKILL.md",
+        "# Review\n\nCheck code changes.",
+    );
+    home.write(
+        ".my-agent-assets/assets/skills/api-design.md",
+        "# API Design",
+    );
+    home.write(
+        ".my-agent-assets/assets/commands/deploy-prod.md",
+        "# Deploy",
+    );
+    home.write(
+        ".my-agent-assets/assets/mcps/postgres.json",
+        r#"{"command":"postgres-mcp"}"#,
+    );
+    home.write(".my-agent-assets/assets/mcps/broken.json", "{");
+
+    let assets = list_assets_for_home(home.path(), all_assets_input());
+    assert_eq!(assets.len(), 5);
+    assert!(assets.iter().any(|asset| asset.id == "skill:review"));
+    assert!(assets.iter().any(|asset| asset.id == "skill:api-design"));
+    assert!(assets.iter().any(|asset| asset.id == "command:deploy-prod"));
+    assert!(assets
+        .iter()
+        .any(|asset| asset.id == "mcp:postgres" && asset.status == AssetStatus::Ready));
+    assert!(assets
+        .iter()
+        .any(|asset| asset.id == "mcp:broken" && asset.status == AssetStatus::Invalid));
+}
+
+#[test]
+fn scan_assets_reads_user_runtime_and_top_level_mcp_servers() {
+    let home = TempHome::new("scan-user");
+    home.write(".claude/skills/review.md", "# Review");
+    home.write(".claude/commands/commit.md", "# Commit");
+    home.write(
+        ".claude.json",
+        r#"{"mcpServers":{"PostgreSQL":{"command":"postgres"},"Redis":{"command":"redis"}}}"#,
+    );
+
+    let result = scan_assets_for_home(
+        home.path(),
+        ScanAssetsInput {
+            scope: ScanScope::User,
+        },
+    );
+
+    assert_eq!(result.counts.total, 4);
+    assert!(result
+        .assets
+        .iter()
+        .any(|asset| asset.id == "skill:review" && asset.scope == Some(RuntimeScope::User)));
+    assert!(result
+        .assets
+        .iter()
+        .any(|asset| asset.id == "command:commit"));
+    assert!(result
+        .assets
+        .iter()
+        .any(|asset| asset.id == "mcp:PostgreSQL"));
+    assert!(result.assets.iter().any(|asset| asset.id == "mcp:Redis"));
+}
+
+#[test]
+fn scan_assets_reads_project_and_custom_runtime_roots() {
+    let home = TempHome::new("scan-project");
+    home.write(
+        "workspace/project-a/.claude/skills/db-review.md",
+        "# DB Review",
+    );
+    home.write("workspace/project-a/.claude/commands/deploy.md", "# Deploy");
+    home.write(
+        "workspace/project-a/.mcp.json",
+        r#"{"mcpServers":{"SQLite":{"command":"sqlite"}}}"#,
+    );
+
+    let project = scan_assets_for_home(
+        home.path(),
+        ScanAssetsInput {
+            scope: ScanScope::Project {
+                project_path: "~/workspace/project-a".into(),
+            },
+        },
+    );
+    let custom = scan_assets_for_home(
+        home.path(),
+        ScanAssetsInput {
+            scope: ScanScope::Custom {
+                path: "~/workspace/project-a".into(),
+            },
+        },
+    );
+
+    assert_eq!(project.counts.total, 3);
+    assert_eq!(custom.counts.total, 3);
+    assert!(project.assets.iter().any(|asset| asset.id == "mcp:SQLite"));
+}
+
+#[test]
+fn scan_assets_warns_on_invalid_top_level_mcp_json() {
+    let home = TempHome::new("scan-invalid");
+    home.write(".claude.json", "{");
+
+    let result = scan_assets_for_home(
+        home.path(),
+        ScanAssetsInput {
+            scope: ScanScope::User,
+        },
+    );
+
+    assert_eq!(result.counts.total, 0);
+    assert_eq!(result.warnings.len(), 1);
+    assert!(result.warnings[0].contains("Could not parse MCP config"));
+}
+
+#[test]
+fn list_projects_detects_first_level_project_markers() {
+    let home = TempHome::new("projects");
+    home.write("workspace/web-app/package.json", "{}");
+    home.write(
+        "code/rust-app/Cargo.toml",
+        "[package]\nname = \"rust-app\"\n",
+    );
+    home.mkdir("workspace/claude-app/.claude");
+    home.write("workspace/nested/child/package.json", "{}");
+
+    let projects = list_projects_for_home(home.path());
+
+    assert!(projects.iter().any(|project| project.name == "web-app"));
+    assert!(projects.iter().any(|project| project.name == "rust-app"));
+    assert!(projects.iter().any(|project| project.name == "claude-app"));
+    assert!(!projects.iter().any(|project| project.name == "child"));
+}
+
+#[test]
+fn list_projects_marks_git_projects_with_changes_when_git_is_available() {
+    let home = TempHome::new("dirty-project");
+    let project = home.path().join("workspace/git-app");
+    fs::create_dir_all(&project).expect("project directory should be created");
+    if !git_ok(&project, &["init"]) {
+        return;
+    }
+    home.write("workspace/git-app/untracked.txt", "dirty");
+
+    let projects = list_projects_for_home(home.path());
+    let git_project = projects
+        .iter()
+        .find(|project| project.name == "git-app")
+        .expect("git project should be detected");
+    assert_eq!(git_project.status, super::contracts::ProjectStatus::Changed);
+}
+
+#[test]
+fn git_status_is_safe_for_missing_and_non_git_asset_centers() {
+    let home = TempHome::new("git-status-safe");
+
+    let missing = git_status_for_home(home.path());
+    assert!(!missing.is_repository);
+    assert!(missing.status_message.contains("does not exist"));
+
+    home.mkdir(".my-agent-assets");
+    let non_git = git_status_for_home(home.path());
+    assert!(!non_git.is_repository);
+    assert!(non_git.status_message.contains("not a Git repository"));
+}
+
+#[test]
+fn git_status_reads_repository_without_upstream_when_git_is_available() {
+    let home = TempHome::new("git-status-repo");
+    let repo = home.path().join(".my-agent-assets");
+    fs::create_dir_all(&repo).expect("repo should be created");
+    if !git_ok(&repo, &["init"]) {
+        return;
+    }
+    fs::write(repo.join("asset.txt"), "changed").expect("asset should be written");
+
+    let status = git_status_for_home(home.path());
+    assert!(status.is_repository);
+    assert!(status.status_message.contains("no upstream"));
+    assert!(!status.clean);
+    assert!(status.changed_files.iter().any(|file| file == "asset.txt"));
+}
+
+#[test]
+fn list_assets_can_filter_by_type() {
+    let home = TempHome::new("asset-filter");
+    home.write(".my-agent-assets/assets/skills/review/SKILL.md", "# Review");
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Deploy");
+
+    let commands = list_assets_for_home(
+        home.path(),
+        ListAssetsInput {
+            asset_type: Some(AssetType::Command),
+        },
+    );
+
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].id, "command:deploy");
+}
+
+fn git_ok(cwd: &Path, args: &[&str]) -> bool {
+    Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}

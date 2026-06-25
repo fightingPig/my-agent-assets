@@ -1,6 +1,11 @@
 mod contracts;
+mod path_utils;
+mod read_only;
 
-use contracts::AppInfo;
+use contracts::{
+    AppInfo, AssetSummary, DesktopSettings, GitStatus, ListAssetsInput, ProjectSummary,
+    ScanAssetsInput, ScanResult,
+};
 
 #[tauri::command]
 fn app_info() -> AppInfo {
@@ -13,10 +18,42 @@ fn app_info() -> AppInfo {
     }
 }
 
+#[tauri::command]
+fn settings_load() -> DesktopSettings {
+    read_only::settings_load_command()
+}
+
+#[tauri::command]
+fn git_status() -> GitStatus {
+    read_only::git_status_command()
+}
+
+#[tauri::command]
+fn list_assets(input: ListAssetsInput) -> Vec<AssetSummary> {
+    read_only::list_assets_command(input)
+}
+
+#[tauri::command]
+fn list_projects() -> Vec<ProjectSummary> {
+    read_only::list_projects_command()
+}
+
+#[tauri::command]
+fn scan_assets(input: ScanAssetsInput) -> ScanResult {
+    read_only::scan_assets_command(input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![app_info])
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            settings_load,
+            git_status,
+            list_assets,
+            list_projects,
+            scan_assets
+        ])
         .run(tauri::generate_context!())
         .expect("error while running My Agent Assets");
 }
@@ -32,3 +69,6 @@ mod tests {
         assert!(info.backend_ready);
     }
 }
+
+#[cfg(test)]
+mod read_only_tests;

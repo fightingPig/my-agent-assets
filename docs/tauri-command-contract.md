@@ -55,7 +55,9 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Output:** `ScanResult { scope, scannedAt, assets, counts, conflictCount, warnings }`.
 - **Side effect:** Read-only.
 - **Future consumer:** Scan Import.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only.
+
+The read-only implementation scans Markdown Skills and Commands from the selected runtime root. MCP discovery reads the relevant JSON config file and parses its top-level `mcpServers` object; `.mcpServers` is not a path.
 
 ### `preview_import`
 
@@ -75,7 +77,7 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Output:** `AssetSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Skills, Commands, MCP Servers, Asset Detail, and Mount Manager.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only.
 
 ### `list_projects`
 
@@ -84,7 +86,7 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Output:** `ProjectSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Projects and Project Detail.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only.
 
 ### `preview_mount`
 
@@ -126,10 +128,10 @@ These values are part of the public JSON contract and must not be inferred only 
 
 - **Purpose:** Read the asset center's local Git state without pull, push, fetch, or credential interaction.
 - **Input:** None.
-- **Output:** `GitStatus { repositoryPath, branch, remote, clean, ahead, behind, changedFiles, conflicts, lastSyncedAt }`.
+- **Output:** `GitStatus { repositoryPath, isRepository, statusMessage, branch, remote, clean, ahead, behind, changedFiles, conflicts, lastSyncedAt }`.
 - **Side effect:** Read-only.
 - **Future consumer:** Sync and Dashboard.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only.
 
 ### `settings_load`
 
@@ -138,7 +140,7 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Output:** `DesktopSettings`.
 - **Side effect:** Read-only.
 - **Future consumer:** Settings.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only defaults.
 
 ### `settings_save`
 
@@ -172,6 +174,11 @@ type ConflictPreview = {
 
 type BackupSummary = { id; label; createdAt; sizeBytes; entryCount };
 
+type GitStatus = {
+  repositoryPath; isRepository; statusMessage; branch; remote;
+  clean; ahead; behind; changedFiles; conflicts; lastSyncedAt;
+};
+
 type DesktopSettings = {
   assetCenterPath; scanRoots; maxDepth;
   backupBeforeApply; planOnlyByDefault;
@@ -188,4 +195,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no Tauri commands and no filesystem, Git, scan, mount, backup, restore, or settings implementation. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types. Apply/write commands beyond `settings_save` are intentionally not part of this contract milestone.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; preview/write commands remain contract-only. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types. Apply/write commands beyond `settings_save` are intentionally not part of this contract milestone.

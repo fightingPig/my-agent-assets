@@ -280,6 +280,8 @@ pub struct RestorePreview {
 #[serde(rename_all = "camelCase")]
 pub struct GitStatus {
     pub repository_path: String,
+    pub is_repository: bool,
+    pub status_message: String,
     pub branch: String,
     pub remote: Option<String>,
     pub clean: bool,
@@ -442,6 +444,40 @@ mod tests {
                 "platform": "macos",
                 "arch": "arm64",
                 "backendReady": true
+            })
+        );
+    }
+
+    #[test]
+    fn git_status_json_shape_includes_read_only_state() {
+        let status = GitStatus {
+            repository_path: "~/.my-agent-assets".into(),
+            is_repository: false,
+            status_message: "Asset center directory does not exist.".into(),
+            branch: "".into(),
+            remote: None,
+            clean: true,
+            ahead: 0,
+            behind: 0,
+            changed_files: vec![],
+            conflicts: vec![],
+            last_synced_at: None,
+        };
+
+        assert_eq!(
+            wire_value(status),
+            json!({
+                "repositoryPath": "~/.my-agent-assets",
+                "isRepository": false,
+                "statusMessage": "Asset center directory does not exist.",
+                "branch": "",
+                "remote": null,
+                "clean": true,
+                "ahead": 0,
+                "behind": 0,
+                "changedFiles": [],
+                "conflicts": [],
+                "lastSyncedAt": null
             })
         );
     }
