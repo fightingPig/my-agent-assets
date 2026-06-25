@@ -131,6 +131,26 @@ pub enum LogLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApplyMode {
+    #[serde(rename = "planOnly")]
+    PlanOnly,
+    #[serde(rename = "apply")]
+    Apply,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ApplyStepStatus {
+    #[serde(rename = "pending")]
+    Pending,
+    #[serde(rename = "skipped")]
+    Skipped,
+    #[serde(rename = "success")]
+    Success,
+    #[serde(rename = "failed")]
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum ScanScope {
     #[serde(rename = "user")]
@@ -191,6 +211,17 @@ pub struct PlanStep {
     pub label: String,
     pub description: String,
     pub risk: RiskLevel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyStepResult {
+    pub step_id: String,
+    pub kind: PlanStepKind,
+    pub label: String,
+    pub status: ApplyStepStatus,
+    pub message: String,
+    pub affected_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -267,6 +298,19 @@ pub struct BackupSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BackupManifestSummary {
+    pub id: String,
+    pub label: String,
+    pub created_at: String,
+    pub size_bytes: u64,
+    pub entry_count: u32,
+    pub manifest_path: String,
+    pub runtime_root: String,
+    pub affected_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RestorePreview {
     pub backup: BackupSummary,
     pub affected_paths: Vec<String>,
@@ -274,6 +318,18 @@ pub struct RestorePreview {
     pub warnings: Vec<String>,
     pub backup_before_restore: bool,
     pub can_apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyResult {
+    pub mode: ApplyMode,
+    pub ok: bool,
+    pub preview_id: String,
+    pub backup: Option<BackupManifestSummary>,
+    pub steps: Vec<ApplyStepResult>,
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +411,36 @@ pub struct SettingsSaveInput {
     pub settings: DesktopSettings,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportApplyInput {
+    pub preview_id: String,
+    pub mode: ApplyMode,
+    pub scope: ScanScope,
+    pub asset_ids: Vec<String>,
+    pub conflict_resolutions: Vec<ConflictResolutionChoice>,
+    pub backup_before_apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MountApplyInput {
+    pub preview_id: String,
+    pub mode: ApplyMode,
+    pub asset_id: String,
+    pub target: MountTarget,
+    pub backup_before_apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreApplyInput {
+    pub preview_id: String,
+    pub mode: ApplyMode,
+    pub backup_id: String,
+    pub backup_before_restore: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,6 +498,12 @@ mod tests {
         assert_eq!(wire_value(LogLevel::Warn), json!("warn"));
         assert_eq!(wire_value(LogLevel::Info), json!("info"));
         assert_eq!(wire_value(LogLevel::Debug), json!("debug"));
+        assert_eq!(wire_value(ApplyMode::PlanOnly), json!("planOnly"));
+        assert_eq!(wire_value(ApplyMode::Apply), json!("apply"));
+        assert_eq!(wire_value(ApplyStepStatus::Pending), json!("pending"));
+        assert_eq!(wire_value(ApplyStepStatus::Skipped), json!("skipped"));
+        assert_eq!(wire_value(ApplyStepStatus::Success), json!("success"));
+        assert_eq!(wire_value(ApplyStepStatus::Failed), json!("failed"));
         assert_eq!(wire_value(ScanScope::User), json!({ "kind": "user" }));
         assert_eq!(
             wire_value(ScanScope::Project {
@@ -507,6 +599,67 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<PreviewImportInput>(value).unwrap(),
             input
+        );
+    }
+
+    #[test]
+    fn apply_contracts_are_preview_bound_and_camel_case() {
+        let input = ImportApplyInput {
+            preview_id: "preview-import-1".into(),
+            mode: ApplyMode::PlanOnly,
+            scope: ScanScope::User,
+            asset_ids: vec!["skill:review".into()],
+            conflict_resolutions: vec![],
+            backup_before_apply: true,
+        };
+        let value = wire_value(&input);
+        assert_eq!(value["previewId"], json!("preview-import-1"));
+        assert_eq!(value["mode"], json!("planOnly"));
+        assert_eq!(value["backupBeforeApply"], json!(true));
+        assert!(value.get("runtimePath").is_none());
+        assert_eq!(
+            serde_json::from_value::<ImportApplyInput>(value).unwrap(),
+            input
+        );
+    }
+
+    #[test]
+    fn apply_result_shape_is_stable() {
+        let result = ApplyResult {
+            mode: ApplyMode::PlanOnly,
+            ok: true,
+            preview_id: "preview-mount-1".into(),
+            backup: None,
+            steps: vec![ApplyStepResult {
+                step_id: "check".into(),
+                kind: PlanStepKind::Check,
+                label: "校验".into(),
+                status: ApplyStepStatus::Skipped,
+                message: "Plan only".into(),
+                affected_paths: vec![],
+            }],
+            warnings: vec![],
+            errors: vec![],
+        };
+
+        assert_eq!(
+            wire_value(result),
+            json!({
+                "mode": "planOnly",
+                "ok": true,
+                "previewId": "preview-mount-1",
+                "backup": null,
+                "steps": [{
+                    "stepId": "check",
+                    "kind": "check",
+                    "label": "校验",
+                    "status": "skipped",
+                    "message": "Plan only",
+                    "affectedPaths": []
+                }],
+                "warnings": [],
+                "errors": []
+            })
         );
     }
 }

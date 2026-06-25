@@ -28,6 +28,12 @@ export type DensityPreference = (typeof DENSITY_PREFERENCES)[number];
 export const LOG_LEVELS = ["error", "warn", "info", "debug"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+export const APPLY_MODES = ["planOnly", "apply"] as const;
+export type ApplyMode = (typeof APPLY_MODES)[number];
+
+export const APPLY_STEP_STATUSES = ["pending", "skipped", "success", "failed"] as const;
+export type ApplyStepStatus = (typeof APPLY_STEP_STATUSES)[number];
+
 export type AppInfo = {
   name: string;
   version: string;
@@ -80,6 +86,15 @@ export type PlanStep = {
   label: string;
   description: string;
   risk: RiskLevel;
+};
+
+export type ApplyStepResult = {
+  stepId: string;
+  kind: PlanStepKind;
+  label: string;
+  status: ApplyStepStatus;
+  message: string;
+  affectedPaths: string[];
 };
 
 export type ConflictResolutionChoice = {
@@ -140,6 +155,12 @@ export type BackupSummary = {
   entryCount: number;
 };
 
+export type BackupManifestSummary = BackupSummary & {
+  manifestPath: string;
+  runtimeRoot: string;
+  affectedPaths: string[];
+};
+
 export type RestorePreview = {
   backup: BackupSummary;
   affectedPaths: string[];
@@ -147,6 +168,16 @@ export type RestorePreview = {
   warnings: string[];
   backupBeforeRestore: boolean;
   canApply: boolean;
+};
+
+export type ApplyResult = {
+  mode: ApplyMode;
+  ok: boolean;
+  previewId: string;
+  backup: BackupManifestSummary | null;
+  steps: ApplyStepResult[];
+  warnings: string[];
+  errors: string[];
 };
 
 export type GitStatus = {
@@ -189,3 +220,24 @@ export type PreviewMountInput = { assetId: string; target: MountTarget };
 export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
 export type PreviewRestoreInput = { backupId: string };
 export type SettingsSaveInput = { settings: DesktopSettings };
+export type ImportApplyInput = {
+  previewId: string;
+  mode: ApplyMode;
+  scope: ScanScope;
+  assetIds: string[];
+  conflictResolutions: ConflictResolutionChoice[];
+  backupBeforeApply: boolean;
+};
+export type MountApplyInput = {
+  previewId: string;
+  mode: ApplyMode;
+  assetId: string;
+  target: MountTarget;
+  backupBeforeApply: boolean;
+};
+export type RestoreApplyInput = {
+  previewId: string;
+  mode: ApplyMode;
+  backupId: string;
+  backupBeforeRestore: boolean;
+};

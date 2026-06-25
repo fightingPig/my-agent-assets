@@ -28,6 +28,8 @@ These values are part of the public JSON contract and must not be inferred only 
 | `AppearanceTheme` | `system`, `light`, `dark` |
 | `DensityPreference` | `compact`, `comfortable` |
 | `LogLevel` | `error`, `warn`, `info`, `debug` |
+| `ApplyMode` | `planOnly`, `apply` |
+| `ApplyStepStatus` | `pending`, `skipped`, `success`, `failed` |
 
 `ScanScope` is a discriminated object with these exact shapes:
 
@@ -151,6 +153,18 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Future consumer:** Settings.
 - **Status:** Contract only; not registered.
 
+### Future apply commands
+
+The write safety contract reserves DTOs for future apply commands, but no apply command is registered in this milestone.
+
+Future command names:
+
+- `import_apply`
+- `mount_apply`
+- `restore_apply`
+
+Each future command must receive a single `input` object with `previewId`, `mode`, command-specific identifiers, and backup preference fields. See `docs/write-safety-contract.md`.
+
 ## DTO Shapes
 
 ```ts
@@ -167,12 +181,25 @@ type ProjectSummary = {
 
 type PlanStep = { id; kind; label; description; risk };
 
+type ApplyStepResult = {
+  stepId; kind; label; status; message; affectedPaths;
+};
+
 type ConflictPreview = {
   id; assetId; assetType; name; reason;
   existingContent; incomingContent; allowedResolutions;
 };
 
 type BackupSummary = { id; label; createdAt; sizeBytes; entryCount };
+
+type BackupManifestSummary = {
+  id; label; createdAt; sizeBytes; entryCount;
+  manifestPath; runtimeRoot; affectedPaths;
+};
+
+type ApplyResult = {
+  mode; ok; previewId; backup; steps; warnings; errors;
+};
 
 type GitStatus = {
   repositoryPath; isRepository; statusMessage; branch; remote;
@@ -195,4 +222,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`. Write commands remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types. Apply/write commands beyond `settings_save` are intentionally not part of this contract milestone.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`. Write commands remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types. Apply/write commands are intentionally not registered in this contract milestone.
