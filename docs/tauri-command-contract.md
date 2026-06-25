@@ -153,13 +153,29 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Future consumer:** Settings.
 - **Status:** Contract only; not registered.
 
+### `import_apply`
+
+- **Purpose:** Apply a previously previewed import selection by copying selected runtime assets into the asset center.
+- **Input:** `ImportApplyInput { previewId, mode, scope, assetIds, conflictResolutions, backupBeforeApply }`.
+- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
+- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
+- **Future consumer:** Scan Import and Conflict Resolver.
+- **Status:** Implemented and registered for Skill, Command, and MCP import.
+
+Current behavior:
+
+- Skill imports support `.claude/skills/<name>/` directories and `.claude/skills/<name>.md` files.
+- Command imports support `.claude/commands/<name>.md` files.
+- MCP imports read the selected top-level `mcpServers.<name>` JSON object from `.claude.json` or `.mcp.json`, then write it to `assets/mcps/<name>.json`.
+- Runtime Claude files are not deleted or modified.
+- Existing asset-center destinations are backed up before replacement when `backupBeforeApply` is true.
+
 ### Future apply commands
 
-The write safety contract reserves DTOs for future apply commands, but no apply command is registered in this milestone.
+The write safety contract reserves DTOs for additional future apply commands.
 
 Future command names:
 
-- `import_apply`
 - `mount_apply`
 - `restore_apply`
 
@@ -222,4 +238,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`. Write commands remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types. Apply/write commands are intentionally not registered in this contract milestone.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the first write integration registers `import_apply`. `mount_apply`, `restore_apply`, and `settings_save` remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

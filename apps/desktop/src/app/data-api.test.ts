@@ -85,6 +85,38 @@ describe("read-only desktop data api", () => {
     });
   });
 
+  it("calls apply command names with the expected input envelope", async () => {
+    const api = await import("./data-api");
+
+    invoke.mockResolvedValueOnce({
+      mode: "planOnly",
+      ok: true,
+      previewId: "preview-import-1",
+      backup: null,
+      steps: [],
+      warnings: [],
+      errors: [],
+    });
+    await api.importApply({
+      previewId: "preview-import-1",
+      mode: "planOnly",
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [],
+      backupBeforeApply: true,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("import_apply", {
+      input: {
+        previewId: "preview-import-1",
+        mode: "planOnly",
+        scope: { kind: "user" },
+        assetIds: ["skill:review"],
+        conflictResolutions: [],
+        backupBeforeApply: true,
+      },
+    });
+  });
+
   it("returns safe fallbacks outside Tauri", async () => {
     const api = await import("./data-api");
     isTauriRuntime.mockReturnValue(false);
@@ -115,6 +147,19 @@ describe("read-only desktop data api", () => {
     await expect(api.previewRestore({ backupId: "backup-1" })).resolves.toMatchObject({
       canApply: false,
       warnings: ["Tauri runtime is unavailable; restore preview skipped."],
+    });
+    await expect(api.importApply({
+      previewId: "preview-import-1",
+      mode: "apply",
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [],
+      backupBeforeApply: true,
+    })).resolves.toMatchObject({
+      ok: false,
+      previewId: "preview-import-1",
+      warnings: ["Tauri runtime is unavailable; import apply skipped."],
+      errors: ["import_apply could not run outside the Tauri runtime."],
     });
     expect(invoke).not.toHaveBeenCalled();
   });

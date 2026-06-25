@@ -1,6 +1,6 @@
 # Write Safety Contract
 
-This document defines the safety boundary for future write/apply commands. It is a contract milestone only: no apply command is registered or implemented in this step.
+This document defines the safety boundary for write/apply commands. The first implementation is `import_apply`; mount, restore, and settings writes remain future work.
 
 ## Scope
 
@@ -44,7 +44,7 @@ The frontend and Rust contract layers define:
 - `MountApplyInput`
 - `RestoreApplyInput`
 
-No Tauri command is registered for these DTOs yet.
+`import_apply` is registered and uses these DTOs. Other apply DTOs remain reserved for future implementation.
 
 ## Backup Rule
 
@@ -130,25 +130,34 @@ Each step result must include:
 
 If any step fails, later write steps must not continue unless explicitly marked as safe cleanup.
 
-## Forbidden In This Milestone
+## Current Implementation
 
-This milestone does not add:
+`import_apply` currently supports fake-HOME-tested imports into the asset center:
 
-- `import_apply`
+- Skills from runtime `.claude/skills/<name>/` directories or `.claude/skills/<name>.md`
+- Commands from runtime `.claude/commands/<name>.md`
+- MCP servers by reading the top-level `mcpServers.<name>` object from `.claude.json` or `.mcp.json`
+- Destination replacement with backup when `backupBeforeApply` is true
+- `planOnly` mode with no filesystem writes
+
+`import_apply` does not delete or modify runtime Claude files. MCP import extracts a server JSON object into the asset center and leaves the source config unchanged.
+
+## Still Forbidden
+
+These operations are still not implemented:
+
 - `mount_apply`
 - `restore_apply`
 - `settings_save`
 - Git pull
 - Git push
-- file writes
 - symlink creation
-- MCP JSON writes
-- backup creation
+- MCP runtime JSON writes
 - restore execution
 
 ## Next Implementation Gate
 
-Before registering any apply command, add tests proving:
+Before registering additional apply commands, add tests proving:
 
 - fake HOME isolation
 - no writes in `planOnly`

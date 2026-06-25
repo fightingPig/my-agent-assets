@@ -6,6 +6,8 @@ import type {
   ConflictPreview,
   DesktopSettings,
   GitStatus,
+  ApplyResult,
+  ImportApplyInput,
   ImportPreview,
   ListAssetsInput,
   MountPreview,
@@ -127,6 +129,22 @@ export async function previewRestore(input: PreviewRestoreInput): Promise<Restor
   const result = await invokeOrFallback<unknown>("preview_restore", { input }, fallback);
   return isRecord(result) && isRecord(result.backup) && Array.isArray(result.affectedPaths)
     ? result as RestorePreview
+    : fallback;
+}
+
+export async function importApply(input: ImportApplyInput): Promise<ApplyResult> {
+  const fallback: ApplyResult = {
+    mode: input.mode,
+    ok: false,
+    previewId: input.previewId,
+    backup: null,
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; import apply skipped."],
+    errors: ["import_apply could not run outside the Tauri runtime."],
+  };
+  const result = await invokeOrFallback<unknown>("import_apply", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
+    ? result as ApplyResult
     : fallback;
 }
 
