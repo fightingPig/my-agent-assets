@@ -4,7 +4,7 @@ use crate::contracts::{
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -328,10 +328,7 @@ impl<'a> MountApplyRunner<'a> {
 
     fn apply_intent(&mut self, intent: &MountIntent) -> io::Result<()> {
         if intent.asset_type == AssetType::Mcp {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "MCP mount apply is reserved for the MCP compile milestone.",
-            ));
+            return self.apply_mcp_compile_intent(intent);
         }
         if !intent.source.exists() {
             return Err(io::Error::new(
@@ -372,6 +369,78 @@ impl<'a> MountApplyRunner<'a> {
             label: format!("挂载 {}", self.input.asset_id),
             status: ApplyStepStatus::Success,
             message: "Created runtime symlink to the asset center.".into(),
+            affected_paths: vec![display_path(&intent.destination)],
+        });
+        Ok(())
+    }
+
+    fn apply_mcp_compile_intent(&mut self, intent: &MountIntent) -> io::Result<()> {
+        if !intent.source.exists() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "Asset center path does not exist: {}",
+                    display_path(&intent.source)
+                ),
+            ));
+        }
+        if !intent.destination.starts_with(self.home) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "MCP compile target must stay under resolved HOME: {}",
+                    display_path(&intent.destination)
+                ),
+            ));
+        }
+
+        let server = read_json_file(&intent.source)?;
+        let mut runtime_config = if intent.destination.exists() {
+            let value = read_json_file(&intent.destination)?;
+            match value {
+                Value::Object(object) => object,
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Existing MCP runtime config must be a JSON object.",
+                    ));
+                }
+            }
+        } else {
+            Map::new()
+        };
+
+        match runtime_config.get_mut("mcpServers") {
+            Some(Value::Object(servers)) => {
+                servers.insert(intent.name.clone(), server);
+            }
+            Some(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Existing mcpServers field must be a JSON object.",
+                ));
+            }
+            None => {
+                let mut servers = Map::new();
+                servers.insert(intent.name.clone(), server);
+                runtime_config.insert("mcpServers".into(), Value::Object(servers));
+            }
+        }
+
+        self.backup_destination_if_needed(&intent.destination)?;
+        if let Some(parent) = intent.destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let bytes =
+            serde_json::to_vec_pretty(&Value::Object(runtime_config)).map_err(io::Error::other)?;
+        write_file_verified(&bytes, &intent.destination)?;
+
+        self.steps.push(ApplyStepResult {
+            step_id: format!("compile-mcp-{}", sanitize_step_id(&self.input.asset_id)),
+            kind: PlanStepKind::CompileMcp,
+            label: format!("编译 {}", self.input.asset_id),
+            status: ApplyStepStatus::Success,
+            message: "Compiled MCP server JSON into the runtime config.".into(),
             affected_paths: vec![display_path(&intent.destination)],
         });
         Ok(())
@@ -456,6 +525,7 @@ impl<'a> MountApplyRunner<'a> {
 
 struct MountIntent {
     asset_type: AssetType,
+    name: String,
     source: PathBuf,
     destination: PathBuf,
 }
@@ -480,6 +550,7 @@ impl MountIntent {
 
         Ok(Self {
             asset_type,
+            name,
             source,
             destination: expand_tilde(&input.target.runtime_path, home),
         })
@@ -699,6 +770,20 @@ fn runtime_root(home: &Path, scope: &ScanScope) -> PathBuf {
 fn copy_file_verified(source: &Path, destination: &Path) -> io::Result<()> {
     let bytes = fs::read(source)?;
     write_file_verified(&bytes, destination)
+}
+
+fn read_json_file(path: &Path) -> io::Result<Value> {
+    let text = fs::read_to_string(path)?;
+    serde_json::from_str(&text).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Could not parse JSON file {}: {}",
+                display_path(path),
+                error
+            ),
+        )
+    })
 }
 
 fn write_file_verified(bytes: &[u8], destination: &Path) -> io::Result<()> {

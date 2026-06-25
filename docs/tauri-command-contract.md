@@ -172,20 +172,21 @@ Current behavior:
 
 ### `mount_apply`
 
-- **Purpose:** Apply a previously previewed Skill or Command mount by creating a runtime symlink to the asset center.
+- **Purpose:** Apply a previously previewed mount by creating a Skill/Command runtime symlink or compiling an MCP server into runtime JSON.
 - **Input:** `MountApplyInput { previewId, mode, assetId, target, backupBeforeApply }`.
 - **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
 - **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
 - **Future consumer:** Mount Manager, Asset Detail, and Project Detail.
-- **Status:** Implemented and registered for Skill and Command symlink mounts. MCP compile remains future work.
+- **Status:** Implemented and registered for Skill/Command symlink mounts and MCP compile.
 
 Current behavior:
 
 - Skill sources are resolved from `assets/skills/<name>/` or `assets/skills/<name>.md`.
 - Command sources are resolved from `assets/commands/<name>.md`.
+- MCP sources are resolved from `assets/mcps/<name>.json`.
 - The runtime target path is expanded from `~` and must stay under the resolved HOME.
 - Existing target paths are backed up before replacement when `backupBeforeApply` is true.
-- MCP asset IDs return a safe failure until the MCP compile milestone.
+- MCP compile writes the selected server into the target file's top-level `mcpServers.<name>` field while preserving existing JSON object fields and other MCP servers.
 
 ### Future apply commands
 
@@ -254,4 +255,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply` and the first Skill/Command slice of `mount_apply`. `restore_apply`, `settings_save`, and MCP runtime compilation remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply` and `mount_apply`. `restore_apply` and `settings_save` remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

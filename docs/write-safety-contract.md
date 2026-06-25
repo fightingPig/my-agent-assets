@@ -1,6 +1,6 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply` and the first `mount_apply` slice are implemented; restore, settings writes, and MCP runtime compilation remain future work.
+This document defines the safety boundary for write/apply commands. `import_apply` and `mount_apply` are implemented; restore and settings writes remain future work.
 
 ## Scope
 
@@ -142,13 +142,14 @@ If any step fails, later write steps must not continue unless explicitly marked 
 
 `import_apply` does not delete or modify runtime Claude files. MCP import extracts a server JSON object into the asset center and leaves the source config unchanged.
 
-`mount_apply` currently supports fake-HOME-tested Skill and Command symlink mounts:
+`mount_apply` currently supports fake-HOME-tested Skill and Command symlink mounts plus MCP runtime config compilation:
 
 - Source assets are resolved from `~/.my-agent-assets/assets/skills` or `~/.my-agent-assets/assets/commands`
-- Mount targets must resolve under the backend's HOME
+- MCP source assets are resolved from `~/.my-agent-assets/assets/mcps/<name>.json`
+- Mount or compile targets must resolve under the backend's HOME
 - Existing mount targets are backed up before replacement when `backupBeforeApply` is true
-- `planOnly` mode creates no symlink and writes no files
-- MCP mount/compile is explicitly reserved for a separate milestone
+- MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
+- `planOnly` mode creates no symlink, writes no JSON, and creates no backup
 
 ## Still Forbidden
 
@@ -158,7 +159,6 @@ These operations are still not implemented:
 - `settings_save`
 - Git pull
 - Git push
-- MCP runtime JSON writes
 - restore execution
 
 ## Next Implementation Gate

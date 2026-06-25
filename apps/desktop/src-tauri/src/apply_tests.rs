@@ -361,11 +361,34 @@ fn mount_apply_reports_missing_asset_without_creating_target() {
 }
 
 #[test]
-fn mount_apply_leaves_mcp_compile_for_future_milestone() {
-    let home = TempHome::new("mount-mcp");
+fn mount_apply_plan_only_does_not_compile_mcp_runtime_config() {
+    let home = TempHome::new("mcp-plan-only");
     home.write(
         ".my-agent-assets/assets/mcps/PostgreSQL.json",
         r#"{"command":"postgres"}"#,
+    );
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::PlanOnly,
+            "mcp:PostgreSQL",
+            "~/workspace/project-a/.mcp.json".into(),
+            true,
+        ),
+    );
+
+    assert!(result.ok, "{:?}", result.errors);
+    assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
+    assert!(!home.exists("workspace/project-a/.mcp.json"));
+}
+
+#[test]
+fn mount_apply_compiles_mcp_server_into_new_runtime_config() {
+    let home = TempHome::new("mcp-new");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres","args":["--stdio"]}"#,
     );
 
     let result = mount_apply_for_home(
@@ -378,7 +401,78 @@ fn mount_apply_leaves_mcp_compile_for_future_milestone() {
         ),
     );
 
+    assert!(result.ok, "{:?}", result.errors);
+    assert!(result.backup.is_none());
+    assert_eq!(result.steps[0].status, ApplyStepStatus::Success);
+    let config = read_json(home.path().join("workspace/project-a/.mcp.json"));
+    assert_eq!(config["mcpServers"]["PostgreSQL"]["command"], "postgres");
+    assert_eq!(config["mcpServers"]["PostgreSQL"]["args"][0], "--stdio");
+}
+
+#[test]
+fn mount_apply_merges_mcp_server_and_backs_up_existing_runtime_config() {
+    let home = TempHome::new("mcp-merge");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres"}"#,
+    );
+    home.write(
+        "workspace/project-a/.mcp.json",
+        r#"{"comment":"keep","mcpServers":{"Redis":{"command":"redis"}}}"#,
+    );
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "mcp:PostgreSQL",
+            "~/workspace/project-a/.mcp.json".into(),
+            true,
+        ),
+    );
+
+    assert!(result.ok, "{:?}", result.errors);
+    let config = read_json(home.path().join("workspace/project-a/.mcp.json"));
+    assert_eq!(config["comment"], "keep");
+    assert_eq!(config["mcpServers"]["Redis"]["command"], "redis");
+    assert_eq!(config["mcpServers"]["PostgreSQL"]["command"], "postgres");
+
+    let backup = result.backup.expect("backup should be created");
+    assert_eq!(backup.entry_count, 1);
+    let backup_file = Path::new(&backup.manifest_path)
+        .parent()
+        .unwrap()
+        .join("files/workspace/project-a/.mcp.json");
+    let backup_config = read_json(backup_file);
+    assert_eq!(backup_config["mcpServers"]["Redis"]["command"], "redis");
+    assert!(backup_config["mcpServers"].get("PostgreSQL").is_none());
+}
+
+#[test]
+fn mount_apply_rejects_invalid_existing_mcp_runtime_config_without_overwrite() {
+    let home = TempHome::new("mcp-invalid-runtime");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres"}"#,
+    );
+    home.write("workspace/project-a/.mcp.json", "{");
+
+    let result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "mcp:PostgreSQL",
+            "~/workspace/project-a/.mcp.json".into(),
+            true,
+        ),
+    );
+
     assert!(!result.ok);
-    assert!(result.errors[0].contains("MCP mount apply is reserved"));
-    assert!(!home.exists("workspace/project-a/.mcp.json"));
+    assert!(result.errors[0].contains("Could not parse JSON file"));
+    assert_eq!(home.read("workspace/project-a/.mcp.json"), "{");
+}
+
+fn read_json(path: impl AsRef<Path>) -> serde_json::Value {
+    let text = fs::read_to_string(path).expect("JSON file should be readable");
+    serde_json::from_str(&text).expect("JSON should parse")
 }
