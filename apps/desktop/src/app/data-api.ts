@@ -40,30 +40,36 @@ const fallbackGitStatus: GitStatus = {
 };
 
 export async function listAssets(input: ListAssetsInput = { assetType: null }): Promise<AssetSummary[]> {
-  return invokeOrFallback("list_assets", { input }, []);
+  const assets = await invokeOrFallback<unknown>("list_assets", { input }, []);
+  return Array.isArray(assets) ? assets as AssetSummary[] : [];
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
-  return invokeOrFallback("list_projects", undefined, []);
+  const projects = await invokeOrFallback<unknown>("list_projects", undefined, []);
+  return Array.isArray(projects) ? projects as ProjectSummary[] : [];
 }
 
 export async function gitStatus(): Promise<GitStatus> {
-  return invokeOrFallback("git_status", undefined, fallbackGitStatus);
+  const status = await invokeOrFallback<unknown>("git_status", undefined, fallbackGitStatus);
+  return isRecord(status) && typeof status.repositoryPath === "string" ? status as GitStatus : fallbackGitStatus;
 }
 
 export async function settingsLoad(): Promise<DesktopSettings> {
-  return invokeOrFallback("settings_load", undefined, fallbackSettings);
+  const settings = await invokeOrFallback<unknown>("settings_load", undefined, fallbackSettings);
+  return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : fallbackSettings;
 }
 
 export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
-  return invokeOrFallback("scan_assets", { input }, {
+  const fallback = {
     scope: input.scope,
     scannedAt: new Date(0).toISOString(),
     assets: [],
     counts: { total: 0, skills: 0, commands: 0, mcps: 0 },
     conflictCount: 0,
     warnings: ["Tauri runtime is unavailable; scan skipped."],
-  });
+  };
+  const result = await invokeOrFallback<unknown>("scan_assets", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.assets) && isRecord(result.counts) ? result as ScanResult : fallback;
 }
 
 async function invokeOrFallback<T>(
@@ -78,4 +84,8 @@ async function invokeOrFallback<T>(
   } catch {
     return fallback;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

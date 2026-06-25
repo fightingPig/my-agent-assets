@@ -1,4 +1,7 @@
 import { Blocks } from "lucide-react";
+import { useEffect, useState } from "react";
+import { listAssets } from "../app/data-api";
+import type { AssetSummary } from "../app/contracts";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -15,7 +18,7 @@ type McpItem = AssetCenterItem & {
   preview: string;
 };
 
-const servers: readonly McpItem[] = [
+const staticServers: readonly McpItem[] = [
   {
     id: "postgresql",
     name: "PostgreSQL",
@@ -95,12 +98,40 @@ const servers: readonly McpItem[] = [
 ];
 
 export function McpServersListPage() {
+  const [items, setItems] = useState<readonly McpItem[]>(staticServers);
+  const [stateLabel, setStateLabel] = useState("读取中");
+
+  useEffect(() => {
+    let cancelled = false;
+    setStateLabel("读取中");
+    listAssets({ assetType: "mcp" })
+      .then((assets) => {
+        if (cancelled) return;
+        if (Array.isArray(assets) && assets.length > 0) {
+          setItems(assets.map(toMcpItem));
+          setStateLabel("只读真实数据");
+        } else {
+          setItems(staticServers);
+          setStateLabel("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems(staticServers);
+        setStateLabel("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <AssetCenterLayout
       actionLabel="挂载 MCP"
       itemLabel="MCP Servers"
-      items={servers}
+      items={items}
       searchPlaceholder="搜索 MCP 名称、能力或配置路径"
+      stateLabel={stateLabel}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[
@@ -113,4 +144,32 @@ export function McpServersListPage() {
       )}
     />
   );
+}
+
+function toMcpItem(asset: AssetSummary): McpItem {
+  return {
+    id: asset.id,
+    name: asset.name,
+    title: asset.title,
+    category: asset.category || "MCP Server",
+    updated: asset.updatedAt ?? "未知",
+    mounts: asset.mountTargets,
+    summary: asset.description || "本地 MCP 配置",
+    status: asset.status === "invalid" ? "配置无效" : "配置正常",
+    statusTone: asset.status === "invalid" ? "warning" : "success",
+    scope: scopeLabel(asset.scope),
+    path: asset.sourcePath,
+    icon: Blocks,
+    transport: "本地配置",
+    source: asset.category || "资产中心",
+    capabilities: [asset.assetType, asset.status],
+    preview: `{\n  "name": "${asset.name}",\n  "sourcePath": "${asset.sourcePath}"\n}`,
+    searchTerms: [asset.assetType, asset.status],
+  };
+}
+
+function scopeLabel(scope: AssetSummary["scope"]) {
+  if (scope === "user") return "用户级";
+  if (scope === "project") return "项目级";
+  return "资产中心";
 }

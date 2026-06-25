@@ -1,4 +1,7 @@
 import { BookOpen } from "lucide-react";
+import { useEffect, useState } from "react";
+import { listAssets } from "../app/data-api";
+import type { AssetSummary } from "../app/contracts";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -9,7 +12,7 @@ type SkillItem = AssetCenterItem & {
   preview: string;
 };
 
-const skills: readonly SkillItem[] = [
+const staticSkills: readonly SkillItem[] = [
   {
     id: "review",
     name: "review",
@@ -77,15 +80,68 @@ const skills: readonly SkillItem[] = [
 ];
 
 export function SkillsListPage() {
+  const [items, setItems] = useState<readonly SkillItem[]>(staticSkills);
+  const [stateLabel, setStateLabel] = useState("读取中");
+
+  useEffect(() => {
+    let cancelled = false;
+    setStateLabel("读取中");
+    listAssets({ assetType: "skill" })
+      .then((assets) => {
+        if (cancelled) return;
+        if (Array.isArray(assets) && assets.length > 0) {
+          setItems(assets.map(toSkillItem));
+          setStateLabel("只读真实数据");
+        } else {
+          setItems(staticSkills);
+          setStateLabel("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems(staticSkills);
+        setStateLabel("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <AssetCenterLayout
       actionLabel="挂载 Skill"
       itemLabel="Skills"
-      items={skills}
+      items={items}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
+      stateLabel={stateLabel}
       renderInspector={(skill) => (
         <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
       )}
     />
   );
+}
+
+function toSkillItem(asset: AssetSummary): SkillItem {
+  return {
+    id: asset.id,
+    name: asset.name,
+    title: asset.title,
+    category: asset.category || "本地 Skill",
+    summary: asset.description || "本地 Skill 资产",
+    status: asset.status === "invalid" ? "无效" : asset.mountTargets.length > 0 ? "已挂载" : "可用",
+    statusTone: asset.status === "invalid" ? "warning" : "success",
+    scope: scopeLabel(asset.scope),
+    path: asset.sourcePath,
+    icon: BookOpen,
+    updated: asset.updatedAt ?? "未知",
+    mounts: asset.mountTargets,
+    preview: asset.description ? `# ${asset.name}\n\n${asset.description}` : `# ${asset.name}`,
+    searchTerms: [asset.assetType, asset.status],
+  };
+}
+
+function scopeLabel(scope: AssetSummary["scope"]) {
+  if (scope === "user") return "用户级";
+  if (scope === "project") return "项目级";
+  return "资产中心";
 }

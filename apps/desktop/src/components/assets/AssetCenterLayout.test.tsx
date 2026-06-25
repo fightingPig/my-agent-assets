@@ -83,7 +83,7 @@ describe("Asset Center static UI", () => {
   it("keeps Sync wording repository-local", () => {
     const { container } = render(<SyncPage />);
     expect(screen.getByText("本地 Git 仓库")).toBeInTheDocument();
-    expect(screen.getByText("远程仓库")).toBeInTheDocument();
+    expect(screen.getAllByText("远程仓库").length).toBeGreaterThan(0);
     for (const phrase of ["GitHub", "登录", "账号", "OAuth", "云"]) {
       expect(container.textContent).not.toContain(phrase);
     }

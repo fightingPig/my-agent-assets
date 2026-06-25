@@ -26,6 +26,7 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   itemLabel: string;
   searchPlaceholder: string;
   actionLabel: string;
+  stateLabel?: string;
   renderInspector: (item: T) => ReactNode;
 };
 
@@ -56,6 +57,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   itemLabel,
   searchPlaceholder,
   actionLabel,
+  stateLabel,
   renderInspector,
 }: AssetCenterLayoutProps<T>) {
   const [query, setQuery] = useState("");
@@ -102,7 +104,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
 
         <div className="asset-list-heading">
           <span>{itemLabel}</span>
-          <small>{visibleItems.length} / {items.length}</small>
+          <small>{visibleItems.length} / {items.length}{stateLabel ? ` · ${stateLabel}` : ""}</small>
         </div>
 
         <div className="asset-list" role="listbox" aria-label={`${itemLabel}选择`}>

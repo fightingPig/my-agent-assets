@@ -54,7 +54,7 @@ describe("remaining V1 static pages", () => {
     expect(projectScope).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("当前范围：项目级")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "导入预览表" })).toBeInTheDocument();
-    expect(screen.getByText("发现 1 项命名冲突")).toBeInTheDocument();
+    expect(screen.getByText("只读扫描预览")).toBeInTheDocument();
   });
 
   it("updates the Mount asset and target preview", () => {
@@ -89,7 +89,7 @@ describe("remaining V1 static pages", () => {
     expect(screen.getByText("Ahead")).toBeInTheDocument();
     expect(screen.getByText("Behind")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "同步历史" })).toBeInTheDocument();
-    expect(screen.getByText("远程仓库包含 1 个新提交")).toBeInTheDocument();
+    expect(screen.getAllByText("静态预览：尚未读取本地 Git 仓库。").length).toBeGreaterThan(0);
   });
 
   it("renders only the seven allowed Settings sections with static controls", () => {

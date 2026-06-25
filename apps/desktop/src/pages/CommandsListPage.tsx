@@ -1,4 +1,7 @@
 import { TerminalSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { listAssets } from "../app/data-api";
+import type { AssetSummary } from "../app/contracts";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -12,7 +15,7 @@ type CommandItem = AssetCenterItem & {
   preview: string;
 };
 
-const commands: readonly CommandItem[] = [
+const staticCommands: readonly CommandItem[] = [
   {
     id: "deploy-prod",
     name: "deploy-prod",
@@ -84,12 +87,40 @@ const commands: readonly CommandItem[] = [
 ];
 
 export function CommandsListPage() {
+  const [items, setItems] = useState<readonly CommandItem[]>(staticCommands);
+  const [stateLabel, setStateLabel] = useState("读取中");
+
+  useEffect(() => {
+    let cancelled = false;
+    setStateLabel("读取中");
+    listAssets({ assetType: "command" })
+      .then((assets) => {
+        if (cancelled) return;
+        if (Array.isArray(assets) && assets.length > 0) {
+          setItems(assets.map(toCommandItem));
+          setStateLabel("只读真实数据");
+        } else {
+          setItems(staticCommands);
+          setStateLabel("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems(staticCommands);
+        setStateLabel("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <AssetCenterLayout
       actionLabel="挂载 Command"
       itemLabel="Commands"
-      items={commands}
+      items={items}
       searchPlaceholder="搜索 Command 名称、用途或路径"
+      stateLabel={stateLabel}
       renderInspector={(command) => (
         <>
           <InspectorSection title="用途标签"><InspectorTags tags={command.tags} /></InspectorSection>
@@ -98,4 +129,30 @@ export function CommandsListPage() {
       )}
     />
   );
+}
+
+function toCommandItem(asset: AssetSummary): CommandItem {
+  return {
+    id: asset.id,
+    name: asset.name,
+    title: asset.title,
+    category: asset.category || "本地 Command",
+    summary: asset.description || "本地命令资产",
+    status: asset.status === "invalid" ? "无效" : "可用",
+    statusTone: asset.status === "invalid" ? "warning" : "success",
+    scope: scopeLabel(asset.scope),
+    path: asset.sourcePath,
+    icon: TerminalSquare,
+    updated: asset.updatedAt ?? "未知",
+    mounts: asset.mountTargets,
+    tags: [asset.assetType, asset.status],
+    preview: asset.description ? `# ${asset.name}\n\n${asset.description}` : `# ${asset.name}`,
+    searchTerms: [asset.assetType, asset.status],
+  };
+}
+
+function scopeLabel(scope: AssetSummary["scope"]) {
+  if (scope === "user") return "用户级";
+  if (scope === "project") return "项目级";
+  return "资产中心";
 }

@@ -1,6 +1,6 @@
 # Read-only Real Data Integration v1
 
-This milestone connects the frozen desktop GUI contracts to safe read-only Tauri commands. It does not switch any page from static data to real data yet.
+This milestone connects the frozen desktop GUI contracts to safe read-only Tauri commands and wires selected static pages to those commands.
 
 ## Implemented Commands
 
@@ -84,7 +84,19 @@ If the asset center directory is missing, is not a Git repository, has no upstre
 - Safe non-repository Git status
 - Empty scan result with a warning
 
-No page currently consumes these wrappers. The V1 static GUI remains static/mock until a future explicit UI integration phase.
+These pages now consume read-only data through the wrapper layer:
+
+- Skills list: `list_assets` with `assetType: "skill"`
+- Commands list: `list_assets` with `assetType: "command"`
+- MCP Servers list: `list_assets` with `assetType: "mcp"`
+- Projects list: `list_projects`
+- Sync: `git_status`
+- Settings: `settings_load`
+- Scan Import: `scan_assets`
+
+Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
+
+Business actions remain disabled. `StaticActionButton` is still used for import, mount, save, Pull, Push, restore, and related commands. No page calls preview/write commands in this phase.
 
 ## Non-goals
 
@@ -99,3 +111,4 @@ This milestone does not:
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
 - Enable visual-only action buttons
+- Call `preview_import`, `preview_mount`, `preview_conflicts`, `preview_restore`, or `settings_save` from the UI
