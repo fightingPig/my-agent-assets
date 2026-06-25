@@ -1,5 +1,7 @@
 import { ArchiveRestore, FileClock, FolderKanban } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { previewRestore } from "../app/data-api";
+import type { RestorePreview } from "../app/contracts";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -11,7 +13,38 @@ const backups = [
 
 export function BackupRestorePage() {
   const [selectedId, setSelectedId] = useState(backups[0].id);
+  const [preview, setPreview] = useState<RestorePreview | null>(null);
+  const [previewState, setPreviewState] = useState("预览中");
   const selected = backups.find((backup) => backup.id === selectedId)!;
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewState("预览中");
+    previewRestore({ backupId: selectedId })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.affectedPaths.length > 0 || result.steps.length > 0) {
+          setPreview(result);
+          setPreviewState("预览数据");
+        } else {
+          setPreview(null);
+          setPreviewState("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreview(null);
+        setPreviewState("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  const affectedPaths = preview?.affectedPaths.length ? preview.affectedPaths : selected.paths;
+  const impact = preview?.steps.length
+    ? preview.steps.map((step) => step.label).join(" / ")
+    : selected.impact;
 
   return (
     <div className="master-detail-workspace backup-workspace">
@@ -20,10 +53,10 @@ export function BackupRestorePage() {
         <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => setSelectedId(backup.id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}</div>
       </section>
       <section className="panel master-inspector-panel">
-        <div className="section-heading"><div><h3>{selected.title}</h3><p>{selected.id}</p></div><span className="healthy-badge">manifest 完整</span></div>
-        <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{selected.impact}</span></div></div>
-        <section className="affected-paths"><h4>受影响路径</h4>{selected.paths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
-        <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>恢复前将再次创建备份</strong><span>当前内容不会在没有确认的情况下被覆盖。</span></div></div>
+        <div className="section-heading"><div><h3>{selected.title}</h3><p>{selected.id}</p></div><span className="healthy-badge">{previewState}</span></div>
+        <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{impact}</span></div></div>
+        <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
+        <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
         <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><StaticActionButton className="asset-business-action">恢复此备份</StaticActionButton></div>
       </section>
     </div>

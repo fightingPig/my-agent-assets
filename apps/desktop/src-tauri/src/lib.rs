@@ -1,10 +1,12 @@
 mod contracts;
 mod path_utils;
+mod preview;
 mod read_only;
 
 use contracts::{
-    AppInfo, AssetSummary, DesktopSettings, GitStatus, ListAssetsInput, ProjectSummary,
-    ScanAssetsInput, ScanResult,
+    AppInfo, AssetSummary, ConflictPreview, DesktopSettings, GitStatus, ImportPreview,
+    ListAssetsInput, MountPreview, PreviewConflictsInput, PreviewImportInput, PreviewMountInput,
+    PreviewRestoreInput, ProjectSummary, RestorePreview, ScanAssetsInput, ScanResult,
 };
 
 #[tauri::command]
@@ -43,6 +45,26 @@ fn scan_assets(input: ScanAssetsInput) -> ScanResult {
     read_only::scan_assets_command(input)
 }
 
+#[tauri::command]
+fn preview_import(input: PreviewImportInput) -> ImportPreview {
+    preview::preview_import_command(input)
+}
+
+#[tauri::command]
+fn preview_mount(input: PreviewMountInput) -> MountPreview {
+    preview::preview_mount_command(input)
+}
+
+#[tauri::command]
+fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
+    preview::preview_conflicts_command(input)
+}
+
+#[tauri::command]
+fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
+    preview::preview_restore_command(input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -52,7 +74,11 @@ pub fn run() {
             git_status,
             list_assets,
             list_projects,
-            scan_assets
+            scan_assets,
+            preview_import,
+            preview_mount,
+            preview_conflicts,
+            preview_restore
         ])
         .run(tauri::generate_context!())
         .expect("error while running My Agent Assets");
@@ -72,3 +98,6 @@ mod tests {
 
 #[cfg(test)]
 mod read_only_tests;
+
+#[cfg(test)]
+mod preview_tests;

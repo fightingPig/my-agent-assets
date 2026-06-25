@@ -1,6 +1,6 @@
-# Read-only Real Data Integration v1
+# Read-only And Preview-only Integration
 
-This milestone connects the frozen desktop GUI contracts to safe read-only Tauri commands and wires selected static pages to those commands.
+This milestone connects the frozen desktop GUI contracts to safe read-only and preview-only Tauri commands, then wires selected static pages to those commands.
 
 ## Implemented Commands
 
@@ -12,11 +12,16 @@ This milestone connects the frozen desktop GUI contracts to safe read-only Tauri
 
 The following commands remain contract-only for a later preview/write phase:
 
+- `settings_save`
+
+## Implemented Preview-only Commands
+
 - `preview_import`
 - `preview_mount`
 - `preview_conflicts`
 - `preview_restore`
-- `settings_save`
+
+Preview-only commands synthesize deterministic DTOs from their input. They do not write files, create directories, create symlinks, modify MCP JSON, restore backups, or perform apply operations.
 
 ## HOME Resolution
 
@@ -98,6 +103,15 @@ Each page keeps its previous static data as an initial placeholder or fallback. 
 
 Business actions remain disabled. `StaticActionButton` is still used for import, mount, save, Pull, Push, restore, and related commands. No page calls preview/write commands in this phase.
 
+The preview workflow pages now consume preview-only data through the wrapper layer:
+
+- Scan Import: `preview_import` after a non-empty `scan_assets` result
+- Mount Manager: `preview_mount` for the selected asset and target
+- Conflict Resolver: `preview_conflicts` for static preview asset IDs
+- Backup Restore: `preview_restore` for the selected backup ID
+
+The UI continues to keep all apply-style buttons disabled. Preview data affects only plan text, warnings, affected paths, conflicts, and summaries.
+
 ## Non-goals
 
 This milestone does not:
@@ -111,4 +125,4 @@ This milestone does not:
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
 - Enable visual-only action buttons
-- Call `preview_import`, `preview_mount`, `preview_conflicts`, `preview_restore`, or `settings_save` from the UI
+- Call `settings_save` or any apply/write command from the UI

@@ -40,6 +40,51 @@ describe("read-only desktop data api", () => {
     });
   });
 
+  it("calls preview-only command names with the expected input envelope", async () => {
+    const api = await import("./data-api");
+
+    invoke.mockResolvedValueOnce({ assets: [], conflicts: [], steps: [] });
+    await api.previewImport({
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [],
+    });
+    expect(invoke).toHaveBeenLastCalledWith("preview_import", {
+      input: { scope: { kind: "user" }, assetIds: ["skill:review"], conflictResolutions: [] },
+    });
+
+    invoke.mockResolvedValueOnce({
+      asset: {},
+      target: {},
+      steps: [],
+      warnings: [],
+      backupRequired: true,
+      canApply: true,
+    });
+    await api.previewMount({
+      assetId: "skill:review",
+      target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
+    });
+    expect(invoke).toHaveBeenLastCalledWith("preview_mount", {
+      input: {
+        assetId: "skill:review",
+        target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
+      },
+    });
+
+    invoke.mockResolvedValueOnce([]);
+    await api.previewConflicts({ scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] });
+    expect(invoke).toHaveBeenLastCalledWith("preview_conflicts", {
+      input: { scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] },
+    });
+
+    invoke.mockResolvedValueOnce({ backup: {}, affectedPaths: [], steps: [] });
+    await api.previewRestore({ backupId: "backup-20260621-1842" });
+    expect(invoke).toHaveBeenLastCalledWith("preview_restore", {
+      input: { backupId: "backup-20260621-1842" },
+    });
+  });
+
   it("returns safe fallbacks outside Tauri", async () => {
     const api = await import("./data-api");
     isTauriRuntime.mockReturnValue(false);
@@ -57,6 +102,19 @@ describe("read-only desktop data api", () => {
     await expect(api.scanAssets({ scope: { kind: "user" } })).resolves.toMatchObject({
       counts: { total: 0, skills: 0, commands: 0, mcps: 0 },
       warnings: ["Tauri runtime is unavailable; scan skipped."],
+    });
+    await expect(api.previewConflicts({ scope: { kind: "user" }, assetIds: [] })).resolves.toEqual([]);
+    await expect(api.previewMount({
+      assetId: "skill:review",
+      target: { scope: "user", runtimePath: "~/.claude/skills/review", projectPath: null },
+    })).resolves.toBeNull();
+    await expect(api.previewImport({ scope: { kind: "user" }, assetIds: [], conflictResolutions: [] })).resolves.toMatchObject({
+      canApply: false,
+      warnings: ["Tauri runtime is unavailable; import preview skipped."],
+    });
+    await expect(api.previewRestore({ backupId: "backup-1" })).resolves.toMatchObject({
+      canApply: false,
+      warnings: ["Tauri runtime is unavailable; restore preview skipped."],
     });
     expect(invoke).not.toHaveBeenCalled();
   });

@@ -1,5 +1,7 @@
 import { AlertTriangle, Blocks, BookOpen } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { previewConflicts } from "../app/data-api";
+import type { ConflictPreview } from "../app/contracts";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -27,14 +29,45 @@ const conflicts = [
 ];
 
 export function ConflictResolverPage() {
+  const [items, setItems] = useState(conflicts);
   const [selectedId, setSelectedId] = useState(conflicts[0].id);
-  const selected = conflicts.find((conflict) => conflict.id === selectedId)!;
+  const [previewState, setPreviewState] = useState("预览中");
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewState("预览中");
+    previewConflicts({ scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL", "skill:review"] })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.length > 0) {
+          const mapped = result.map(toConflictItem);
+          setItems(mapped);
+          setSelectedId(mapped[0].id);
+          setPreviewState("预览数据");
+        } else {
+          setItems(conflicts);
+          setSelectedId(conflicts[0].id);
+          setPreviewState("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems(conflicts);
+        setSelectedId(conflicts[0].id);
+        setPreviewState("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selected = items.find((conflict) => conflict.id === selectedId) ?? items[0];
 
   return (
     <div className="master-detail-workspace conflict-workspace">
       <section className="panel master-list-panel">
-        <div className="section-heading"><div><h3>待处理冲突</h3><p>需要逐项确认处理方式</p></div><span className="status-badge warning">{conflicts.length} 项</span></div>
-        <div className="master-select-list" role="listbox" aria-label="冲突选择">{conflicts.map(({ id, name, type, reason, icon: Icon }) => <button aria-label={name} aria-selected={selectedId === id} className={selectedId === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedId(id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon warning"><Icon size={16} /></span><span><strong>{name}</strong><small>{type} · {reason}</small></span><AlertTriangle size={15} /></button>)}</div>
+        <div className="section-heading"><div><h3>待处理冲突</h3><p>需要逐项确认处理方式 · {previewState}</p></div><span className="status-badge warning">{items.length} 项</span></div>
+        <div className="master-select-list" role="listbox" aria-label="冲突选择">{items.map(({ id, name, type, reason, icon: Icon }) => <button aria-label={name} aria-selected={selectedId === id} className={selectedId === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedId(id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon warning"><Icon size={16} /></span><span><strong>{name}</strong><small>{type} · {reason}</small></span><AlertTriangle size={15} /></button>)}</div>
       </section>
       <section className="panel master-inspector-panel">
         <div className="section-heading"><div><h3>{selected.name}</h3><p>{selected.reason}</p></div><span className="asset-status warning">需要确认</span></div>
@@ -45,4 +78,17 @@ export function ConflictResolverPage() {
       </section>
     </div>
   );
+}
+
+function toConflictItem(conflict: ConflictPreview): (typeof conflicts)[number] {
+  return {
+    id: conflict.id,
+    name: conflict.name,
+    type: conflict.assetType === "mcp" ? "MCP Server" : conflict.assetType === "command" ? "Command" : "Skill",
+    reason: conflict.reason,
+    source: conflict.assetId,
+    icon: conflict.assetType === "mcp" ? Blocks : BookOpen,
+    existing: conflict.existingContent,
+    incoming: conflict.incomingContent,
+  };
 }

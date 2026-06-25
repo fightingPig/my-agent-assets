@@ -2,10 +2,19 @@ import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/platform";
 import type {
   AssetSummary,
+  BackupSummary,
+  ConflictPreview,
   DesktopSettings,
   GitStatus,
+  ImportPreview,
   ListAssetsInput,
+  MountPreview,
+  PreviewConflictsInput,
+  PreviewImportInput,
+  PreviewMountInput,
+  PreviewRestoreInput,
   ProjectSummary,
+  RestorePreview,
   ScanAssetsInput,
   ScanResult,
 } from "./contracts";
@@ -70,6 +79,55 @@ export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
   };
   const result = await invokeOrFallback<unknown>("scan_assets", { input }, fallback);
   return isRecord(result) && Array.isArray(result.assets) && isRecord(result.counts) ? result as ScanResult : fallback;
+}
+
+export async function previewImport(input: PreviewImportInput): Promise<ImportPreview> {
+  const fallback: ImportPreview = {
+    scope: input.scope,
+    assets: [],
+    conflicts: [],
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; import preview skipped."],
+    canApply: false,
+  };
+  const result = await invokeOrFallback<unknown>("preview_import", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.assets)
+    ? result as ImportPreview
+    : fallback;
+}
+
+export async function previewMount(input: PreviewMountInput): Promise<MountPreview | null> {
+  const result = await invokeOrFallback<unknown>("preview_mount", { input }, null);
+  return isRecord(result) && isRecord(result.asset) && isRecord(result.target) && Array.isArray(result.steps)
+    ? result as MountPreview
+    : null;
+}
+
+export async function previewConflicts(input: PreviewConflictsInput): Promise<ConflictPreview[]> {
+  const result = await invokeOrFallback<unknown>("preview_conflicts", { input }, []);
+  return Array.isArray(result) ? result as ConflictPreview[] : [];
+}
+
+export async function previewRestore(input: PreviewRestoreInput): Promise<RestorePreview> {
+  const fallbackBackup: BackupSummary = {
+    id: input.backupId,
+    label: `Restore preview for ${input.backupId}`,
+    createdAt: "",
+    sizeBytes: 0,
+    entryCount: 0,
+  };
+  const fallback: RestorePreview = {
+    backup: fallbackBackup,
+    affectedPaths: [],
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; restore preview skipped."],
+    backupBeforeRestore: true,
+    canApply: false,
+  };
+  const result = await invokeOrFallback<unknown>("preview_restore", { input }, fallback);
+  return isRecord(result) && isRecord(result.backup) && Array.isArray(result.affectedPaths)
+    ? result as RestorePreview
+    : fallback;
 }
 
 async function invokeOrFallback<T>(

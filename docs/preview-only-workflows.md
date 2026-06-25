@@ -1,0 +1,43 @@
+# Preview-only Workflows v1
+
+This milestone adds registered Tauri commands for safe workflow previews:
+
+- `preview_import`
+- `preview_mount`
+- `preview_conflicts`
+- `preview_restore`
+
+These commands are deterministic and input-driven. They return plan, warning, conflict, target, and impact DTOs only.
+
+## Safety Boundary
+
+Preview commands must not:
+
+- Write files
+- Create directories
+- Create or remove symlinks
+- Modify `.claude`, `.claude.json`, `.mcp.json`, or asset-center files
+- Create backups
+- Restore backups
+- Run Git commands
+- Perform import, mount, conflict resolution, restore, Pull, or Push apply behavior
+
+## Frontend Integration
+
+The static workflow pages now call preview wrappers from `apps/desktop/src/app/data-api.ts`:
+
+- `ScanImportPage` calls `previewImport` only after `scanAssets` returns discovered assets.
+- `MountManagerPage` calls `previewMount` when selected asset or target changes.
+- `ConflictResolverPage` calls `previewConflicts` for a static preview scope.
+- `BackupRestorePage` calls `previewRestore` when the selected backup changes.
+
+All apply buttons remain `StaticActionButton` and stay disabled.
+
+## Remaining Non-goals
+
+- No `settings_save`
+- No import apply
+- No mount apply
+- No conflict apply
+- No restore apply
+- No Git pull or push
