@@ -17,6 +17,7 @@ import type {
   PreviewMountInput,
   PreviewRestoreInput,
   ProjectSummary,
+  RestoreApplyInput,
   RestorePreview,
   ScanAssetsInput,
   ScanResult,
@@ -160,6 +161,22 @@ export async function mountApply(input: MountApplyInput): Promise<ApplyResult> {
     errors: ["mount_apply could not run outside the Tauri runtime."],
   };
   const result = await invokeOrFallback<unknown>("mount_apply", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
+    ? result as ApplyResult
+    : fallback;
+}
+
+export async function restoreApply(input: RestoreApplyInput): Promise<ApplyResult> {
+  const fallback: ApplyResult = {
+    mode: input.mode,
+    ok: false,
+    previewId: input.previewId,
+    backup: null,
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; restore apply skipped."],
+    errors: ["restore_apply could not run outside the Tauri runtime."],
+  };
+  const result = await invokeOrFallback<unknown>("restore_apply", { input }, fallback);
   return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
     ? result as ApplyResult
     : fallback;

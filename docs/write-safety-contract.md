@@ -1,6 +1,6 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply` and `mount_apply` are implemented; restore and settings writes remain future work.
+This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, and `restore_apply` are implemented; settings writes remain future work.
 
 ## Scope
 
@@ -44,7 +44,7 @@ The frontend and Rust contract layers define:
 - `MountApplyInput`
 - `RestoreApplyInput`
 
-`import_apply` and `mount_apply` are registered and use these DTOs. Other apply DTOs remain reserved for future implementation.
+`import_apply`, `mount_apply`, and `restore_apply` are registered and use these DTOs. Other apply DTOs remain reserved for future implementation.
 
 ## Backup Rule
 
@@ -151,15 +151,22 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
 - `planOnly` mode creates no symlink, writes no JSON, and creates no backup
 
+`restore_apply` currently supports fake-HOME-tested restore from backup manifests:
+
+- Manifests are loaded from `~/.my-agent-assets/backups/<backupId>/manifest.json`
+- File, directory, and symlink backup entries can be restored
+- Restore targets must stay under the backend's HOME
+- Backup entry paths must stay under the selected backup directory
+- Current runtime state is backed up before replacement when `backupBeforeRestore` is true
+- `planOnly` mode reads the manifest but restores no files and creates no backup
+
 ## Still Forbidden
 
 These operations are still not implemented:
 
-- `restore_apply`
 - `settings_save`
 - Git pull
 - Git push
-- restore execution
 
 ## Next Implementation Gate
 

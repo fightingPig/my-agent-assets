@@ -188,13 +188,26 @@ Current behavior:
 - Existing target paths are backed up before replacement when `backupBeforeApply` is true.
 - MCP compile writes the selected server into the target file's top-level `mcpServers.<name>` field while preserving existing JSON object fields and other MCP servers.
 
-### Future apply commands
+### `restore_apply`
 
-The write safety contract reserves DTOs for additional future apply commands.
+- **Purpose:** Restore paths from a backup manifest and optionally back up current state before replacement.
+- **Input:** `RestoreApplyInput { previewId, mode, backupId, backupBeforeRestore }`.
+- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
+- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
+- **Future consumer:** Backup Restore.
+- **Status:** Implemented and registered for file, directory, and symlink backup entries.
 
-Future command names:
+Current behavior:
 
-- `restore_apply`
+- The backend loads `~/.my-agent-assets/backups/<backupId>/manifest.json`.
+- Restore targets must stay under the resolved HOME.
+- Backup entry paths must stay under the selected backup directory.
+- Current state is backed up before restore when `backupBeforeRestore` is true.
+- `planOnly` reads the manifest and returns skipped restore steps without writing files.
+
+### Future write commands
+
+The write safety contract reserves DTOs for additional future write commands.
 
 Each future command must receive a single `input` object with `previewId`, `mode`, command-specific identifiers, and backup preference fields. See `docs/write-safety-contract.md`.
 
@@ -255,4 +268,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply` and `mount_apply`. `restore_apply` and `settings_save` remain contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, and `restore_apply`. `settings_save` remains contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

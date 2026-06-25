@@ -149,6 +149,30 @@ describe("read-only desktop data api", () => {
         backupBeforeApply: true,
       },
     });
+
+    invoke.mockResolvedValueOnce({
+      mode: "planOnly",
+      ok: true,
+      previewId: "preview-restore-1",
+      backup: null,
+      steps: [],
+      warnings: [],
+      errors: [],
+    });
+    await api.restoreApply({
+      previewId: "preview-restore-1",
+      mode: "planOnly",
+      backupId: "backup-1",
+      backupBeforeRestore: true,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("restore_apply", {
+      input: {
+        previewId: "preview-restore-1",
+        mode: "planOnly",
+        backupId: "backup-1",
+        backupBeforeRestore: true,
+      },
+    });
   });
 
   it("returns safe fallbacks outside Tauri", async () => {
@@ -210,6 +234,17 @@ describe("read-only desktop data api", () => {
       previewId: "preview-mount-1",
       warnings: ["Tauri runtime is unavailable; mount apply skipped."],
       errors: ["mount_apply could not run outside the Tauri runtime."],
+    });
+    await expect(api.restoreApply({
+      previewId: "preview-restore-1",
+      mode: "apply",
+      backupId: "backup-1",
+      backupBeforeRestore: true,
+    })).resolves.toMatchObject({
+      ok: false,
+      previewId: "preview-restore-1",
+      warnings: ["Tauri runtime is unavailable; restore apply skipped."],
+      errors: ["restore_apply could not run outside the Tauri runtime."],
     });
     expect(invoke).not.toHaveBeenCalled();
   });

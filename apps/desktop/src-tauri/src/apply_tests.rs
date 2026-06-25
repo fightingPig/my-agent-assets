@@ -1,7 +1,7 @@
-use super::apply::{import_apply_for_home, mount_apply_for_home};
+use super::apply::{import_apply_for_home, mount_apply_for_home, restore_apply_for_home};
 use super::contracts::{
-    ApplyMode, ApplyStepStatus, ImportApplyInput, MountApplyInput, MountTarget, RuntimeScope,
-    ScanScope,
+    ApplyMode, ApplyStepStatus, ImportApplyInput, MountApplyInput, MountTarget, RestoreApplyInput,
+    RuntimeScope, ScanScope,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -81,6 +81,19 @@ fn mount_input(
             project_path: Some("~/workspace/project-a".into()),
         },
         backup_before_apply,
+    }
+}
+
+fn restore_input(
+    mode: ApplyMode,
+    backup_id: String,
+    backup_before_restore: bool,
+) -> RestoreApplyInput {
+    RestoreApplyInput {
+        preview_id: "preview-restore-test".into(),
+        mode,
+        backup_id,
+        backup_before_restore,
     }
 }
 
@@ -472,7 +485,210 @@ fn mount_apply_rejects_invalid_existing_mcp_runtime_config_without_overwrite() {
     assert_eq!(home.read("workspace/project-a/.mcp.json"), "{");
 }
 
+#[test]
+fn restore_apply_plan_only_reads_manifest_without_changing_files() {
+    let home = TempHome::new("restore-plan-only");
+    home.write(".claude/commands/deploy.md", "# New Deploy");
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Old Deploy");
+    let import_result = import_apply_for_home(
+        home.path(),
+        import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]),
+    );
+    let backup_id = import_result.backup.expect("backup should exist").id;
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Mutated");
+
+    let restore_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::PlanOnly, backup_id, true),
+    );
+
+    assert!(restore_result.ok, "{:?}", restore_result.errors);
+    assert_eq!(restore_result.steps[0].status, ApplyStepStatus::Skipped);
+    assert_eq!(
+        home.read(".my-agent-assets/assets/commands/deploy.md"),
+        "# Mutated"
+    );
+    assert!(restore_result.backup.is_none());
+}
+
+#[test]
+fn restore_apply_restores_file_from_import_backup_and_backs_up_current() {
+    let home = TempHome::new("restore-file");
+    home.write(".claude/commands/deploy.md", "# New Deploy");
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Old Deploy");
+    let import_result = import_apply_for_home(
+        home.path(),
+        import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]),
+    );
+    let backup_id = import_result.backup.expect("backup should exist").id;
+    assert_eq!(
+        home.read(".my-agent-assets/assets/commands/deploy.md"),
+        "# New Deploy"
+    );
+
+    let restore_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::Apply, backup_id, true),
+    );
+
+    assert!(restore_result.ok, "{:?}", restore_result.errors);
+    assert_eq!(
+        home.read(".my-agent-assets/assets/commands/deploy.md"),
+        "# Old Deploy"
+    );
+    let current_backup = restore_result
+        .backup
+        .expect("restore should back up current file");
+    let backup_file = Path::new(&current_backup.manifest_path)
+        .parent()
+        .unwrap()
+        .join("files/.my-agent-assets/assets/commands/deploy.md");
+    assert_eq!(
+        fs::read_to_string(backup_file).expect("current backup should be readable"),
+        "# New Deploy"
+    );
+}
+
+#[test]
+fn restore_apply_restores_directory_from_import_backup() {
+    let home = TempHome::new("restore-directory");
+    home.write(".claude/skills/review/SKILL.md", "# New Review");
+    home.write(
+        ".my-agent-assets/assets/skills/review/SKILL.md",
+        "# Old Review",
+    );
+    let import_result = import_apply_for_home(
+        home.path(),
+        import_input(ApplyMode::Apply, ScanScope::User, vec!["skill:review"]),
+    );
+    let backup_id = import_result.backup.expect("backup should exist").id;
+    home.write(
+        ".my-agent-assets/assets/skills/review/SKILL.md",
+        "# Mutated",
+    );
+
+    let restore_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::Apply, backup_id, false),
+    );
+
+    assert!(restore_result.ok, "{:?}", restore_result.errors);
+    assert_eq!(
+        home.read(".my-agent-assets/assets/skills/review/SKILL.md"),
+        "# Old Review"
+    );
+    assert!(restore_result.backup.is_none());
+    assert!(restore_result
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("without backup")));
+}
+
+#[test]
+fn restore_apply_restores_symlink_from_mount_backup() {
+    let home = TempHome::new("restore-symlink");
+    home.write(".my-agent-assets/assets/commands/deploy.md", "# Deploy");
+    home.write(
+        ".my-agent-assets/assets/commands/old-deploy.md",
+        "# Old Deploy",
+    );
+    let target = home
+        .path()
+        .join("workspace/project-a/.claude/commands/deploy.md");
+    fs::create_dir_all(target.parent().unwrap()).expect("target parent should be created");
+    create_test_symlink(
+        &home
+            .path()
+            .join(".my-agent-assets/assets/commands/old-deploy.md"),
+        &target,
+    );
+
+    let mount_result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "command:deploy",
+            "~/workspace/project-a/.claude/commands/deploy.md".into(),
+            true,
+        ),
+    );
+    let backup_id = mount_result.backup.expect("backup should exist").id;
+    assert_eq!(
+        fs::read_link(&target).expect("target should be a symlink"),
+        home.path()
+            .join(".my-agent-assets/assets/commands/deploy.md")
+    );
+
+    let restore_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::Apply, backup_id, false),
+    );
+
+    assert!(restore_result.ok, "{:?}", restore_result.errors);
+    assert_eq!(
+        fs::read_link(&target).expect("restored target should be a symlink"),
+        home.path()
+            .join(".my-agent-assets/assets/commands/old-deploy.md")
+    );
+}
+
+#[test]
+fn restore_apply_rejects_tampered_manifest_outside_home() {
+    let home = TempHome::new("restore-tampered");
+    let backup_root = home.path().join(".my-agent-assets/backups/tampered");
+    fs::create_dir_all(backup_root.join("files")).expect("backup root should be created");
+    let outside = std::env::temp_dir().join(format!(
+        "my-agent-assets-restore-outside-{}",
+        std::process::id()
+    ));
+    let backup_file = backup_root.join("files/value.md");
+    fs::write(&backup_file, "backup").expect("backup file should be written");
+    fs::write(
+        backup_root.join("manifest.json"),
+        format!(
+            r#"{{
+  "id": "tampered",
+  "label": "Tampered",
+  "createdAt": "test",
+  "runtimeRoot": "{}",
+  "entries": [
+    {{
+      "originalPath": "{}",
+      "backupPath": "{}",
+      "kind": "file",
+      "sizeBytes": 6
+    }}
+  ]
+}}"#,
+            home.path().to_string_lossy(),
+            outside.to_string_lossy(),
+            backup_file.to_string_lossy()
+        ),
+    )
+    .expect("manifest should be written");
+
+    let result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::Apply, "tampered".into(), true),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("must stay under resolved HOME"));
+    assert!(!outside.exists());
+}
+
 fn read_json(path: impl AsRef<Path>) -> serde_json::Value {
     let text = fs::read_to_string(path).expect("JSON file should be readable");
     serde_json::from_str(&text).expect("JSON should parse")
+}
+
+#[cfg(unix)]
+fn create_test_symlink(source: &Path, destination: &Path) {
+    std::os::unix::fs::symlink(source, destination).expect("test symlink should be created");
+}
+
+#[cfg(windows)]
+fn create_test_symlink(source: &Path, destination: &Path) {
+    std::os::windows::fs::symlink_file(source, destination)
+        .expect("test symlink should be created");
 }

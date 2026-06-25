@@ -1,9 +1,9 @@
 use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, AssetType, BackupManifestSummary,
-    ImportApplyInput, MountApplyInput, PlanStepKind, ScanScope,
+    ImportApplyInput, MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs;
 use std::io;
@@ -49,6 +49,27 @@ pub fn mount_apply_command(input: MountApplyInput) -> ApplyResult {
 
 pub fn mount_apply_for_home(home: &Path, input: MountApplyInput) -> ApplyResult {
     let mut runner = MountApplyRunner::new(home, input);
+    runner.run()
+}
+
+#[tauri::command]
+pub fn restore_apply_command(input: RestoreApplyInput) -> ApplyResult {
+    match home_dir() {
+        Some(home) => restore_apply_for_home(&home, input),
+        None => ApplyResult {
+            mode: input.mode,
+            ok: false,
+            preview_id: input.preview_id,
+            backup: None,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec!["Could not resolve HOME for restore apply.".into()],
+        },
+    }
+}
+
+pub fn restore_apply_for_home(home: &Path, input: RestoreApplyInput) -> ApplyResult {
+    let mut runner = RestoreApplyRunner::new(home, input);
     runner.run()
 }
 
@@ -280,6 +301,242 @@ struct MountApplyRunner<'a> {
     warnings: Vec<String>,
     errors: Vec<String>,
     backup: Option<BackupBuilder>,
+}
+
+struct RestoreApplyRunner<'a> {
+    home: &'a Path,
+    input: RestoreApplyInput,
+    steps: Vec<ApplyStepResult>,
+    warnings: Vec<String>,
+    errors: Vec<String>,
+    backup: Option<BackupBuilder>,
+}
+
+impl<'a> RestoreApplyRunner<'a> {
+    fn new(home: &'a Path, input: RestoreApplyInput) -> Self {
+        Self {
+            home,
+            input,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec![],
+            backup: None,
+        }
+    }
+
+    fn run(&mut self) -> ApplyResult {
+        let manifest_path = self
+            .home
+            .join(".my-agent-assets")
+            .join("backups")
+            .join(&self.input.backup_id)
+            .join("manifest.json");
+
+        let manifest = match read_backup_manifest(&manifest_path) {
+            Ok(manifest) => manifest,
+            Err(error) => {
+                self.push_failed_step(
+                    "读取备份清单",
+                    error.to_string(),
+                    vec![display_path(&manifest_path)],
+                );
+                return self.result();
+            }
+        };
+
+        if self.input.mode == ApplyMode::PlanOnly {
+            self.steps.push(ApplyStepResult {
+                step_id: format!("plan-restore-{}", sanitize_step_id(&self.input.backup_id)),
+                kind: PlanStepKind::Restore,
+                label: format!("预览恢复 {}", self.input.backup_id),
+                status: ApplyStepStatus::Skipped,
+                message: format!(
+                    "Plan-only mode: {} backup entries would be restored.",
+                    manifest.entries.len()
+                ),
+                affected_paths: manifest
+                    .entries
+                    .iter()
+                    .map(|entry| entry.original_path.clone())
+                    .collect(),
+            });
+            return self.result();
+        }
+
+        for entry in &manifest.entries {
+            if let Err(error) = self.restore_entry(entry, &manifest_path) {
+                self.push_failed_step(
+                    "恢复备份条目",
+                    error.to_string(),
+                    vec![entry.original_path.clone()],
+                );
+                break;
+            }
+        }
+
+        self.result()
+    }
+
+    fn restore_entry(&mut self, entry: &BackupEntry, manifest_path: &Path) -> io::Result<()> {
+        let original = PathBuf::from(&entry.original_path);
+        let backup = PathBuf::from(&entry.backup_path);
+        let backup_root = manifest_path
+            .parent()
+            .ok_or_else(|| io::Error::other("Backup manifest has no parent directory."))?;
+
+        if !original.starts_with(self.home) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Restore target must stay under resolved HOME: {}",
+                    display_path(&original)
+                ),
+            ));
+        }
+        if !backup.starts_with(backup_root) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Backup entry must stay under backup root: {}",
+                    display_path(&backup)
+                ),
+            ));
+        }
+        if !path_exists_no_follow(&backup) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Backup entry does not exist: {}", display_path(&backup)),
+            ));
+        }
+
+        self.backup_current_if_needed(&original)?;
+        if let Some(parent) = original.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        match entry.kind.as_str() {
+            "directory" => {
+                let temp = temp_path_for(&original);
+                if path_exists_no_follow(&temp) {
+                    remove_path(&temp)?;
+                }
+                copy_dir_recursive(&backup, &temp)?;
+                verify_dir_equal(&backup, &temp)?;
+                replace_path(&temp, &original)?;
+                verify_dir_equal(&backup, &original)?;
+            }
+            "file" => {
+                copy_file_verified(&backup, &original)?;
+            }
+            "symlink" => {
+                let target_text = fs::read_to_string(&backup)?;
+                let target = PathBuf::from(target_text);
+                let temp = temp_path_for(&original);
+                if path_exists_no_follow(&temp) {
+                    remove_path(&temp)?;
+                }
+                create_symlink(&target, &temp)?;
+                verify_symlink_target(&temp, &target)?;
+                replace_path(&temp, &original)?;
+                verify_symlink_target(&original, &target)?;
+            }
+            other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Unsupported backup entry kind: {}", other),
+                ));
+            }
+        }
+
+        self.steps.push(ApplyStepResult {
+            step_id: format!("restore-{}", sanitize_step_id(&entry.original_path)),
+            kind: PlanStepKind::Restore,
+            label: "恢复备份条目".into(),
+            status: ApplyStepStatus::Success,
+            message: "Restored path from backup manifest.".into(),
+            affected_paths: vec![entry.original_path.clone()],
+        });
+        Ok(())
+    }
+
+    fn backup_current_if_needed(&mut self, original: &Path) -> io::Result<()> {
+        if !path_exists_no_follow(original) {
+            return Ok(());
+        }
+        if !self.input.backup_before_restore {
+            self.warnings.push(format!(
+                "Replacing current path without backup: {}",
+                display_path(original)
+            ));
+            return Ok(());
+        }
+
+        if self.backup.is_none() {
+            self.backup = Some(BackupBuilder::create(
+                self.home,
+                &self.input.preview_id,
+                "restore",
+                "Restore apply backup",
+            )?);
+        }
+        if let Some(backup) = &mut self.backup {
+            backup.add_path(original)?;
+            self.steps.push(ApplyStepResult {
+                step_id: format!(
+                    "backup-current-{}",
+                    sanitize_step_id(&display_path(original))
+                ),
+                kind: PlanStepKind::Backup,
+                label: "备份当前状态".into(),
+                status: ApplyStepStatus::Success,
+                message: "Backed up current path before restore.".into(),
+                affected_paths: vec![display_path(original)],
+            });
+        }
+        Ok(())
+    }
+
+    fn result(&mut self) -> ApplyResult {
+        let backup = match self.input.mode {
+            ApplyMode::PlanOnly => None,
+            ApplyMode::Apply => self.backup.take().and_then(|backup| match backup.finish() {
+                Ok(summary) => Some(summary),
+                Err(error) => {
+                    self.errors
+                        .push(format!("Could not write backup manifest: {}", error));
+                    None
+                }
+            }),
+        };
+
+        ApplyResult {
+            mode: self.input.mode.clone(),
+            ok: self.errors.is_empty(),
+            preview_id: self.input.preview_id.clone(),
+            backup,
+            steps: self.steps.clone(),
+            warnings: self.warnings.clone(),
+            errors: self.errors.clone(),
+        }
+    }
+
+    fn push_failed_step(
+        &mut self,
+        label: &str,
+        message: impl Into<String>,
+        affected_paths: Vec<String>,
+    ) {
+        let message = message.into();
+        self.errors.push(message.clone());
+        self.steps.push(ApplyStepResult {
+            step_id: format!("failed-restore-{}", sanitize_step_id(&self.input.backup_id)),
+            kind: PlanStepKind::Restore,
+            label: label.into(),
+            status: ApplyStepStatus::Failed,
+            message,
+            affected_paths,
+        });
+    }
 }
 
 impl<'a> MountApplyRunner<'a> {
@@ -617,7 +874,7 @@ impl ImportIntent {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BackupManifest {
     id: String,
@@ -627,7 +884,7 @@ struct BackupManifest {
     entries: Vec<BackupEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BackupEntry {
     original_path: String,
@@ -779,6 +1036,20 @@ fn read_json_file(path: &Path) -> io::Result<Value> {
             io::ErrorKind::InvalidData,
             format!(
                 "Could not parse JSON file {}: {}",
+                display_path(path),
+                error
+            ),
+        )
+    })
+}
+
+fn read_backup_manifest(path: &Path) -> io::Result<BackupManifest> {
+    let text = fs::read_to_string(path)?;
+    serde_json::from_str(&text).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Could not parse backup manifest {}: {}",
                 display_path(path),
                 error
             ),
