@@ -27,6 +27,7 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   searchPlaceholder: string;
   actionLabel: string;
   stateLabel?: string;
+  onOpenDetail?: (item: T) => void;
   renderInspector: (item: T) => ReactNode;
 };
 
@@ -58,6 +59,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   searchPlaceholder,
   actionLabel,
   stateLabel,
+  onOpenDetail,
   renderInspector,
 }: AssetCenterLayoutProps<T>) {
   const [query, setQuery] = useState("");
@@ -171,7 +173,9 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
               {renderInspector(selectedItem)}
             </div>
             <div className="asset-inspector-actions">
-              <StaticActionButton className="asset-secondary-action">更多操作</StaticActionButton>
+              {onOpenDetail
+                ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenDetail(selectedItem)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button>
+                : <StaticActionButton className="asset-secondary-action">更多操作</StaticActionButton>}
               <StaticActionButton className="asset-business-action">{actionLabel}</StaticActionButton>
             </div>
           </>

@@ -17,20 +17,21 @@ import { SyncPage } from "../pages/SyncPage";
 type CurrentPageProps = {
   activePage: PageId;
   appInfo: AppInfo;
+  onPageChange?: (page: PageId) => void;
 };
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled page: ${String(value)}`);
 }
 
-export function CurrentPage({ activePage, appInfo }: CurrentPageProps) {
+export function CurrentPage({ activePage, appInfo, onPageChange }: CurrentPageProps) {
   switch (activePage) {
     case "dashboard": return <DashboardPage appInfo={appInfo} />;
-    case "skills": return <SkillsListPage />;
-    case "commands": return <CommandsListPage />;
-    case "mcp": return <McpServersListPage />;
+    case "skills": return <SkillsListPage onPageChange={onPageChange} />;
+    case "commands": return <CommandsListPage onPageChange={onPageChange} />;
+    case "mcp": return <McpServersListPage onPageChange={onPageChange} />;
     case "asset-detail": return <AssetDetailPage />;
-    case "projects": return <ProjectsListPage />;
+    case "projects": return <ProjectsListPage onPageChange={onPageChange} />;
     case "project-detail": return <ProjectDetailPage />;
     case "scan": return <ScanImportPage />;
     case "mounts": return <MountManagerPage />;

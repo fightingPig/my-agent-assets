@@ -20,7 +20,7 @@ The page registry contains 13 implemented static pages:
 12. Sync / 同步
 13. Settings / 设置
 
-Eleven primary pages are reachable from the Sidebar. Asset Detail and Project Detail are implemented and registered, but intentionally have no primary navigation entry yet.
+Eleven primary pages are reachable from the Sidebar. Asset Detail and Project Detail are implemented, registered, and reachable from their list-page inspector actions, but intentionally have no primary navigation entry.
 
 ## Current Interaction Model
 
@@ -106,7 +106,7 @@ Future integration should place filesystem, Git, scan, mount, MCP compile, backu
 
 ## Known Limitations
 
-- Asset Detail and Project Detail are not connected to list-row navigation.
+- Asset Detail and Project Detail are reached from list inspector actions rather than primary sidebar navigation.
 - No real Claude runtime, asset-center, project filesystem, or Git data is loaded.
 - Destructive apply-style business actions remain intentionally disabled; Settings save, Scan Import plan generation, Mount Manager plan generation, and Backup Restore plan generation were added as controlled actions after the static freeze.
 - Visual QA currently batch-generates macOS-layout screenshots only.

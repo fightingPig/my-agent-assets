@@ -34,7 +34,7 @@ function App() {
   return (
     <AppFrame platform={platform} activePage={activePage} onPageChange={setActivePage}>
       <PageHeader page={currentPage} shortcuts={shortcuts} />
-      <CurrentPage activePage={activePage} appInfo={appInfo} />
+      <CurrentPage activePage={activePage} appInfo={appInfo} onPageChange={setActivePage} />
     </AppFrame>
   );
 }

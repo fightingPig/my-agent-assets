@@ -2,6 +2,7 @@ import { Blocks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
+import type { PageId } from "../app/pages";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -97,7 +98,11 @@ const staticServers: readonly McpItem[] = [
   },
 ];
 
-export function McpServersListPage() {
+type AssetListPageProps = {
+  onPageChange?: (page: PageId) => void;
+};
+
+export function McpServersListPage({ onPageChange }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly McpItem[]>(staticServers);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -132,6 +137,7 @@ export function McpServersListPage() {
       items={items}
       searchPlaceholder="搜索 MCP 名称、能力或配置路径"
       stateLabel={stateLabel}
+      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[

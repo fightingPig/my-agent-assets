@@ -2,6 +2,7 @@ import { FolderKanban, Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { listProjects } from "../app/data-api";
 import type { ProjectSummary } from "../app/contracts";
+import type { PageId } from "../app/pages";
 import { InspectorFields, InspectorSection, InspectorTags } from "../components/assets/AssetCenterLayout";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
@@ -9,7 +10,11 @@ import { staticProjects, type StaticProject } from "./project-data";
 
 const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral" } as const;
 
-export function ProjectsListPage() {
+type ProjectsListPageProps = {
+  onPageChange?: (page: PageId) => void;
+};
+
+export function ProjectsListPage({ onPageChange }: ProjectsListPageProps = {}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [projects, setProjects] = useState<readonly StaticProject[]>(staticProjects);
@@ -81,7 +86,7 @@ export function ProjectsListPage() {
             <InspectorFields fields={[{ label: "项目路径", value: selected.path }, { label: "最近更新", value: selected.updated }]} />
             <InspectorSection title="当前挂载"><InspectorTags tags={selected.mounts} /></InspectorSection>
           </div>
-          <div className="asset-inspector-actions"><StaticActionButton className="asset-secondary-action">扫描项目</StaticActionButton><StaticActionButton className="asset-business-action">管理挂载</StaticActionButton></div>
+          <div className="asset-inspector-actions">{onPageChange ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onPageChange("project-detail")} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button> : <StaticActionButton className="asset-secondary-action">扫描项目</StaticActionButton>}<StaticActionButton className="asset-business-action">管理挂载</StaticActionButton></div>
         </> : <div className="asset-inspector-empty"><strong>暂无可检查项目</strong><span>调整筛选后选择一个项目。</span></div>}
       </aside>
     </div>

@@ -2,6 +2,7 @@ import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
+import type { PageId } from "../app/pages";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -79,7 +80,11 @@ const staticSkills: readonly SkillItem[] = [
   },
 ];
 
-export function SkillsListPage() {
+type AssetListPageProps = {
+  onPageChange?: (page: PageId) => void;
+};
+
+export function SkillsListPage({ onPageChange }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly SkillItem[]>(staticSkills);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -114,6 +119,7 @@ export function SkillsListPage() {
       items={items}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
       stateLabel={stateLabel}
+      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
       renderInspector={(skill) => (
         <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
       )}

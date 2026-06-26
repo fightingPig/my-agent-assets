@@ -72,6 +72,22 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("button", { name: "项目详情" })).not.toBeInTheDocument();
   });
 
+  it("opens hidden detail pages from list inspectors without adding sidebar routes", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Skills" }));
+    fireEvent.click(await screen.findByRole("button", { name: "查看详情" }));
+    expect(screen.getByRole("heading", { name: "资产详情" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "资产详情" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
+    fireEvent.click(await screen.findByRole("button", { name: "查看详情" }));
+    expect(screen.getByRole("heading", { name: "项目详情" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "项目详情" })).not.toBeInTheDocument();
+  });
+
   it("renders the required static skeleton content", () => {
     render(<App />);
     const expectedContent = [

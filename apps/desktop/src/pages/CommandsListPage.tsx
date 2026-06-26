@@ -2,6 +2,7 @@ import { TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
+import type { PageId } from "../app/pages";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -86,7 +87,11 @@ const staticCommands: readonly CommandItem[] = [
   },
 ];
 
-export function CommandsListPage() {
+type AssetListPageProps = {
+  onPageChange?: (page: PageId) => void;
+};
+
+export function CommandsListPage({ onPageChange }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly CommandItem[]>(staticCommands);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -121,6 +126,7 @@ export function CommandsListPage() {
       items={items}
       searchPlaceholder="搜索 Command 名称、用途或路径"
       stateLabel={stateLabel}
+      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
       renderInspector={(command) => (
         <>
           <InspectorSection title="用途标签"><InspectorTags tags={command.tags} /></InspectorSection>
