@@ -33,6 +33,7 @@ const {
   previewMount,
   previewConflicts,
   previewRestore,
+  mountApply,
   restoreApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
@@ -45,6 +46,7 @@ const {
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
   previewRestore: vi.fn(),
+  mountApply: vi.fn(),
   restoreApply: vi.fn(),
 }));
 
@@ -59,6 +61,7 @@ vi.mock("../app/data-api", () => ({
   previewMount,
   previewConflicts,
   previewRestore,
+  mountApply,
   restoreApply,
 }));
 
@@ -78,6 +81,24 @@ beforeEach(() => {
   previewMount.mockResolvedValue(mountPreviewFixture());
   previewConflicts.mockResolvedValue([]);
   previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842"));
+  mountApply.mockResolvedValue({
+    mode: "planOnly",
+    ok: true,
+    previewId: "mount-plan:skill:review:project-a",
+    backup: null,
+    steps: [
+      {
+        stepId: "plan-mount-skill-review",
+        kind: "mount",
+        label: "预览挂载",
+        status: "skipped",
+        message: "Plan-only mode: no symlink was created.",
+        affectedPaths: ["~/workspace/project-a/.claude/skills/review"],
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
   restoreApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
@@ -274,6 +295,7 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
     expect(screen.getByText("Preview mount warning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成挂载计划" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
 
     rerender(<ConflictResolverPage />);
@@ -304,10 +326,32 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
   });
 
+  it("generates a plan-only mount apply preview without enabling mount execution", async () => {
+    render(<MountManagerPage />);
+
+    await waitFor(() => expect(previewMount).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
+
+    await waitFor(() => expect(mountApply).toHaveBeenCalledWith({
+      previewId: "mount-plan:skill:review:project-a",
+      mode: "planOnly",
+      assetId: "skill:review",
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+      backupBeforeApply: true,
+    }));
+    expect(await screen.findByText(/Plan-only mode: no symlink was created/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
+  });
+
   it("does not call apply command wrappers from Scan Import preview", async () => {
     render(<ScanImportPage />);
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
     expect(previewImport).not.toHaveBeenCalled();
+    expect(mountApply).not.toHaveBeenCalled();
     expect(restoreApply).not.toHaveBeenCalled();
   });
 });
