@@ -123,7 +123,7 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Purpose:** Validate a backup and show affected paths and restore steps.
 - **Input:** `PreviewRestoreInput { backupId }`.
 - **Output:** `RestorePreview { backup, affectedPaths, steps, warnings, backupBeforeRestore, canApply }`.
-- **Side effect:** Preview-only.
+- **Side effect:** Preview-only. Reads an existing backup manifest when present, but does not restore files or create backups.
 - **Future consumer:** Backup Restore.
 - **Status:** Implemented and registered as preview-only.
 

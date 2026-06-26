@@ -21,7 +21,7 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `preview_conflicts`
 - `preview_restore`
 
-Preview-only commands synthesize deterministic DTOs from their input. They do not write files, create directories, create symlinks, modify MCP JSON, restore backups, or perform apply operations.
+Preview-only commands synthesize deterministic DTOs from their input or read existing manifests for preview. They do not write files, create directories, create symlinks, modify MCP JSON, restore backups, or perform apply operations.
 
 ## HOME Resolution
 
@@ -115,6 +115,8 @@ The preview workflow pages now consume preview-only data through the wrapper lay
 - Sync: `preview_sync` for local Pull/Push plan generation without running Git sync commands
 
 The UI continues to keep destructive apply-style buttons disabled. Preview and plan-only data affects only plan text, warnings, affected paths, conflicts, and summaries.
+
+`preview_restore` now prefers `~/.my-agent-assets/backups/<backupId>/manifest.json` when present, returning the manifest's affected paths and backup summary. Missing or invalid manifests safely fall back to synthetic preview data with a warning.
 
 ## Non-goals
 
