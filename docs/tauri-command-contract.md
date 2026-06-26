@@ -30,6 +30,7 @@ These values are part of the public JSON contract and must not be inferred only 
 | `LogLevel` | `error`, `warn`, `info`, `debug` |
 | `ApplyMode` | `planOnly`, `apply` |
 | `ApplyStepStatus` | `pending`, `skipped`, `success`, `failed` |
+| `SyncDirection` | `pull`, `push` |
 
 `ScanScope` is a discriminated object with these exact shapes:
 
@@ -124,6 +125,15 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Output:** `RestorePreview { backup, affectedPaths, steps, warnings, backupBeforeRestore, canApply }`.
 - **Side effect:** Preview-only.
 - **Future consumer:** Backup Restore.
+- **Status:** Implemented and registered as preview-only.
+
+### `preview_sync`
+
+- **Purpose:** Build a local Git Pull or Push plan from current repository status.
+- **Input:** `PreviewSyncInput { direction }`, where `direction` is `pull | push`.
+- **Output:** `SyncPreview { direction, repositoryPath, branch, remote, steps, warnings, canApply }`.
+- **Side effect:** Preview-only. It does not run `git fetch`, `git pull`, `git push`, or mutate the repository.
+- **Future consumer:** Sync.
 - **Status:** Implemented and registered as preview-only.
 
 ### `git_status`

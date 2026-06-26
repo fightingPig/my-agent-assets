@@ -30,12 +30,13 @@ The static workflow pages now call preview wrappers from `apps/desktop/src/app/d
 - `MountManagerPage` calls `previewMount` when selected asset or target changes, and can call `mountApply` in `planOnly` mode to generate a mount plan without writing files.
 - `ConflictResolverPage` calls `previewConflicts` for a static preview scope and keeps `skip` / `rename` / `overwrite` as local resolution preview state.
 - `BackupRestorePage` calls `previewRestore` when the selected backup changes, and later milestones allow `restoreApply` in `planOnly` mode for restore-plan generation.
+- `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`.
 
 Destructive apply buttons remain `StaticActionButton` and stay disabled.
 
 ## Remaining UI Non-goals
 
 - No conflict apply
-- No Git pull or push
+- No Git pull or push execution
 
-Backend `settings_save`, `import_apply`, `mount_apply`, and `restore_apply` were implemented in later safety milestones. The Settings page now has a controlled save action for local desktop configuration, Scan Import can generate a plan-only import result, Mount Manager can generate a plan-only mount result, and Backup Restore can generate a plan-only restore result. Destructive asset operations remain disabled until a dedicated UI wiring milestone.
+Backend `settings_save`, `import_apply`, `mount_apply`, `restore_apply`, and `preview_sync` were implemented in later safety milestones. The Settings page now has a controlled save action for local desktop configuration, Scan Import can generate a plan-only import result, Mount Manager can generate a plan-only mount result, Sync can generate preview-only Pull/Push plans, and Backup Restore can generate a plan-only restore result. Destructive asset operations remain disabled until a dedicated UI wiring milestone.

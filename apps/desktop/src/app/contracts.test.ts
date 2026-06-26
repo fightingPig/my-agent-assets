@@ -12,11 +12,14 @@ import {
   PROJECT_STATUSES,
   RISK_LEVELS,
   RUNTIME_SCOPES,
+  SYNC_DIRECTIONS,
   type PreviewImportInput,
   type ScanScope,
   type GitStatus,
   type ImportApplyInput,
   type ApplyResult,
+  type PreviewSyncInput,
+  type SyncPreview,
 } from "./contracts";
 
 describe("Tauri command contracts", () => {
@@ -33,6 +36,35 @@ describe("Tauri command contracts", () => {
     expect(LOG_LEVELS).toEqual(["error", "warn", "info", "debug"]);
     expect(APPLY_MODES).toEqual(["planOnly", "apply"]);
     expect(APPLY_STEP_STATUSES).toEqual(["pending", "skipped", "success", "failed"]);
+    expect(SYNC_DIRECTIONS).toEqual(["pull", "push"]);
+  });
+
+  it("keeps Sync preview contracts direction-bound and preview-only", () => {
+    const input = { direction: "pull" } satisfies PreviewSyncInput;
+    const preview = {
+      direction: "pull",
+      repositoryPath: "~/.my-agent-assets",
+      branch: "main",
+      remote: "origin/main",
+      steps: [
+        {
+          id: "preview-git-sync",
+          kind: "git",
+          label: "生成 Pull 计划",
+          description: "仅生成同步计划，不执行 Git 同步命令。",
+          risk: "medium",
+        },
+      ],
+      warnings: ["Preview only: no git pull, push, or fetch is executed."],
+      canApply: true,
+    } satisfies SyncPreview;
+
+    expect(input.direction).toBe("pull");
+    expect(preview.direction).toBe("pull");
+    expect(preview.steps[0].kind).toBe("git");
+    expect(preview.warnings[0]).toContain("Preview only");
+    expectTypeOf(input).toMatchTypeOf<PreviewSyncInput>();
+    expectTypeOf(preview).toMatchTypeOf<SyncPreview>();
   });
 
   it("keeps ScanScope discriminated and PreviewImportInput self-contained", () => {

@@ -16,12 +16,14 @@ import type {
   PreviewImportInput,
   PreviewMountInput,
   PreviewRestoreInput,
+  PreviewSyncInput,
   ProjectSummary,
   RestoreApplyInput,
   RestorePreview,
   ScanAssetsInput,
   ScanResult,
   SettingsSaveInput,
+  SyncPreview,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -137,6 +139,22 @@ export async function previewRestore(input: PreviewRestoreInput): Promise<Restor
   const result = await invokeOrFallback<unknown>("preview_restore", { input }, fallback);
   return isRecord(result) && isRecord(result.backup) && Array.isArray(result.affectedPaths)
     ? result as RestorePreview
+    : fallback;
+}
+
+export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview> {
+  const fallback: SyncPreview = {
+    direction: input.direction,
+    repositoryPath: fallbackGitStatus.repositoryPath,
+    branch: fallbackGitStatus.branch,
+    remote: fallbackGitStatus.remote,
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; sync preview skipped."],
+    canApply: false,
+  };
+  const result = await invokeOrFallback<unknown>("preview_sync", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.warnings)
+    ? result as SyncPreview
     : fallback;
 }
 

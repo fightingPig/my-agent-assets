@@ -30,6 +30,7 @@ const {
   settingsSave,
   scanAssets,
   previewImport,
+  previewSync,
   importApply,
   previewMount,
   previewConflicts,
@@ -44,6 +45,7 @@ const {
   settingsSave: vi.fn(),
   scanAssets: vi.fn(),
   previewImport: vi.fn(),
+  previewSync: vi.fn(),
   importApply: vi.fn(),
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock("../app/data-api", () => ({
   settingsSave,
   scanAssets,
   previewImport,
+  previewSync,
   importApply,
   previewMount,
   previewConflicts,
@@ -81,6 +84,18 @@ beforeEach(() => {
   settingsSave.mockImplementation(async ({ settings }) => settings);
   scanAssets.mockResolvedValue(scanResultFixture([]));
   previewImport.mockResolvedValue(importPreviewFixture([]));
+  previewSync.mockResolvedValue({
+    direction: "push",
+    repositoryPath: "~/.my-agent-assets",
+    branch: "main",
+    remote: "origin/main",
+    steps: [
+      { id: "check-git-repository", kind: "check", label: "校验本地 Git 仓库", description: "Repository ready.", risk: "none" },
+      { id: "preview-git-sync", kind: "git", label: "生成 Push 计划", description: "No git push is executed.", risk: "medium" },
+    ],
+    warnings: ["Preview only: no git pull, push, or fetch is executed."],
+    canApply: true,
+  });
   importApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
@@ -226,6 +241,22 @@ describe("read-only UI integration", () => {
     expect(screen.getByText("2 commits")).toBeInTheDocument();
     expect(screen.getAllByText("Git repository has no upstream.").length).toBeGreaterThan(0);
     expect(screen.getByText("mounts.yaml", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "预览 Pull" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "预览 Push" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Pull" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Push" })).toBeDisabled();
+  });
+
+  it("generates a preview-only Sync plan without enabling Pull or Push", async () => {
+    render(<SyncPage />);
+
+    await waitFor(() => expect(gitStatus).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "预览 Push" }));
+
+    await waitFor(() => expect(previewSync).toHaveBeenCalledWith({ direction: "push" }));
+    expect(await screen.findByText(/生成 Push 计划/)).toBeInTheDocument();
+    expect(screen.getByText("计划方向")).toBeInTheDocument();
+    expect(screen.getByText("计划可执行")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pull" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Push" })).toBeDisabled();
   });

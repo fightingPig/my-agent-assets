@@ -100,7 +100,7 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Destructive import execution, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
+Destructive import execution, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
@@ -108,6 +108,7 @@ The preview workflow pages now consume preview-only data through the wrapper lay
 - Mount Manager: `preview_mount` for the selected asset and target, plus `mount_apply` with `mode: "planOnly"` when generating a mount plan
 - Conflict Resolver: `preview_conflicts` for static preview asset IDs, plus local `skip` / `rename` / `overwrite` resolution preview state
 - Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
+- Sync: `preview_sync` for local Pull/Push plan generation without running Git sync commands
 
 The UI continues to keep destructive apply-style buttons disabled. Preview and plan-only data affects only plan text, warnings, affected paths, conflicts, and summaries.
 

@@ -9,8 +9,8 @@ use contracts::{
     AppInfo, ApplyResult, AssetSummary, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
     PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
-    ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput, ScanResult,
-    SettingsSaveInput,
+    PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput,
+    ScanResult, SettingsSaveInput, SyncPreview,
 };
 
 #[tauri::command]
@@ -75,6 +75,11 @@ fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
 }
 
 #[tauri::command]
+fn preview_sync(input: PreviewSyncInput) -> SyncPreview {
+    preview::preview_sync_command(input)
+}
+
+#[tauri::command]
 fn import_apply(input: ImportApplyInput) -> ApplyResult {
     apply::import_apply_command(input)
 }
@@ -104,6 +109,7 @@ pub fn run() {
             preview_mount,
             preview_conflicts,
             preview_restore,
+            preview_sync,
             import_apply,
             mount_apply,
             restore_apply

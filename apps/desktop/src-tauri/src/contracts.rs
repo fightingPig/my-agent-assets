@@ -150,6 +150,14 @@ pub enum ApplyStepStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SyncDirection {
+    #[serde(rename = "pull")]
+    Pull,
+    #[serde(rename = "push")]
+    Push,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum ScanScope {
@@ -350,6 +358,18 @@ pub struct GitStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncPreview {
+    pub direction: SyncDirection,
+    pub repository_path: String,
+    pub branch: String,
+    pub remote: Option<String>,
+    pub steps: Vec<PlanStep>,
+    pub warnings: Vec<String>,
+    pub can_apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopSettings {
     pub asset_center_path: String,
     pub scan_roots: Vec<String>,
@@ -403,6 +423,12 @@ pub struct PreviewConflictsInput {
 #[serde(rename_all = "camelCase")]
 pub struct PreviewRestoreInput {
     pub backup_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewSyncInput {
+    pub direction: SyncDirection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -504,6 +530,8 @@ mod tests {
         assert_eq!(wire_value(ApplyStepStatus::Skipped), json!("skipped"));
         assert_eq!(wire_value(ApplyStepStatus::Success), json!("success"));
         assert_eq!(wire_value(ApplyStepStatus::Failed), json!("failed"));
+        assert_eq!(wire_value(SyncDirection::Pull), json!("pull"));
+        assert_eq!(wire_value(SyncDirection::Push), json!("push"));
         assert_eq!(wire_value(ScanScope::User), json!({ "kind": "user" }));
         assert_eq!(
             wire_value(ScanScope::Project {
@@ -516,6 +544,53 @@ mod tests {
                 path: "~/code".into()
             }),
             json!({ "kind": "custom", "path": "~/code" })
+        );
+    }
+
+    #[test]
+    fn preview_sync_contract_is_direction_bound_and_camel_case() {
+        let input = PreviewSyncInput {
+            direction: SyncDirection::Pull,
+        };
+        let value = wire_value(&input);
+        assert_eq!(value, json!({ "direction": "pull" }));
+        assert_eq!(
+            serde_json::from_value::<PreviewSyncInput>(value).unwrap(),
+            input
+        );
+
+        let preview = SyncPreview {
+            direction: SyncDirection::Push,
+            repository_path: "~/.my-agent-assets".into(),
+            branch: "main".into(),
+            remote: Some("origin/main".into()),
+            steps: vec![PlanStep {
+                id: "preview-push".into(),
+                kind: PlanStepKind::Git,
+                label: "预览 Push".into(),
+                description: "No git push is executed.".into(),
+                risk: RiskLevel::Medium,
+            }],
+            warnings: vec!["Preview only.".into()],
+            can_apply: true,
+        };
+        assert_eq!(
+            wire_value(preview),
+            json!({
+                "direction": "push",
+                "repositoryPath": "~/.my-agent-assets",
+                "branch": "main",
+                "remote": "origin/main",
+                "steps": [{
+                    "id": "preview-push",
+                    "kind": "git",
+                    "label": "预览 Push",
+                    "description": "No git push is executed.",
+                    "risk": "medium"
+                }],
+                "warnings": ["Preview only."],
+                "canApply": true
+            })
         );
     }
 

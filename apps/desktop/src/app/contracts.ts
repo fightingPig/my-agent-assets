@@ -34,6 +34,9 @@ export type ApplyMode = (typeof APPLY_MODES)[number];
 export const APPLY_STEP_STATUSES = ["pending", "skipped", "success", "failed"] as const;
 export type ApplyStepStatus = (typeof APPLY_STEP_STATUSES)[number];
 
+export const SYNC_DIRECTIONS = ["pull", "push"] as const;
+export type SyncDirection = (typeof SYNC_DIRECTIONS)[number];
+
 export type AppInfo = {
   name: string;
   version: string;
@@ -194,6 +197,16 @@ export type GitStatus = {
   lastSyncedAt: string | null;
 };
 
+export type SyncPreview = {
+  direction: SyncDirection;
+  repositoryPath: string;
+  branch: string;
+  remote: string | null;
+  steps: PlanStep[];
+  warnings: string[];
+  canApply: boolean;
+};
+
 export type DesktopSettings = {
   assetCenterPath: string;
   scanRoots: string[];
@@ -219,6 +232,7 @@ export type ListAssetsInput = { assetType: AssetType | null };
 export type PreviewMountInput = { assetId: string; target: MountTarget };
 export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
 export type PreviewRestoreInput = { backupId: string };
+export type PreviewSyncInput = { direction: SyncDirection };
 export type SettingsSaveInput = { settings: DesktopSettings };
 export type ImportApplyInput = {
   previewId: string;

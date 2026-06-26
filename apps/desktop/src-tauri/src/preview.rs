@@ -1,8 +1,10 @@
 use crate::contracts::{
     AssetStatus, AssetSummary, AssetType, BackupSummary, ConflictPreview, ConflictResolution,
-    ImportPreview, MountPreview, PlanStep, PlanStepKind, PreviewConflictsInput, PreviewImportInput,
-    PreviewMountInput, PreviewRestoreInput, RestorePreview, RiskLevel, RuntimeScope,
+    GitStatus, ImportPreview, MountPreview, PlanStep, PlanStepKind, PreviewConflictsInput,
+    PreviewImportInput, PreviewMountInput, PreviewRestoreInput, PreviewSyncInput, RestorePreview,
+    RiskLevel, RuntimeScope, SyncDirection, SyncPreview,
 };
+use crate::read_only;
 
 pub fn preview_import_command(input: PreviewImportInput) -> ImportPreview {
     preview_import(input)
@@ -18,6 +20,10 @@ pub fn preview_conflicts_command(input: PreviewConflictsInput) -> Vec<ConflictPr
 
 pub fn preview_restore_command(input: PreviewRestoreInput) -> RestorePreview {
     preview_restore(input)
+}
+
+pub fn preview_sync_command(input: PreviewSyncInput) -> SyncPreview {
+    preview_sync(input, read_only::git_status_command())
 }
 
 pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
@@ -169,6 +175,82 @@ pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
     }
 }
 
+pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
+    let direction_label = match input.direction {
+        SyncDirection::Pull => "Pull",
+        SyncDirection::Push => "Push",
+    };
+    let mut warnings = vec!["Preview only: no git pull, push, or fetch is executed.".into()];
+    if !status.is_repository {
+        warnings.push("Asset center is not a Git repository.".into());
+    }
+    if status.remote.is_none() {
+        warnings.push("No upstream remote is configured.".into());
+    }
+    if !status.clean {
+        warnings.push(format!(
+            "{} local changed file(s) may need review before sync.",
+            status.changed_files.len()
+        ));
+    }
+    if !status.conflicts.is_empty() {
+        warnings.push(format!(
+            "{} conflict path(s) require manual resolution before sync.",
+            status.conflicts.len()
+        ));
+    }
+
+    let can_apply = status.is_repository
+        && status.remote.is_some()
+        && status.conflicts.is_empty()
+        && match input.direction {
+            SyncDirection::Pull => status.behind > 0,
+            SyncDirection::Push => status.ahead > 0,
+        };
+
+    SyncPreview {
+        direction: input.direction,
+        repository_path: status.repository_path.clone(),
+        branch: status.branch.clone(),
+        remote: status.remote.clone(),
+        steps: vec![
+            step(
+                "check-git-repository",
+                PlanStepKind::Check,
+                "校验本地 Git 仓库",
+                status.status_message,
+                RiskLevel::None,
+            ),
+            step(
+                "check-sync-risk",
+                PlanStepKind::Git,
+                format!("预览 {} 风险", direction_label),
+                format!(
+                    "Ahead {} commit(s), behind {} commit(s), changed {} file(s), conflicts {}.",
+                    status.ahead,
+                    status.behind,
+                    status.changed_files.len(),
+                    status.conflicts.len()
+                ),
+                if status.conflicts.is_empty() {
+                    RiskLevel::Low
+                } else {
+                    RiskLevel::High
+                },
+            ),
+            step(
+                "preview-git-sync",
+                PlanStepKind::Git,
+                format!("生成 {} 计划", direction_label),
+                "仅生成同步计划，不执行 Git 同步命令。",
+                RiskLevel::Medium,
+            ),
+        ],
+        warnings,
+        can_apply,
+    }
+}
+
 fn asset_from_id(asset_id: &str) -> AssetSummary {
     let (asset_type, name) = parse_asset_id(asset_id);
     let prefix = asset_type_prefix(&asset_type);
@@ -229,7 +311,7 @@ fn asset_type_prefix(asset_type: &AssetType) -> &'static str {
 fn step(
     id: &str,
     kind: PlanStepKind,
-    label: &str,
+    label: impl Into<String>,
     description: impl Into<String>,
     risk: RiskLevel,
 ) -> PlanStep {

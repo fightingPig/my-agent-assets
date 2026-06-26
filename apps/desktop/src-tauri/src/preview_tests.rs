@@ -1,8 +1,11 @@
 use super::contracts::{
-    ConflictResolutionChoice, MountTarget, PreviewConflictsInput, PreviewImportInput,
-    PreviewMountInput, PreviewRestoreInput, RuntimeScope, ScanScope,
+    ConflictResolutionChoice, GitStatus, MountTarget, PreviewConflictsInput, PreviewImportInput,
+    PreviewMountInput, PreviewRestoreInput, PreviewSyncInput, RuntimeScope, ScanScope,
+    SyncDirection,
 };
-use super::preview::{preview_conflicts, preview_import, preview_mount, preview_restore};
+use super::preview::{
+    preview_conflicts, preview_import, preview_mount, preview_restore, preview_sync,
+};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -121,4 +124,67 @@ fn preview_restore_returns_impact_without_writes() {
     assert!(preview.backup_before_restore);
     assert!(preview.can_apply);
     assert_eq!(preview.steps.len(), 3);
+}
+
+#[test]
+fn preview_sync_returns_git_plan_without_writes() {
+    let probe = TempProbe::new("sync");
+    let before = probe.snapshot();
+    let preview = preview_sync(
+        PreviewSyncInput {
+            direction: SyncDirection::Push,
+        },
+        GitStatus {
+            repository_path: "~/.my-agent-assets".into(),
+            is_repository: true,
+            status_message: "Repository ready.".into(),
+            branch: "main".into(),
+            remote: Some("origin/main".into()),
+            clean: true,
+            ahead: 2,
+            behind: 0,
+            changed_files: vec![],
+            conflicts: vec![],
+            last_synced_at: None,
+        },
+    );
+
+    assert_eq!(probe.snapshot(), before);
+    assert_eq!(preview.direction, SyncDirection::Push);
+    assert_eq!(preview.repository_path, "~/.my-agent-assets");
+    assert!(preview.can_apply);
+    assert_eq!(preview.steps.len(), 3);
+    assert!(preview.warnings[0].contains("Preview only"));
+}
+
+#[test]
+fn preview_sync_blocks_when_repository_is_not_ready() {
+    let preview = preview_sync(
+        PreviewSyncInput {
+            direction: SyncDirection::Pull,
+        },
+        GitStatus {
+            repository_path: "~/.my-agent-assets".into(),
+            is_repository: false,
+            status_message: "Asset center directory does not exist.".into(),
+            branch: "".into(),
+            remote: None,
+            clean: true,
+            ahead: 0,
+            behind: 4,
+            changed_files: vec![],
+            conflicts: vec![],
+            last_synced_at: None,
+        },
+    );
+
+    assert!(!preview.can_apply);
+    assert!(preview
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("not a Git repository")));
+    assert!(preview
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("No upstream remote")));
 }

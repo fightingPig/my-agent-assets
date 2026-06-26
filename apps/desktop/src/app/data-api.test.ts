@@ -104,6 +104,12 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("preview_restore", {
       input: { backupId: "backup-20260621-1842" },
     });
+
+    invoke.mockResolvedValueOnce({ direction: "pull", steps: [], warnings: [] });
+    await api.previewSync({ direction: "pull" });
+    expect(invoke).toHaveBeenLastCalledWith("preview_sync", {
+      input: { direction: "pull" },
+    });
   });
 
   it("calls apply command names with the expected input envelope", async () => {
@@ -227,6 +233,11 @@ describe("read-only desktop data api", () => {
     await expect(api.previewRestore({ backupId: "backup-1" })).resolves.toMatchObject({
       canApply: false,
       warnings: ["Tauri runtime is unavailable; restore preview skipped."],
+    });
+    await expect(api.previewSync({ direction: "push" })).resolves.toMatchObject({
+      direction: "push",
+      canApply: false,
+      warnings: ["Tauri runtime is unavailable; sync preview skipped."],
     });
     await expect(api.importApply({
       previewId: "preview-import-1",
