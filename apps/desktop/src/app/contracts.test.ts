@@ -19,6 +19,7 @@ import {
   type ImportApplyInput,
   type ApplyResult,
   type PreviewSyncInput,
+  type SyncApplyInput,
   type SyncPreview,
 } from "./contracts";
 
@@ -42,6 +43,7 @@ describe("Tauri command contracts", () => {
   it("keeps Sync preview contracts direction-bound and preview-only", () => {
     const input = { direction: "pull" } satisfies PreviewSyncInput;
     const preview = {
+      previewId: "preview:sync:pull",
       direction: "pull",
       repositoryPath: "~/.my-agent-assets",
       branch: "main",
@@ -61,6 +63,7 @@ describe("Tauri command contracts", () => {
 
     expect(input.direction).toBe("pull");
     expect(preview.direction).toBe("pull");
+    expect(preview.previewId).toBe("preview:sync:pull");
     expect(preview.steps[0].kind).toBe("git");
     expect(preview.warnings[0]).toContain("Preview only");
     expectTypeOf(input).toMatchTypeOf<PreviewSyncInput>();
@@ -128,6 +131,19 @@ describe("Tauri command contracts", () => {
     expect(input.backupBeforeApply).toBe(true);
     expect(input).not.toHaveProperty("runtimePath");
     expectTypeOf(input).toMatchTypeOf<ImportApplyInput>();
+  });
+
+  it("keeps Sync apply tied to a preview and explicit mode", () => {
+    const input = {
+      previewId: "preview:sync:push",
+      mode: "apply",
+      direction: "push",
+    } satisfies SyncApplyInput;
+
+    expect(input.previewId).toBe("preview:sync:push");
+    expect(input.mode).toBe("apply");
+    expect(input.direction).toBe("push");
+    expectTypeOf(input).toMatchTypeOf<SyncApplyInput>();
   });
 
   it("keeps ApplyResult explicit about backup, step outcomes, warnings, and errors", () => {

@@ -23,6 +23,7 @@ import type {
   ScanAssetsInput,
   ScanResult,
   SettingsSaveInput,
+  SyncApplyInput,
   SyncPreview,
 } from "./contracts";
 
@@ -151,6 +152,7 @@ export async function previewRestore(input: PreviewRestoreInput): Promise<Restor
 
 export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview> {
   const fallback: SyncPreview = {
+    previewId: `preview:sync:${input.direction}`,
     direction: input.direction,
     repositoryPath: fallbackGitStatus.repositoryPath,
     branch: fallbackGitStatus.branch,
@@ -160,8 +162,24 @@ export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview>
     canApply: false,
   };
   const result = await invokeOrFallback<unknown>("preview_sync", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.warnings)
+  return isRecord(result) && typeof result.previewId === "string" && Array.isArray(result.steps) && Array.isArray(result.warnings)
     ? result as SyncPreview
+    : fallback;
+}
+
+export async function syncApply(input: SyncApplyInput): Promise<ApplyResult> {
+  const fallback: ApplyResult = {
+    mode: input.mode,
+    ok: false,
+    previewId: input.previewId,
+    backup: null,
+    steps: [],
+    warnings: ["Tauri runtime is unavailable; sync apply skipped."],
+    errors: ["sync_apply could not run outside the Tauri runtime."],
+  };
+  const result = await invokeOrFallback<unknown>("sync_apply", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
+    ? result as ApplyResult
     : fallback;
 }
 

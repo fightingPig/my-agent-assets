@@ -362,6 +362,7 @@ pub struct GitStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncPreview {
+    pub preview_id: String,
     pub direction: SyncDirection,
     pub repository_path: String,
     pub branch: String,
@@ -431,6 +432,14 @@ pub struct PreviewRestoreInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewSyncInput {
+    pub direction: SyncDirection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncApplyInput {
+    pub preview_id: String,
+    pub mode: ApplyMode,
     pub direction: SyncDirection,
 }
 
@@ -563,6 +572,7 @@ mod tests {
         );
 
         let preview = SyncPreview {
+            preview_id: "preview:sync:push".into(),
             direction: SyncDirection::Push,
             repository_path: "~/.my-agent-assets".into(),
             branch: "main".into(),
@@ -581,6 +591,7 @@ mod tests {
             wire_value(preview),
             json!({
                 "direction": "push",
+                "previewId": "preview:sync:push",
                 "repositoryPath": "~/.my-agent-assets",
                 "branch": "main",
                 "remote": "origin/main",

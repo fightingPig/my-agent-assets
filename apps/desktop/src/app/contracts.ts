@@ -201,6 +201,7 @@ export type GitStatus = {
 };
 
 export type SyncPreview = {
+  previewId: string;
   direction: SyncDirection;
   repositoryPath: string;
   branch: string;
@@ -236,6 +237,11 @@ export type PreviewMountInput = { assetId: string; target: MountTarget };
 export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
 export type PreviewRestoreInput = { backupId: string };
 export type PreviewSyncInput = { direction: SyncDirection };
+export type SyncApplyInput = {
+  previewId: string;
+  mode: ApplyMode;
+  direction: SyncDirection;
+};
 export type SettingsSaveInput = { settings: DesktopSettings };
 export type ImportApplyInput = {
   previewId: string;

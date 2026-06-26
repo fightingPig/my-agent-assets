@@ -4,13 +4,14 @@ mod path_utils;
 mod preview;
 mod read_only;
 mod settings;
+mod sync_apply;
 
 use contracts::{
     AppInfo, ApplyResult, AssetSummary, BackupSummary, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
     PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
     PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput,
-    ScanResult, SettingsSaveInput, SyncPreview,
+    ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
 };
 
 #[tauri::command]
@@ -85,6 +86,11 @@ fn preview_sync(input: PreviewSyncInput) -> SyncPreview {
 }
 
 #[tauri::command]
+fn sync_apply(input: SyncApplyInput) -> ApplyResult {
+    sync_apply::sync_apply_command(input)
+}
+
+#[tauri::command]
 fn import_apply(input: ImportApplyInput) -> ApplyResult {
     apply::import_apply_command(input)
 }
@@ -116,6 +122,7 @@ pub fn run() {
             preview_conflicts,
             preview_restore,
             preview_sync,
+            sync_apply,
             import_apply,
             mount_apply,
             restore_apply
@@ -147,3 +154,6 @@ mod apply_tests;
 
 #[cfg(test)]
 mod settings_tests;
+
+#[cfg(test)]
+mod sync_apply_tests;

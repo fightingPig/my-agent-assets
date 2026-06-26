@@ -114,6 +114,24 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("preview_sync", {
       input: { direction: "pull" },
     });
+
+    invoke.mockResolvedValueOnce({
+      mode: "apply",
+      ok: true,
+      previewId: "preview-sync-1",
+      backup: null,
+      steps: [],
+      warnings: [],
+      errors: [],
+    });
+    await api.syncApply({
+      previewId: "preview-sync-1",
+      mode: "apply",
+      direction: "push",
+    });
+    expect(invoke).toHaveBeenLastCalledWith("sync_apply", {
+      input: { previewId: "preview-sync-1", mode: "apply", direction: "push" },
+    });
   });
 
   it("calls apply command names with the expected input envelope", async () => {
@@ -243,6 +261,16 @@ describe("read-only desktop data api", () => {
       direction: "push",
       canApply: false,
       warnings: ["Tauri runtime is unavailable; sync preview skipped."],
+    });
+    await expect(api.syncApply({
+      previewId: "preview-sync-1",
+      mode: "apply",
+      direction: "push",
+    })).resolves.toMatchObject({
+      ok: false,
+      previewId: "preview-sync-1",
+      warnings: ["Tauri runtime is unavailable; sync apply skipped."],
+      errors: ["sync_apply could not run outside the Tauri runtime."],
     });
     await expect(api.importApply({
       previewId: "preview-import-1",

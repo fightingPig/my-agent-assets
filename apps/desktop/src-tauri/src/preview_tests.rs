@@ -5,7 +5,7 @@ use super::contracts::{
 };
 use super::preview::{
     import_preview_id, preview_conflicts, preview_import, preview_mount, preview_restore,
-    preview_restore_for_home, preview_sync, restore_preview_id,
+    preview_restore_for_home, preview_sync, restore_preview_id, sync_preview_id,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -195,26 +195,29 @@ fn preview_restore_reads_manifest_paths_without_restoring_files() {
 fn preview_sync_returns_git_plan_without_writes() {
     let probe = TempProbe::new("sync");
     let before = probe.snapshot();
-    let preview = preview_sync(
-        PreviewSyncInput {
-            direction: SyncDirection::Push,
-        },
-        GitStatus {
-            repository_path: "~/.my-agent-assets".into(),
-            is_repository: true,
-            status_message: "Repository ready.".into(),
-            branch: "main".into(),
-            remote: Some("origin/main".into()),
-            clean: true,
-            ahead: 2,
-            behind: 0,
-            changed_files: vec![],
-            conflicts: vec![],
-            last_synced_at: None,
-        },
-    );
+    let input = PreviewSyncInput {
+        direction: SyncDirection::Push,
+    };
+    let status = GitStatus {
+        repository_path: "~/.my-agent-assets".into(),
+        is_repository: true,
+        status_message: "Repository ready.".into(),
+        branch: "main".into(),
+        remote: Some("origin/main".into()),
+        clean: true,
+        ahead: 2,
+        behind: 0,
+        changed_files: vec![],
+        conflicts: vec![],
+        last_synced_at: None,
+    };
+    let preview = preview_sync(input.clone(), status.clone());
 
     assert_eq!(probe.snapshot(), before);
+    assert_eq!(
+        preview.preview_id,
+        sync_preview_id(&input.direction, &status)
+    );
     assert_eq!(preview.direction, SyncDirection::Push);
     assert_eq!(preview.repository_path, "~/.my-agent-assets");
     assert!(preview.can_apply);

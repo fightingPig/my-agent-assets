@@ -277,6 +277,7 @@ pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> Rest
 }
 
 pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
+    let preview_id = sync_preview_id(&input.direction, &status);
     let direction_label = match input.direction {
         SyncDirection::Pull => "Pull",
         SyncDirection::Push => "Push",
@@ -303,6 +304,7 @@ pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
 
     let can_apply = status.is_repository
         && status.remote.is_some()
+        && status.clean
         && status.conflicts.is_empty()
         && match input.direction {
             SyncDirection::Pull => status.behind > 0,
@@ -310,6 +312,7 @@ pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
         };
 
     SyncPreview {
+        preview_id,
         direction: input.direction,
         repository_path: status.repository_path.clone(),
         branch: status.branch.clone(),
@@ -397,6 +400,22 @@ pub fn mount_preview_id(asset_id: &str, target: &MountTarget) -> String {
 
 pub fn restore_preview_id(backup_id: &str) -> String {
     stable_preview_id("restore", &[backup_id.to_string()])
+}
+
+pub fn sync_preview_id(direction: &SyncDirection, status: &GitStatus) -> String {
+    stable_preview_id(
+        "sync",
+        &[
+            wire_json(direction),
+            status.repository_path.clone(),
+            status.branch.clone(),
+            status.remote.clone().unwrap_or_default(),
+            status.ahead.to_string(),
+            status.behind.to_string(),
+            status.changed_files.join("\n"),
+            status.conflicts.join("\n"),
+        ],
+    )
 }
 
 fn canonical_scan_scope(scope: &ScanScope) -> String {

@@ -135,10 +135,30 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 - **Purpose:** Build a local Git Pull or Push plan from current repository status.
 - **Input:** `PreviewSyncInput { direction }`, where `direction` is `pull | push`.
-- **Output:** `SyncPreview { direction, repositoryPath, branch, remote, steps, warnings, canApply }`.
+- **Output:** `SyncPreview { previewId, direction, repositoryPath, branch, remote, steps, warnings, canApply }`.
 - **Side effect:** Preview-only. It does not run `git fetch`, `git pull`, `git push`, or mutate the repository.
 - **Future consumer:** Sync.
 - **Status:** Implemented and registered as preview-only.
+
+`previewId` is generated from the requested direction and current Git status. `sync_apply` rejects the request if repository status changes before execution.
+
+### `sync_apply`
+
+- **Purpose:** Execute a previously previewed local Git Pull or Push for the asset center repository.
+- **Input:** `SyncApplyInput { previewId, mode, direction }`.
+- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
+- **Side effect:** Write when `mode` is `apply`; no Git command is run when `mode` is `planOnly`.
+- **Future consumer:** Sync.
+- **Status:** Implemented and registered for `git pull --ff-only` and `git push`.
+
+Current behavior:
+
+- The target repository is `~/.my-agent-assets`.
+- The backend recomputes `previewId` from current Git status before running any command.
+- Dirty worktrees, conflicts, missing upstreams, and non-repository paths are rejected.
+- Pull uses `git pull --ff-only`.
+- Push uses `git push`.
+- Git commands are invoked with `std::process::Command` argument arrays, not shell strings.
 
 ### `git_status`
 
@@ -289,4 +309,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, `restore_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

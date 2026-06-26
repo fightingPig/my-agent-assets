@@ -1,6 +1,6 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, `restore_apply`, and `settings_save` are implemented.
+This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are implemented.
 
 ## Scope
 
@@ -9,6 +9,7 @@ Implemented write commands cover:
 - Import apply
 - Mount apply
 - Restore apply
+- Sync apply
 - Settings save
 
 They must not be implemented until this contract is satisfied by code, tests, and fake HOME end-to-end verification.
@@ -24,7 +25,7 @@ Every apply command must receive a single `input` object containing:
 
 Apply commands must not accept arbitrary frontend paths as sufficient authority to write. The backend must rebuild or validate the plan from trusted state and compare it with the preview identity before writing.
 
-Preview commands return deterministic `previewId` values for import, mount, and restore previews. Apply commands recompute the expected `previewId` from their input and fail before any write when the supplied ID does not match.
+Preview commands return deterministic `previewId` values for import, mount, restore, and sync previews. Apply commands recompute the expected `previewId` from their input and fail before any write when the supplied ID does not match.
 
 `mode` has two wire values:
 
@@ -47,8 +48,9 @@ The frontend and Rust contract layers define:
 - `ImportApplyInput`
 - `MountApplyInput`
 - `RestoreApplyInput`
+- `SyncApplyInput`
 
-`import_apply`, `mount_apply`, `restore_apply`, and `settings_save` are registered and use these DTOs.
+`import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are registered and use these DTOs.
 
 ## Backup Rule
 
@@ -172,12 +174,21 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Empty path fields are normalized to defaults
 - Numeric settings are clamped to supported ranges
 
+`sync_apply` currently supports fake-HOME-tested Git sync execution:
+
+- Targets only `~/.my-agent-assets`
+- Recomputes `previewId` from current Git status before running a command
+- Rejects dirty worktrees, conflicts, missing upstreams, and non-repositories
+- `planOnly` mode runs no Git commands
+- Pull executes `git pull --ff-only`
+- Push executes `git push`
+- Git commands are executed through `std::process::Command` argument arrays, not shell strings
+
 ## Still Forbidden
 
 These operations are still not implemented:
 
-- Git pull
-- Git push
+- Conflict apply
 
 ## Next Implementation Gate
 

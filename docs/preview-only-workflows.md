@@ -32,13 +32,12 @@ The static workflow pages now call preview wrappers from `apps/desktop/src/app/d
 - `MountManagerPage` calls `previewMount` when selected asset or target changes, and can call `mountApply` in `planOnly` mode with the preview's `previewId` to generate a mount plan without writing files.
 - `ConflictResolverPage` calls `previewConflicts` for a static preview scope and keeps `skip` / `rename` / `overwrite` as local resolution preview state.
 - `BackupRestorePage` calls `previewRestore` when the selected backup changes, and can call `restoreApply` in `planOnly` mode with the preview's `previewId` for restore-plan generation.
-- `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`.
+- `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`, then can call `syncApply` after typed confirmation.
 
-Conflict and Git sync apply buttons remain `StaticActionButton` and stay disabled. Import, mount, and restore pages use `ApplyConfirmationPanel` after a successful plan-only result; the user must type `APPLY` before real apply mode can run.
+Conflict apply buttons remain `StaticActionButton` and stay disabled. Import, mount, restore, and Sync pages use `ApplyConfirmationPanel` after a successful preview or plan-only result; the user must type `APPLY` before real apply mode can run.
 
 ## Remaining UI Non-goals
 
 - No conflict apply
-- No Git pull or push execution
 
-Backend `settings_save`, `import_apply`, `mount_apply`, `restore_apply`, and `preview_sync` were implemented in later safety milestones. The Settings page now has a controlled save action for local desktop configuration, Scan Import can generate a plan-only import result and then run confirmed import apply, Mount Manager can generate a plan-only mount result and then run confirmed mount apply, Sync can generate preview-only Pull/Push plans, and Backup Restore can generate a plan-only restore result and then run confirmed restore apply.
+Backend `settings_save`, `import_apply`, `mount_apply`, `restore_apply`, `preview_sync`, and `sync_apply` were implemented in later safety milestones. The Settings page now has a controlled save action for local desktop configuration, Scan Import can generate a plan-only import result and then run confirmed import apply, Mount Manager can generate a plan-only mount result and then run confirmed mount apply, Sync can generate Pull/Push plans and then run confirmed Git sync apply, and Backup Restore can generate a plan-only restore result and then run confirmed restore apply.
