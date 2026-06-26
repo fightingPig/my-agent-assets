@@ -100,11 +100,11 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Import, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; both plan actions avoid file writes.
+Destructive import execution, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
-- Scan Import: `preview_import` after a non-empty `scan_assets` result
+- Scan Import: `preview_import` after a non-empty `scan_assets` result, plus `import_apply` with `mode: "planOnly"` when generating an import plan
 - Mount Manager: `preview_mount` for the selected asset and target, plus `mount_apply` with `mode: "planOnly"` when generating a mount plan
 - Conflict Resolver: `preview_conflicts` for static preview asset IDs
 - Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
@@ -115,10 +115,10 @@ The UI continues to keep destructive apply-style buttons disabled. Preview and p
 
 The read-only UI milestone still does not:
 
-- Import assets
+- Destructively import assets
 - Destructively mount or unmount assets
 - Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
 - Enable destructive apply-style action buttons
-- Call import, destructive mount, destructive restore, Git, or sync write commands from enabled UI actions
+- Call destructive import, destructive mount, destructive restore, Git, or sync write commands from enabled UI actions

@@ -30,6 +30,7 @@ const {
   settingsSave,
   scanAssets,
   previewImport,
+  importApply,
   previewMount,
   previewConflicts,
   previewRestore,
@@ -43,6 +44,7 @@ const {
   settingsSave: vi.fn(),
   scanAssets: vi.fn(),
   previewImport: vi.fn(),
+  importApply: vi.fn(),
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
   previewRestore: vi.fn(),
@@ -58,6 +60,7 @@ vi.mock("../app/data-api", () => ({
   settingsSave,
   scanAssets,
   previewImport,
+  importApply,
   previewMount,
   previewConflicts,
   previewRestore,
@@ -78,6 +81,24 @@ beforeEach(() => {
   settingsSave.mockImplementation(async ({ settings }) => settings);
   scanAssets.mockResolvedValue(scanResultFixture([]));
   previewImport.mockResolvedValue(importPreviewFixture([]));
+  importApply.mockResolvedValue({
+    mode: "planOnly",
+    ok: true,
+    previewId: "import-plan:user:skill:live-scan",
+    backup: null,
+    steps: [
+      {
+        stepId: "plan-import-skill-live-scan",
+        kind: "import",
+        label: "预览导入",
+        status: "skipped",
+        message: "Plan-only mode: 1 asset would be imported.",
+        affectedPaths: ["~/.my-agent-assets/assets/skills/live-scan"],
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
   previewMount.mockResolvedValue(mountPreviewFixture());
   previewConflicts.mockResolvedValue([]);
   previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842"));
@@ -272,6 +293,31 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "保存扫描预览" })).toBeDisabled();
   });
 
+  it("generates a plan-only import apply preview without enabling import execution", async () => {
+    scanAssets.mockResolvedValue(scanResultFixture([
+      assetFixture("skill:live-scan", "live-scan", "skill"),
+    ]));
+    previewImport.mockResolvedValue(importPreviewFixture([
+      assetFixture("skill:live-scan", "live-scan", "skill"),
+    ]));
+
+    render(<ScanImportPage />);
+
+    await waitFor(() => expect(previewImport).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
+
+    await waitFor(() => expect(importApply).toHaveBeenCalledWith({
+      previewId: "import-plan:user:skill:live-scan",
+      mode: "planOnly",
+      scope: { kind: "user" },
+      assetIds: ["skill:live-scan"],
+      conflictResolutions: [],
+      backupBeforeApply: true,
+    }));
+    expect(await screen.findByText(/Plan-only mode: 1 asset would be imported/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
+  });
+
   it("renders preview-only mount, conflict, and restore data while keeping actions disabled", async () => {
     previewMount.mockResolvedValue(mountPreviewFixture({
       steps: [
@@ -351,6 +397,7 @@ describe("read-only UI integration", () => {
     render(<ScanImportPage />);
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
     expect(previewImport).not.toHaveBeenCalled();
+    expect(importApply).not.toHaveBeenCalled();
     expect(mountApply).not.toHaveBeenCalled();
     expect(restoreApply).not.toHaveBeenCalled();
   });
