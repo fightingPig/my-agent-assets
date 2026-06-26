@@ -10,10 +10,6 @@ use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
-pub fn settings_load_command() -> DesktopSettings {
-    settings_for_home(home_dir().as_deref())
-}
-
 pub fn git_status_command() -> GitStatus {
     match home_dir() {
         Some(home) => git_status_for_home(&home),

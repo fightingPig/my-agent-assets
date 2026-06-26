@@ -5,14 +5,13 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 ## Implemented Commands
 
 - `settings_load`
+- `settings_save`
 - `git_status`
 - `list_assets`
 - `list_projects`
 - `scan_assets`
 
-The following commands remain contract-only for a later preview/write phase:
-
-- `settings_save`
+`settings_save` was implemented after the original read-only milestone. The Settings page still does not expose an enabled save action.
 
 ## Implemented Preview-only Commands
 
@@ -35,7 +34,7 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 
 ## Data Sources
 
-`settings_load` returns default settings only. It does not read, create, or save a config file.
+`settings_load` returns default settings when no config exists. After `settings_save`, it reads `~/.my-agent-assets/config.json`.
 
 `list_assets` reads:
 
@@ -114,15 +113,12 @@ The UI continues to keep all apply-style buttons disabled. Preview data affects 
 
 ## Non-goals
 
-This milestone does not:
+The read-only UI milestone still does not:
 
-- Write files
-- Create `~/.my-agent-assets`
-- Save settings
 - Import assets
 - Mount or unmount assets
 - Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
 - Enable visual-only action buttons
-- Call `settings_save` or any apply/write command from the UI
+- Call `settings_save` or any apply/write command from enabled UI actions

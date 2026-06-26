@@ -21,6 +21,7 @@ import type {
   RestorePreview,
   ScanAssetsInput,
   ScanResult,
+  SettingsSaveInput,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -70,6 +71,11 @@ export async function gitStatus(): Promise<GitStatus> {
 export async function settingsLoad(): Promise<DesktopSettings> {
   const settings = await invokeOrFallback<unknown>("settings_load", undefined, fallbackSettings);
   return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : fallbackSettings;
+}
+
+export async function settingsSave(input: SettingsSaveInput): Promise<DesktopSettings> {
+  const settings = await invokeOrFallback<unknown>("settings_save", { input }, input.settings);
+  return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : input.settings;
 }
 
 export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {

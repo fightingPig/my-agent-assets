@@ -1,10 +1,10 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, and `restore_apply` are implemented; settings writes remain future work.
+This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, `restore_apply`, and `settings_save` are implemented.
 
 ## Scope
 
-Future write commands may cover:
+Implemented write commands cover:
 
 - Import apply
 - Mount apply
@@ -44,7 +44,7 @@ The frontend and Rust contract layers define:
 - `MountApplyInput`
 - `RestoreApplyInput`
 
-`import_apply`, `mount_apply`, and `restore_apply` are registered and use these DTOs. Other apply DTOs remain reserved for future implementation.
+`import_apply`, `mount_apply`, `restore_apply`, and `settings_save` are registered and use these DTOs.
 
 ## Backup Rule
 
@@ -160,11 +160,18 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Current runtime state is backed up before replacement when `backupBeforeRestore` is true
 - `planOnly` mode reads the manifest but restores no files and creates no backup
 
+`settings_save` currently supports fake-HOME-tested settings persistence:
+
+- Settings are written to `~/.my-agent-assets/config.json`
+- `settings_load` returns defaults when no config exists and reads the saved config when present
+- Settings writes do not touch Claude runtime files
+- Empty path fields are normalized to defaults
+- Numeric settings are clamped to supported ranges
+
 ## Still Forbidden
 
 These operations are still not implemented:
 
-- `settings_save`
 - Git pull
 - Git push
 

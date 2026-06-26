@@ -151,7 +151,15 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Output:** The normalized and persisted `DesktopSettings`.
 - **Side effect:** Write.
 - **Future consumer:** Settings.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered.
+
+Current behavior:
+
+- Settings are stored as JSON at `~/.my-agent-assets/config.json`.
+- Missing config files are not created by `settings_load`.
+- Empty path fields fall back to safe defaults.
+- Numeric settings are clamped to supported ranges.
+- The GUI Settings page remains read-only until a future UI wiring milestone.
 
 ### `import_apply`
 
@@ -207,9 +215,7 @@ Current behavior:
 
 ### Future write commands
 
-The write safety contract reserves DTOs for additional future write commands.
-
-Each future command must receive a single `input` object with `previewId`, `mode`, command-specific identifiers, and backup preference fields. See `docs/write-safety-contract.md`.
+Future write commands must receive a single `input` object with explicit command-specific identifiers and safety preferences. Apply-style commands must include `previewId` and `mode`. See `docs/write-safety-contract.md`.
 
 ## DTO Shapes
 
@@ -268,4 +274,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, and `restore_apply`. `settings_save` remains contract-only or out of scope. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, `restore_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

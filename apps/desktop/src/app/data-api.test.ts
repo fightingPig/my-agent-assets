@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { GitStatus } from "./contracts";
+import type { DesktopSettings, GitStatus } from "./contracts";
 
 const { invoke, isTauriRuntime } = vi.hoisted(() => ({
   invoke: vi.fn(),
   isTauriRuntime: vi.fn(),
 }));
+
+const savedSettings: DesktopSettings = {
+  assetCenterPath: "~/.my-agent-assets",
+  scanRoots: ["~/workspace"],
+  maxDepth: 4,
+  backupBeforeApply: true,
+  planOnlyByDefault: true,
+  gitDefaultBranch: "main",
+  gitRemote: "origin",
+  appearanceTheme: "system",
+  density: "compact",
+  logLevel: "info",
+  logRetentionDays: 14,
+  cliPath: "maa",
+};
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("../lib/platform", () => ({ isTauriRuntime }));
@@ -32,6 +47,12 @@ describe("read-only desktop data api", () => {
     invoke.mockResolvedValueOnce({ assetCenterPath: "~/.my-agent-assets" });
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");
+
+    invoke.mockResolvedValueOnce(savedSettings);
+    await api.settingsSave({ settings: savedSettings });
+    expect(invoke).toHaveBeenLastCalledWith("settings_save", {
+      input: { settings: savedSettings },
+    });
 
     invoke.mockResolvedValueOnce({ assets: [] });
     await api.scanAssets({ scope: { kind: "custom", path: "~/workspace/project-a" } });
@@ -185,6 +206,7 @@ describe("read-only desktop data api", () => {
       assetCenterPath: "~/.my-agent-assets",
       scanRoots: ["~/.claude", "~/workspace", "~/code"],
     });
+    await expect(api.settingsSave({ settings: savedSettings })).resolves.toEqual(savedSettings);
     await expect(api.gitStatus()).resolves.toMatchObject({
       isRepository: false,
       statusMessage: "Tauri runtime is unavailable.",

@@ -3,12 +3,14 @@ mod contracts;
 mod path_utils;
 mod preview;
 mod read_only;
+mod settings;
 
 use contracts::{
     AppInfo, ApplyResult, AssetSummary, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
     PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
     ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput, ScanResult,
+    SettingsSaveInput,
 };
 
 #[tauri::command]
@@ -24,7 +26,12 @@ fn app_info() -> AppInfo {
 
 #[tauri::command]
 fn settings_load() -> DesktopSettings {
-    read_only::settings_load_command()
+    settings::settings_load_command()
+}
+
+#[tauri::command]
+fn settings_save(input: SettingsSaveInput) -> DesktopSettings {
+    settings::settings_save_command(input)
 }
 
 #[tauri::command]
@@ -88,6 +95,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             settings_load,
+            settings_save,
             git_status,
             list_assets,
             list_projects,
@@ -124,3 +132,6 @@ mod preview_tests;
 
 #[cfg(test)]
 mod apply_tests;
+
+#[cfg(test)]
+mod settings_tests;

@@ -33,11 +33,9 @@ The static workflow pages now call preview wrappers from `apps/desktop/src/app/d
 
 All apply buttons remain `StaticActionButton` and stay disabled.
 
-## Remaining Non-goals
+## Remaining UI Non-goals
 
-- No `settings_save`
-- No import apply
-- No mount apply
 - No conflict apply
-- No restore apply
 - No Git pull or push
+
+Backend `settings_save`, `import_apply`, `mount_apply`, and `restore_apply` were implemented in later safety milestones. The static GUI still keeps business action buttons disabled until a dedicated UI wiring milestone.
