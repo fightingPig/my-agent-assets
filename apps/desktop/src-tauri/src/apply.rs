@@ -3,6 +3,7 @@ use crate::contracts::{
     ImportApplyInput, MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
+use crate::preview;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::fs;
@@ -95,6 +96,18 @@ impl<'a> ImportApplyRunner<'a> {
     }
 
     fn run(&mut self) -> ApplyResult {
+        if !self.validate_preview_id() {
+            return ApplyResult {
+                mode: self.input.mode.clone(),
+                ok: false,
+                preview_id: self.input.preview_id.clone(),
+                backup: None,
+                steps: self.steps.clone(),
+                warnings: self.warnings.clone(),
+                errors: self.errors.clone(),
+            };
+        }
+
         if self.input.asset_ids.is_empty() {
             self.warnings
                 .push("No asset IDs were selected for import apply.".into());
@@ -154,6 +167,29 @@ impl<'a> ImportApplyRunner<'a> {
             warnings: self.warnings.clone(),
             errors: self.errors.clone(),
         }
+    }
+
+    fn validate_preview_id(&mut self) -> bool {
+        let expected = preview::import_preview_id(
+            &self.input.scope,
+            &self.input.asset_ids,
+            &self.input.conflict_resolutions,
+        );
+        if self.input.preview_id == expected {
+            return true;
+        }
+
+        let preview_id = self.input.preview_id.clone();
+        self.push_failed_step(
+            &preview_id,
+            "校验预览 ID",
+            format!(
+                "Preview ID does not match import input. Expected {}, got {}.",
+                expected, self.input.preview_id
+            ),
+            vec![],
+        );
+        false
     }
 
     fn apply_intent(&mut self, intent: &ImportIntent) -> io::Result<()> {
@@ -325,6 +361,10 @@ impl<'a> RestoreApplyRunner<'a> {
     }
 
     fn run(&mut self) -> ApplyResult {
+        if !self.validate_preview_id() {
+            return self.result();
+        }
+
         let manifest_path = self
             .home
             .join(".my-agent-assets")
@@ -375,6 +415,23 @@ impl<'a> RestoreApplyRunner<'a> {
         }
 
         self.result()
+    }
+
+    fn validate_preview_id(&mut self) -> bool {
+        let expected = preview::restore_preview_id(&self.input.backup_id);
+        if self.input.preview_id == expected {
+            return true;
+        }
+
+        self.push_failed_step(
+            "校验预览 ID",
+            format!(
+                "Preview ID does not match restore input. Expected {}, got {}.",
+                expected, self.input.preview_id
+            ),
+            vec![],
+        );
+        false
     }
 
     fn restore_entry(&mut self, entry: &BackupEntry, manifest_path: &Path) -> io::Result<()> {
@@ -552,6 +609,10 @@ impl<'a> MountApplyRunner<'a> {
     }
 
     fn run(&mut self) -> ApplyResult {
+        if !self.validate_preview_id() {
+            return self.result();
+        }
+
         let intent = match MountIntent::from_input(self.home, &self.input) {
             Ok(intent) => intent,
             Err(error) => {
@@ -581,6 +642,23 @@ impl<'a> MountApplyRunner<'a> {
         }
 
         self.result()
+    }
+
+    fn validate_preview_id(&mut self) -> bool {
+        let expected = preview::mount_preview_id(&self.input.asset_id, &self.input.target);
+        if self.input.preview_id == expected {
+            return true;
+        }
+
+        self.push_failed_step(
+            "校验预览 ID",
+            format!(
+                "Preview ID does not match mount input. Expected {}, got {}.",
+                expected, self.input.preview_id
+            ),
+            vec![],
+        );
+        false
     }
 
     fn apply_intent(&mut self, intent: &MountIntent) -> io::Result<()> {

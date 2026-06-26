@@ -103,7 +103,7 @@ beforeEach(() => {
   importApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
-    previewId: "import-plan:user:skill:live-scan",
+    previewId: "preview:import:test",
     backup: null,
     steps: [
       {
@@ -124,7 +124,7 @@ beforeEach(() => {
   mountApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
-    previewId: "mount-plan:skill:review:project-a",
+    previewId: "preview:mount:skill-review-project-a",
     backup: null,
     steps: [
       {
@@ -142,7 +142,7 @@ beforeEach(() => {
   restoreApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
-    previewId: "restore-plan:backup-20260621-1842",
+    previewId: "preview:restore:backup-20260621-1842",
     backup: null,
     steps: [
       {
@@ -367,7 +367,7 @@ describe("read-only UI integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
 
     await waitFor(() => expect(importApply).toHaveBeenCalledWith({
-      previewId: "import-plan:user:skill:live-scan",
+      previewId: "preview:import:test",
       mode: "planOnly",
       scope: { kind: "user" },
       assetIds: ["skill:live-scan"],
@@ -423,7 +423,7 @@ describe("read-only UI integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成恢复计划" }));
 
     await waitFor(() => expect(restoreApply).toHaveBeenCalledWith({
-      previewId: "restore-plan:backup-20260621-1842",
+      previewId: "preview:restore:backup-20260621-1842",
       mode: "planOnly",
       backupId: "backup-20260621-1842",
       backupBeforeRestore: true,
@@ -439,7 +439,7 @@ describe("read-only UI integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
 
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith({
-      previewId: "mount-plan:skill:review:project-a",
+      previewId: "preview:mount:skill-review-project-a",
       mode: "planOnly",
       assetId: "skill:review",
       target: {
@@ -557,6 +557,7 @@ function scanResultFixture(assets: AssetSummary[]): ScanResult {
 
 function importPreviewFixture(assets: AssetSummary[]): ImportPreview {
   return {
+    previewId: "preview:import:test",
     scope: { kind: "user" },
     assets,
     conflicts: [],
@@ -570,6 +571,7 @@ function importPreviewFixture(assets: AssetSummary[]): ImportPreview {
 
 function mountPreviewFixture(overrides: Partial<MountPreview> = {}): MountPreview {
   return {
+    previewId: "preview:mount:skill-review-project-a",
     asset: assetFixture("skill:review", "review", "skill"),
     target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
     steps: [
@@ -597,6 +599,7 @@ function conflictPreviewFixture(id: string, name: string, assetType: ConflictPre
 
 function restorePreviewFixture(backupId: string, overrides: Partial<RestorePreview> = {}): RestorePreview {
   return {
+    previewId: `preview:restore:${backupId}`,
     backup: { id: backupId, label: `Restore preview for ${backupId}`, createdAt: "preview-only", sizeBytes: 0, entryCount: 3 },
     affectedPaths: [`backups/${backupId}/manifest.json`, "~/.claude/skills/review"],
     steps: [

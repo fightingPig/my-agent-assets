@@ -267,6 +267,7 @@ pub struct ConflictPreview {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportPreview {
+    pub preview_id: String,
     pub scope: ScanScope,
     pub assets: Vec<AssetSummary>,
     pub conflicts: Vec<ConflictPreview>,
@@ -286,6 +287,7 @@ pub struct MountTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MountPreview {
+    pub preview_id: String,
     pub asset: AssetSummary,
     pub target: MountTarget,
     pub steps: Vec<PlanStep>,
@@ -320,6 +322,7 @@ pub struct BackupManifestSummary {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestorePreview {
+    pub preview_id: String,
     pub backup: BackupSummary,
     pub affected_paths: Vec<String>,
     pub steps: Vec<PlanStep>,

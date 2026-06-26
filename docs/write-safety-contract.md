@@ -24,6 +24,8 @@ Every apply command must receive a single `input` object containing:
 
 Apply commands must not accept arbitrary frontend paths as sufficient authority to write. The backend must rebuild or validate the plan from trusted state and compare it with the preview identity before writing.
 
+Preview commands return deterministic `previewId` values for import, mount, and restore previews. Apply commands recompute the expected `previewId` from their input and fail before any write when the supplied ID does not match.
+
 `mode` has two wire values:
 
 - `planOnly`

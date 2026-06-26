@@ -106,6 +106,8 @@ Each page keeps its previous static data as an initial placeholder or fallback. 
 
 Destructive import execution, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
 
+Import, mount, and restore previews return deterministic `previewId` values. Their plan-only apply calls pass the preview's ID, and the backend rejects mismatched IDs before reading or writing runtime data.
+
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
 - Scan Import: `preview_import` after a non-empty `scan_assets` result, plus `import_apply` with `mode: "planOnly"` when generating an import plan

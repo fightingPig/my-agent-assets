@@ -92,11 +92,13 @@ export function BackupRestorePage() {
     : null;
 
   const handlePlanRestore = async () => {
+    if (!preview?.previewId) return;
+
     setIsPlanning(true);
     setPreviewState("生成恢复计划中");
     try {
       const result = await restoreApply({
-        previewId: `restore-plan:${selectedId}`,
+        previewId: preview?.previewId ?? "",
         mode: "planOnly",
         backupId: selectedId,
         backupBeforeRestore: preview?.backupBeforeRestore ?? true,
@@ -122,7 +124,7 @@ export function BackupRestorePage() {
         <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{impact}</span></div></div>
         <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
         <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{planSummary ?? preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
-        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button><StaticActionButton className="asset-business-action">恢复此备份</StaticActionButton></div>
+        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button><StaticActionButton className="asset-business-action">恢复此备份</StaticActionButton></div>
       </section>
     </div>
   );

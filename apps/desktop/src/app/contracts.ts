@@ -127,6 +127,7 @@ export type ConflictPreview = {
 };
 
 export type ImportPreview = {
+  previewId: string;
   scope: ScanScope;
   assets: AssetSummary[];
   conflicts: ConflictPreview[];
@@ -142,6 +143,7 @@ export type MountTarget = {
 };
 
 export type MountPreview = {
+  previewId: string;
   asset: AssetSummary;
   target: MountTarget;
   steps: PlanStep[];
@@ -165,6 +167,7 @@ export type BackupManifestSummary = BackupSummary & {
 };
 
 export type RestorePreview = {
+  previewId: string;
   backup: BackupSummary;
   affectedPaths: string[];
   steps: PlanStep[];

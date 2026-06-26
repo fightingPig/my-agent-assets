@@ -66,12 +66,12 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 - **Purpose:** Build an import plan for explicitly selected assets and conflict decisions.
 - **Input:** `PreviewImportInput { scope, assetIds, conflictResolutions }`.
-- **Output:** `ImportPreview { scope, assets, conflicts, steps, warnings, canApply }`.
+- **Output:** `ImportPreview { previewId, scope, assets, conflicts, steps, warnings, canApply }`.
 - **Side effect:** Preview-only.
 - **Future consumer:** Scan Import and Conflict Resolver.
 - **Status:** Implemented and registered as preview-only.
 
-`PreviewImportInput` is self-contained. The backend will rebuild the preview from `scope`, `assetIds`, and `conflictResolutions`; it must not require a prior scan session.
+`PreviewImportInput` is self-contained. The backend will rebuild the preview from `scope`, `assetIds`, and `conflictResolutions`; it must not require a prior scan session. `previewId` is generated from those inputs and later validated by `import_apply`.
 
 ### `list_assets`
 
@@ -95,10 +95,12 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 - **Purpose:** Build a mount or MCP compile plan for one asset and runtime target.
 - **Input:** `PreviewMountInput { assetId, target }`, where `target` is `MountTarget { scope, runtimePath, projectPath }`.
-- **Output:** `MountPreview { asset, target, steps, warnings, backupRequired, canApply }`.
+- **Output:** `MountPreview { previewId, asset, target, steps, warnings, backupRequired, canApply }`.
 - **Side effect:** Preview-only.
 - **Future consumer:** Mount Manager, Asset Detail, and Project Detail.
 - **Status:** Implemented and registered as preview-only.
+
+`previewId` is generated from `assetId` and `target` and later validated by `mount_apply`.
 
 ### `preview_conflicts`
 
@@ -122,10 +124,12 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 - **Purpose:** Validate a backup and show affected paths and restore steps.
 - **Input:** `PreviewRestoreInput { backupId }`.
-- **Output:** `RestorePreview { backup, affectedPaths, steps, warnings, backupBeforeRestore, canApply }`.
+- **Output:** `RestorePreview { previewId, backup, affectedPaths, steps, warnings, backupBeforeRestore, canApply }`.
 - **Side effect:** Preview-only. Reads an existing backup manifest when present, but does not restore files or create backups.
 - **Future consumer:** Backup Restore.
 - **Status:** Implemented and registered as preview-only.
+
+`previewId` is generated from `backupId` and later validated by `restore_apply`.
 
 ### `preview_sync`
 
@@ -222,6 +226,7 @@ Current behavior:
 - Backup entry paths must stay under the selected backup directory.
 - Current state is backed up before restore when `backupBeforeRestore` is true.
 - `planOnly` reads the manifest and returns skipped restore steps without writing files.
+- `previewId` must match the deterministic preview identity for the apply input; mismatches fail before any write.
 
 ### Future write commands
 

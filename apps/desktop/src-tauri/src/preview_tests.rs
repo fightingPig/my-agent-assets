@@ -4,8 +4,8 @@ use super::contracts::{
     SyncDirection,
 };
 use super::preview::{
-    preview_conflicts, preview_import, preview_mount, preview_restore, preview_restore_for_home,
-    preview_sync,
+    import_preview_id, preview_conflicts, preview_import, preview_mount, preview_restore,
+    preview_restore_for_home, preview_sync, restore_preview_id,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -68,6 +68,19 @@ fn preview_import_is_deterministic_and_does_not_write_files() {
     assert_eq!(preview.steps.len(), 3);
     assert!(preview.can_apply);
     assert!(preview.warnings[0].contains("Preview only"));
+    assert_eq!(
+        preview.preview_id,
+        import_preview_id(
+            &ScanScope::User,
+            &["skill:review".into(), "mcp:PostgreSQL".into()],
+            &[ConflictResolutionChoice {
+                conflict_id: "mcp:PostgreSQL".into(),
+                resolution: super::contracts::ConflictResolution::Rename,
+                rename_to: Some("PostgreSQL-local".into()),
+            }]
+        )
+    );
+    assert!(preview.preview_id.starts_with("preview:import:"));
 }
 
 #[test]
@@ -92,6 +105,7 @@ fn preview_mount_returns_target_plan_without_writes() {
     assert!(preview.backup_required);
     assert!(preview.can_apply);
     assert_eq!(preview.steps.len(), 3);
+    assert!(preview.preview_id.starts_with("preview:mount:"));
 }
 
 #[test]
@@ -125,6 +139,10 @@ fn preview_restore_returns_impact_without_writes() {
     assert!(preview.backup_before_restore);
     assert!(preview.can_apply);
     assert_eq!(preview.steps.len(), 3);
+    assert_eq!(
+        preview.preview_id,
+        restore_preview_id("backup-20260621-1842")
+    );
 }
 
 #[test]
@@ -170,6 +188,7 @@ fn preview_restore_reads_manifest_paths_without_restoring_files() {
     );
     assert!(preview.can_apply);
     assert!(preview.warnings[0].contains("Preview only"));
+    assert!(preview.preview_id.starts_with("preview:restore:"));
 }
 
 #[test]

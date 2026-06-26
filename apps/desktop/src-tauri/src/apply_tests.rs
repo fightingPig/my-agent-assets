@@ -3,6 +3,7 @@ use super::contracts::{
     ApplyMode, ApplyStepStatus, ImportApplyInput, MountApplyInput, MountTarget, RestoreApplyInput,
     RuntimeScope, ScanScope,
 };
+use super::preview::{import_preview_id, mount_preview_id, restore_preview_id};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -55,11 +56,13 @@ impl Drop for TempHome {
 }
 
 fn import_input(mode: ApplyMode, scope: ScanScope, asset_ids: Vec<&str>) -> ImportApplyInput {
+    let asset_ids = asset_ids.into_iter().map(String::from).collect::<Vec<_>>();
+    let preview_id = import_preview_id(&scope, &asset_ids, &[]);
     ImportApplyInput {
-        preview_id: "preview-import-test".into(),
+        preview_id,
         mode,
         scope,
-        asset_ids: asset_ids.into_iter().map(String::from).collect(),
+        asset_ids,
         conflict_resolutions: vec![],
         backup_before_apply: true,
     }
@@ -71,15 +74,17 @@ fn mount_input(
     runtime_path: String,
     backup_before_apply: bool,
 ) -> MountApplyInput {
+    let target = MountTarget {
+        scope: RuntimeScope::Project,
+        runtime_path,
+        project_path: Some("~/workspace/project-a".into()),
+    };
+    let preview_id = mount_preview_id(asset_id, &target);
     MountApplyInput {
-        preview_id: "preview-mount-test".into(),
+        preview_id,
         mode,
         asset_id: asset_id.into(),
-        target: MountTarget {
-            scope: RuntimeScope::Project,
-            runtime_path,
-            project_path: Some("~/workspace/project-a".into()),
-        },
+        target,
         backup_before_apply,
     }
 }
@@ -90,7 +95,7 @@ fn restore_input(
     backup_before_restore: bool,
 ) -> RestoreApplyInput {
     RestoreApplyInput {
-        preview_id: "preview-restore-test".into(),
+        preview_id: restore_preview_id(&backup_id),
         mode,
         backup_id,
         backup_before_restore,
@@ -241,6 +246,20 @@ fn import_apply_reports_missing_source_without_creating_destination() {
 }
 
 #[test]
+fn import_apply_rejects_mismatched_preview_id_before_writing() {
+    let home = TempHome::new("import-preview-mismatch");
+    home.write(".claude/commands/deploy.md", "# Deploy");
+    let mut input = import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]);
+    input.preview_id = "preview:import:tampered".into();
+
+    let result = import_apply_for_home(home.path(), input);
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("Preview ID does not match import input"));
+    assert!(!home.exists(".my-agent-assets"));
+}
+
+#[test]
 fn mount_apply_plan_only_does_not_create_runtime_target() {
     let home = TempHome::new("mount-plan-only");
     home.write(".my-agent-assets/assets/skills/review.md", "# Review");
@@ -371,6 +390,25 @@ fn mount_apply_reports_missing_asset_without_creating_target() {
     assert!(!result.ok);
     assert!(result.errors[0].contains("Asset center path does not exist"));
     assert!(!home.exists("workspace/project-a/.claude/skills/missing.md"));
+}
+
+#[test]
+fn mount_apply_rejects_mismatched_preview_id_before_writing() {
+    let home = TempHome::new("mount-preview-mismatch");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    let mut input = mount_input(
+        ApplyMode::Apply,
+        "skill:review",
+        "~/workspace/project-a/.claude/skills/review.md".into(),
+        true,
+    );
+    input.preview_id = "preview:mount:tampered".into();
+
+    let result = mount_apply_for_home(home.path(), input);
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("Preview ID does not match mount input"));
+    assert!(!home.exists("workspace/project-a/.claude/skills/review.md"));
 }
 
 #[test]
@@ -675,6 +713,22 @@ fn restore_apply_rejects_tampered_manifest_outside_home() {
     assert!(!result.ok);
     assert!(result.errors[0].contains("must stay under resolved HOME"));
     assert!(!outside.exists());
+}
+
+#[test]
+fn restore_apply_rejects_mismatched_preview_id_before_reading_manifest() {
+    let home = TempHome::new("restore-preview-mismatch");
+    let mut input = restore_input(ApplyMode::Apply, "missing-backup".into(), true);
+    input.preview_id = "preview:restore:tampered".into();
+
+    let result = restore_apply_for_home(home.path(), input);
+
+    assert!(!result.ok);
+    assert!(result
+        .errors
+        .iter()
+        .any(|error| error.contains("Preview ID does not match restore input")));
+    assert!(!home.exists(".my-agent-assets"));
 }
 
 fn read_json(path: impl AsRef<Path>) -> serde_json::Value {

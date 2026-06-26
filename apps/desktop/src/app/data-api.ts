@@ -100,6 +100,7 @@ export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
 
 export async function previewImport(input: PreviewImportInput): Promise<ImportPreview> {
   const fallback: ImportPreview = {
+    previewId: "preview:import:unavailable",
     scope: input.scope,
     assets: [],
     conflicts: [],
@@ -108,14 +109,14 @@ export async function previewImport(input: PreviewImportInput): Promise<ImportPr
     canApply: false,
   };
   const result = await invokeOrFallback<unknown>("preview_import", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.assets)
+  return isRecord(result) && typeof result.previewId === "string" && Array.isArray(result.steps) && Array.isArray(result.assets)
     ? result as ImportPreview
     : fallback;
 }
 
 export async function previewMount(input: PreviewMountInput): Promise<MountPreview | null> {
   const result = await invokeOrFallback<unknown>("preview_mount", { input }, null);
-  return isRecord(result) && isRecord(result.asset) && isRecord(result.target) && Array.isArray(result.steps)
+  return isRecord(result) && typeof result.previewId === "string" && isRecord(result.asset) && isRecord(result.target) && Array.isArray(result.steps)
     ? result as MountPreview
     : null;
 }
@@ -134,6 +135,7 @@ export async function previewRestore(input: PreviewRestoreInput): Promise<Restor
     entryCount: 0,
   };
   const fallback: RestorePreview = {
+    previewId: `preview:restore:${input.backupId}`,
     backup: fallbackBackup,
     affectedPaths: [],
     steps: [],
@@ -142,7 +144,7 @@ export async function previewRestore(input: PreviewRestoreInput): Promise<Restor
     canApply: false,
   };
   const result = await invokeOrFallback<unknown>("preview_restore", { input }, fallback);
-  return isRecord(result) && isRecord(result.backup) && Array.isArray(result.affectedPaths)
+  return isRecord(result) && typeof result.previewId === "string" && isRecord(result.backup) && Array.isArray(result.affectedPaths)
     ? result as RestorePreview
     : fallback;
 }

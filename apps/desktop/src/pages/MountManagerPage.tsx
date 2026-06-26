@@ -63,11 +63,13 @@ export function MountManagerPage() {
     : warning;
 
   const handlePlanMount = async () => {
+    if (!preview?.previewId) return;
+
     setIsPlanning(true);
     setPreviewState("生成挂载计划中");
     try {
       const result = await mountApply({
-        previewId: `mount-plan:${previewInput.assetId}:${selectedTarget}`,
+        previewId: preview?.previewId ?? "",
         mode: "planOnly",
         assetId: previewInput.assetId,
         target: previewInput.target,
@@ -90,7 +92,7 @@ export function MountManagerPage() {
         <div className="mount-flow-column"><div className="mount-flow-heading"><span>2</span><div><strong>选择目标</strong><small>本地运行目标</small></div></div><div className="selectable-stack">{targets.map(({ id, detail }) => <button aria-pressed={selectedTarget === id} className={selectedTarget === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedTarget(id)} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={16} /><span><strong>{id === "user" ? "用户级" : id}</strong><small>{detail}</small></span></button>)}</div></div>
         <div className="mount-flow-column plan"><div className="mount-flow-heading"><span>3</span><div><strong>预览挂载计划</strong><small>{previewState} · 不会执行文件变更</small></div></div><div className="mount-plan-summary"><div><Link2 size={17} /><span><strong>{asset.id}</strong><small>{asset.type}</small></span></div><i>→</i><div><FolderKanban size={17} /><span><strong>{target.id === "user" ? "用户级" : target.id}</strong><small>{preview?.target.runtimePath ?? target.detail}</small></span></div></div><div className="plan-lines">{planLines.map((line) => <span key={line}>{line}</span>)}</div></div>
       </section>
-      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button><StaticActionButton className="asset-business-action">确认挂载</StaticActionButton></div></section>
+      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button><StaticActionButton className="asset-business-action">确认挂载</StaticActionButton></div></section>
     </div>
   );
 }

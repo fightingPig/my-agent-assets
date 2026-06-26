@@ -9,6 +9,8 @@ This milestone adds registered Tauri commands for safe workflow previews:
 
 These commands are deterministic and input-driven. They return plan, warning, conflict, target, and impact DTOs only.
 
+Import, mount, and restore preview DTOs include a deterministic `previewId`. The related apply commands must use that ID and will reject mismatched IDs before writing or restoring anything.
+
 ## Safety Boundary
 
 Preview commands must not:
@@ -26,10 +28,10 @@ Preview commands must not:
 
 The static workflow pages now call preview wrappers from `apps/desktop/src/app/data-api.ts`:
 
-- `ScanImportPage` calls `previewImport` only after `scanAssets` returns discovered assets, and can call `importApply` in `planOnly` mode to generate an import plan without writing files.
-- `MountManagerPage` calls `previewMount` when selected asset or target changes, and can call `mountApply` in `planOnly` mode to generate a mount plan without writing files.
+- `ScanImportPage` calls `previewImport` only after `scanAssets` returns discovered assets, and can call `importApply` in `planOnly` mode with the preview's `previewId` to generate an import plan without writing files.
+- `MountManagerPage` calls `previewMount` when selected asset or target changes, and can call `mountApply` in `planOnly` mode with the preview's `previewId` to generate a mount plan without writing files.
 - `ConflictResolverPage` calls `previewConflicts` for a static preview scope and keeps `skip` / `rename` / `overwrite` as local resolution preview state.
-- `BackupRestorePage` calls `previewRestore` when the selected backup changes, and later milestones allow `restoreApply` in `planOnly` mode for restore-plan generation.
+- `BackupRestorePage` calls `previewRestore` when the selected backup changes, and can call `restoreApply` in `planOnly` mode with the preview's `previewId` for restore-plan generation.
 - `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`.
 
 Destructive apply buttons remain `StaticActionButton` and stay disabled.

@@ -81,16 +81,16 @@ export function ScanImportPage() {
   const planSummary = planResult?.steps.length
     ? planResult.steps.map((step) => step.message).join(" / ")
     : previewStepText;
-  const canGeneratePlan = scannedAssetIds.length > 0 && !isPlanning;
+  const canGeneratePlan = Boolean(importPreview?.previewId) && scannedAssetIds.length > 0 && !isPlanning;
 
   const handlePlanImport = async () => {
-    if (scannedAssetIds.length === 0) return;
+    if (scannedAssetIds.length === 0 || !importPreview?.previewId) return;
 
     setIsPlanning(true);
     setStateLabel("生成导入计划中");
     try {
       const result = await importApply({
-        previewId: `import-plan:${input.kind}:${scannedAssetIds.join(",")}`,
+        previewId: importPreview?.previewId ?? "",
         mode: "planOnly",
         scope: input,
         assetIds: scannedAssetIds,

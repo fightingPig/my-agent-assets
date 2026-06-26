@@ -1,8 +1,9 @@
 use crate::contracts::{
     AssetStatus, AssetSummary, AssetType, BackupSummary, ConflictPreview, ConflictResolution,
-    GitStatus, ImportPreview, MountPreview, PlanStep, PlanStepKind, PreviewConflictsInput,
-    PreviewImportInput, PreviewMountInput, PreviewRestoreInput, PreviewSyncInput, RestorePreview,
-    RiskLevel, RuntimeScope, SyncDirection, SyncPreview,
+    ConflictResolutionChoice, GitStatus, ImportPreview, MountPreview, MountTarget, PlanStep,
+    PlanStepKind, PreviewConflictsInput, PreviewImportInput, PreviewMountInput,
+    PreviewRestoreInput, PreviewSyncInput, RestorePreview, RiskLevel, RuntimeScope, ScanScope,
+    SyncDirection, SyncPreview,
 };
 use crate::path_utils::{display_path, home_dir};
 use crate::read_only;
@@ -40,6 +41,7 @@ pub fn preview_sync_command(input: PreviewSyncInput) -> SyncPreview {
 }
 
 pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
+    let preview_id = import_preview_id(&input.scope, &input.asset_ids, &input.conflict_resolutions);
     let assets = input
         .asset_ids
         .iter()
@@ -76,6 +78,7 @@ pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
     ));
 
     ImportPreview {
+        preview_id,
         scope: input.scope,
         assets,
         conflicts,
@@ -86,6 +89,7 @@ pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
 }
 
 pub fn preview_mount(input: PreviewMountInput) -> MountPreview {
+    let preview_id = mount_preview_id(&input.asset_id, &input.target);
     let asset = asset_from_id(&input.asset_id);
     let target_path = input.target.runtime_path.clone();
     let is_mcp = asset.asset_type == AssetType::Mcp;
@@ -95,6 +99,7 @@ pub fn preview_mount(input: PreviewMountInput) -> MountPreview {
     }
 
     MountPreview {
+        preview_id,
         asset,
         target: input.target,
         steps: vec![
@@ -143,6 +148,7 @@ pub fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
 }
 
 pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
+    let preview_id = restore_preview_id(&input.backup_id);
     let backup = BackupSummary {
         id: input.backup_id.clone(),
         label: format!("Restore preview for {}", input.backup_id),
@@ -157,6 +163,7 @@ pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
     ];
 
     RestorePreview {
+        preview_id,
         backup,
         affected_paths,
         steps: vec![
@@ -231,6 +238,7 @@ pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> Rest
     let entry_count = affected_paths.len() as u32;
 
     RestorePreview {
+        preview_id: restore_preview_id(&input.backup_id),
         backup: BackupSummary {
             id: manifest.id,
             label: manifest.label,
@@ -342,6 +350,84 @@ pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
         warnings,
         can_apply,
     }
+}
+
+pub fn import_preview_id(
+    scope: &ScanScope,
+    asset_ids: &[String],
+    conflict_resolutions: &[ConflictResolutionChoice],
+) -> String {
+    let mut sorted_assets = asset_ids.to_vec();
+    sorted_assets.sort();
+
+    let mut sorted_resolutions = conflict_resolutions
+        .iter()
+        .map(|choice| {
+            format!(
+                "{}:{}:{}",
+                choice.conflict_id,
+                wire_json(&choice.resolution),
+                choice.rename_to.as_deref().unwrap_or("")
+            )
+        })
+        .collect::<Vec<_>>();
+    sorted_resolutions.sort();
+
+    stable_preview_id(
+        "import",
+        &[
+            canonical_scan_scope(scope),
+            sorted_assets.join("\n"),
+            sorted_resolutions.join("\n"),
+        ],
+    )
+}
+
+pub fn mount_preview_id(asset_id: &str, target: &MountTarget) -> String {
+    stable_preview_id(
+        "mount",
+        &[
+            asset_id.to_string(),
+            wire_json(&target.scope),
+            target.runtime_path.clone(),
+            target.project_path.clone().unwrap_or_default(),
+        ],
+    )
+}
+
+pub fn restore_preview_id(backup_id: &str) -> String {
+    stable_preview_id("restore", &[backup_id.to_string()])
+}
+
+fn canonical_scan_scope(scope: &ScanScope) -> String {
+    match scope {
+        ScanScope::User => "user".into(),
+        ScanScope::Project { project_path } => format!("project:{}", project_path),
+        ScanScope::Custom { path } => format!("custom:{}", path),
+    }
+}
+
+fn stable_preview_id(kind: &str, parts: &[String]) -> String {
+    let mut canonical = String::new();
+    canonical.push_str(kind);
+    for part in parts {
+        canonical.push('\u{1f}');
+        canonical.push_str(part);
+    }
+    format!("preview:{}:{:016x}", kind, fnv1a64(canonical.as_bytes()))
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
+fn wire_json<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "null".into())
 }
 
 fn asset_from_id(asset_id: &str) -> AssetSummary {
