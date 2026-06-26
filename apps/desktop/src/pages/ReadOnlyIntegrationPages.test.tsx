@@ -378,6 +378,37 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
   });
 
+  it("requires typed confirmation before executing import apply", async () => {
+    scanAssets.mockResolvedValue(scanResultFixture([
+      assetFixture("skill:live-scan", "live-scan", "skill"),
+    ]));
+    previewImport.mockResolvedValue(importPreviewFixture([
+      assetFixture("skill:live-scan", "live-scan", "skill"),
+    ]));
+
+    render(<ScanImportPage />);
+
+    await waitFor(() => expect(previewImport).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
+    await waitFor(() => expect(importApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+
+    const applyButton = screen.getByRole("button", { name: "确认导入" });
+    expect(applyButton).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(applyButton).toBeEnabled();
+    fireEvent.click(applyButton);
+
+    await waitFor(() => expect(importApply).toHaveBeenLastCalledWith({
+      previewId: "preview:import:test",
+      mode: "apply",
+      scope: { kind: "user" },
+      assetIds: ["skill:live-scan"],
+      conflictResolutions: [],
+      backupBeforeApply: true,
+    }));
+    expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+  });
+
   it("renders preview-only mount, conflict, and restore data while keeping actions disabled", async () => {
     previewMount.mockResolvedValue(mountPreviewFixture({
       steps: [
@@ -432,6 +463,28 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
   });
 
+  it("requires typed confirmation before executing restore apply", async () => {
+    render(<BackupRestorePage />);
+
+    await screen.findByText("backup-20260621-1842");
+    fireEvent.click(screen.getByRole("button", { name: "生成恢复计划" }));
+    await waitFor(() => expect(restoreApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+
+    const restoreButton = screen.getByRole("button", { name: "恢复此备份" });
+    expect(restoreButton).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(restoreButton).toBeEnabled();
+    fireEvent.click(restoreButton);
+
+    await waitFor(() => expect(restoreApply).toHaveBeenLastCalledWith({
+      previewId: "preview:restore:backup-20260621-1842",
+      mode: "apply",
+      backupId: "backup-20260621-1842",
+      backupBeforeRestore: true,
+    }));
+    expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+  });
+
   it("generates a plan-only mount apply preview without enabling mount execution", async () => {
     render(<MountManagerPage />);
 
@@ -451,6 +504,33 @@ describe("read-only UI integration", () => {
     }));
     expect(await screen.findByText(/Plan-only mode: no symlink was created/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
+  });
+
+  it("requires typed confirmation before executing mount apply", async () => {
+    render(<MountManagerPage />);
+
+    await waitFor(() => expect(previewMount).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
+    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+
+    const mountButton = screen.getByRole("button", { name: "确认挂载" });
+    expect(mountButton).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(mountButton).toBeEnabled();
+    fireEvent.click(mountButton);
+
+    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith({
+      previewId: "preview:mount:skill-review-project-a",
+      mode: "apply",
+      assetId: "skill:review",
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+      backupBeforeApply: true,
+    }));
+    expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
   });
 
   it("updates Conflict Resolver local resolution preview without calling apply wrappers", async () => {

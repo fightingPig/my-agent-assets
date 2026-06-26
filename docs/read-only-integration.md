@@ -104,9 +104,16 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Destructive import execution, destructive mount execution, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
+Git Pull, Git Push, and conflict apply remain disabled. `StaticActionButton` is still used for visual-only business actions that do not have a safe apply workflow. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
 
 Import, mount, and restore previews return deterministic `previewId` values. Their plan-only apply calls pass the preview's ID, and the backend rejects mismatched IDs before reading or writing runtime data.
+
+The Scan Import, Mount Manager, and Backup Restore pages can execute real `apply` mode only after:
+
+1. A preview exists.
+2. A plan-only apply succeeds.
+3. The user types `APPLY` in the local confirmation field.
+4. The backend validates the deterministic `previewId`.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
@@ -116,7 +123,7 @@ The preview workflow pages now consume preview-only data through the wrapper lay
 - Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
 - Sync: `preview_sync` for local Pull/Push plan generation without running Git sync commands
 
-The UI continues to keep destructive apply-style buttons disabled. Preview and plan-only data affects only plan text, warnings, affected paths, conflicts, and summaries.
+The UI continues to keep Git sync and conflict-resolution apply buttons disabled. Preview and plan-only data affects plan text, warnings, affected paths, conflicts, and summaries; import, mount, and restore can proceed to real apply only through the typed confirmation gate.
 
 `preview_restore` now prefers `~/.my-agent-assets/backups/<backupId>/manifest.json` when present, returning the manifest's affected paths and backup summary. Missing or invalid manifests safely fall back to synthetic preview data with a warning.
 
@@ -124,11 +131,9 @@ The UI continues to keep destructive apply-style buttons disabled. Preview and p
 
 The read-only UI milestone still does not:
 
-- Destructively import assets
-- Destructively mount or unmount assets
+- Unmount assets
 - Apply conflict resolutions
-- Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
-- Enable destructive apply-style action buttons
-- Call destructive import, destructive mount, destructive restore, Git, or sync write commands from enabled UI actions
+- Enable conflict or Git sync apply-style action buttons
+- Call conflict, Git, or sync write commands from enabled UI actions

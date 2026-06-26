@@ -232,6 +232,7 @@ src/
 │   │   ├── Sidebar.tsx
 │   │   └── PageHeader.tsx
 │   └── ui/
+│       ├── ApplyConfirmationPanel.tsx
 │       └── StaticActionButton.tsx
 ├── lib/
 │   └── platform.ts
@@ -272,6 +273,8 @@ src/
 Shell components own the frozen window layout and navigation frame.
 
 Page components may use local static data during the current frontend-only phase.
+
+`ApplyConfirmationPanel.tsx` provides the typed confirmation gate used before real import, mount, or restore apply commands are executed.
 
 `visual-qa/` contains reusable static GUI screenshot and layout diagnostics tooling.
 

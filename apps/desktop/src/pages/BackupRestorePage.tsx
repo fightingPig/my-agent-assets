@@ -2,6 +2,7 @@ import { ArchiveRestore, FileClock, FolderKanban } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listBackups, previewRestore, restoreApply } from "../app/data-api";
 import type { ApplyResult, BackupSummary, RestorePreview } from "../app/contracts";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -25,9 +26,12 @@ export function BackupRestorePage() {
   const [selectedId, setSelectedId] = useState(staticBackups[0].id);
   const [preview, setPreview] = useState<RestorePreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState("");
   const [previewState, setPreviewState] = useState("预览中");
   const [listState, setListState] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0] ?? staticBackups[0];
 
   useEffect(() => {
@@ -62,6 +66,8 @@ export function BackupRestorePage() {
     let cancelled = false;
     setPreviewState("预览中");
     setPlanResult(null);
+    setApplyResult(null);
+    setConfirmationValue("");
     previewRestore({ backupId: selectedId })
       .then((result) => {
         if (cancelled) return;
@@ -90,6 +96,7 @@ export function BackupRestorePage() {
   const planSummary = planResult?.steps.length
     ? planResult.steps.map((step) => step.message).join(" / ")
     : null;
+  const canApply = Boolean(planResult?.ok && preview?.previewId);
 
   const handlePlanRestore = async () => {
     if (!preview?.previewId) return;
@@ -113,6 +120,28 @@ export function BackupRestorePage() {
     }
   };
 
+  const handleApplyRestore = async () => {
+    if (!canApply || !preview?.previewId) return;
+
+    setIsApplying(true);
+    setPreviewState("执行恢复中");
+    try {
+      const result = await restoreApply({
+        previewId: preview.previewId,
+        mode: "apply",
+        backupId: selectedId,
+        backupBeforeRestore: preview.backupBeforeRestore,
+      });
+      setApplyResult(result);
+      setPreviewState(result.ok ? "恢复已执行" : "恢复失败");
+    } catch {
+      setApplyResult(null);
+      setPreviewState("恢复失败");
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   return (
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
@@ -124,7 +153,8 @@ export function BackupRestorePage() {
         <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{impact}</span></div></div>
         <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
         <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{planSummary ?? preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
-        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button><StaticActionButton className="asset-business-action">恢复此备份</StaticActionButton></div>
+        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button></div>
+        <ApplyConfirmationPanel actionLabel="恢复此备份" canApply={canApply} confirmationValue={confirmationValue} description="会从 backup manifest 恢复受影响路径；后端会校验 previewId 并先备份当前状态。" isApplying={isApplying} onApply={handleApplyRestore} onConfirmationChange={setConfirmationValue} result={applyResult} title="执行恢复" />
       </section>
     </div>
   );

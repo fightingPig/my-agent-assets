@@ -2,6 +2,7 @@ import { AlertTriangle, Check, FolderSearch, House, ScanSearch } from "lucide-re
 import { useEffect, useMemo, useState } from "react";
 import { importApply, previewImport, scanAssets } from "../app/data-api";
 import type { ApplyResult, AssetSummary, ImportPreview, ScanResult, ScanScope } from "../app/contracts";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -23,8 +24,11 @@ export function ScanImportPage() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState("");
   const [stateLabel, setStateLabel] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
   const input = useMemo(() => toScanScope(selectedScope), [selectedScope]);
 
@@ -32,6 +36,8 @@ export function ScanImportPage() {
     let cancelled = false;
     setStateLabel("读取中");
     setPlanResult(null);
+    setApplyResult(null);
+    setConfirmationValue("");
     scanAssets({ scope: input })
       .then((result) => {
         if (cancelled) return;
@@ -82,6 +88,7 @@ export function ScanImportPage() {
     ? planResult.steps.map((step) => step.message).join(" / ")
     : previewStepText;
   const canGeneratePlan = Boolean(importPreview?.previewId) && scannedAssetIds.length > 0 && !isPlanning;
+  const canApply = Boolean(planResult?.ok && importPreview?.previewId && scannedAssetIds.length > 0);
 
   const handlePlanImport = async () => {
     if (scannedAssetIds.length === 0 || !importPreview?.previewId) return;
@@ -107,6 +114,30 @@ export function ScanImportPage() {
     }
   };
 
+  const handleApplyImport = async () => {
+    if (!canApply || !importPreview?.previewId) return;
+
+    setIsApplying(true);
+    setStateLabel("执行导入中");
+    try {
+      const result = await importApply({
+        previewId: importPreview.previewId,
+        mode: "apply",
+        scope: input,
+        assetIds: scannedAssetIds,
+        conflictResolutions: [],
+        backupBeforeApply: true,
+      });
+      setApplyResult(result);
+      setStateLabel(result.ok ? "导入已执行" : "导入失败");
+    } catch {
+      setApplyResult(null);
+      setStateLabel("导入失败");
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   return (
     <div className="operation-workspace">
       <section className="panel operation-stepper" aria-label="扫描步骤">
@@ -128,7 +159,18 @@ export function ScanImportPage() {
         <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}</p></div><span>{rows.length} 项待确认</span></div>
         <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={`${result.type}:${result.name}`}><strong>{result.name}</strong><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}</div>
         <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{previewWarning ?? warning ?? "只读扫描预览"}</strong><span>{planSummary ?? (scanResult?.assets.length ? "当前仅展示发现结果，不执行预览导入或导入。" : "未读取到真实资产时保留静态预览，确认导入仍然禁用。")}</span></div></div>
-        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">保存扫描预览</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button><StaticActionButton className="asset-business-action">确认导入</StaticActionButton></div>
+        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">保存扫描预览</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button></div>
+        <ApplyConfirmationPanel
+          actionLabel="确认导入"
+          canApply={canApply}
+          confirmationValue={confirmationValue}
+          description="会把当前扫描资产写入资产中心；后端会校验 previewId 并在替换前创建备份。"
+          isApplying={isApplying}
+          onApply={handleApplyImport}
+          onConfirmationChange={setConfirmationValue}
+          result={applyResult}
+          title="执行导入"
+        />
       </section>
     </div>
   );

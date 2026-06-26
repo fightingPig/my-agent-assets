@@ -2,6 +2,7 @@ import { AlertTriangle, Blocks, BookOpen, FolderKanban, Link2, TerminalSquare } 
 import { useEffect, useMemo, useState } from "react";
 import { mountApply, previewMount } from "../app/data-api";
 import type { ApplyResult, MountPreview, PreviewMountInput } from "../app/contracts";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -21,8 +22,11 @@ export function MountManagerPage() {
   const [selectedTarget, setSelectedTarget] = useState(targets[0].id);
   const [preview, setPreview] = useState<MountPreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState("");
   const [previewState, setPreviewState] = useState("预览中");
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
   const asset = assets.find((item) => item.id === selectedAsset)!;
   const target = targets.find((item) => item.id === selectedTarget)!;
   const previewInput = useMemo(() => toPreviewMountInput(asset, target), [asset, target]);
@@ -31,6 +35,8 @@ export function MountManagerPage() {
     let cancelled = false;
     setPreviewState("预览中");
     setPlanResult(null);
+    setApplyResult(null);
+    setConfirmationValue("");
     previewMount(previewInput)
       .then((result) => {
         if (cancelled) return;
@@ -61,6 +67,7 @@ export function MountManagerPage() {
   const planSummary = planResult?.steps.length
     ? planResult.steps.map((step) => step.message).join(" / ")
     : warning;
+  const canApply = Boolean(planResult?.ok && preview?.previewId);
 
   const handlePlanMount = async () => {
     if (!preview?.previewId) return;
@@ -85,6 +92,29 @@ export function MountManagerPage() {
     }
   };
 
+  const handleApplyMount = async () => {
+    if (!canApply || !preview?.previewId) return;
+
+    setIsApplying(true);
+    setPreviewState("执行挂载中");
+    try {
+      const result = await mountApply({
+        previewId: preview.previewId,
+        mode: "apply",
+        assetId: previewInput.assetId,
+        target: previewInput.target,
+        backupBeforeApply: preview.backupRequired,
+      });
+      setApplyResult(result);
+      setPreviewState(result.ok ? "挂载已执行" : "挂载失败");
+    } catch {
+      setApplyResult(null);
+      setPreviewState("挂载失败");
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   return (
     <div className="operation-workspace">
       <section className="panel mount-workflow">
@@ -92,7 +122,7 @@ export function MountManagerPage() {
         <div className="mount-flow-column"><div className="mount-flow-heading"><span>2</span><div><strong>选择目标</strong><small>本地运行目标</small></div></div><div className="selectable-stack">{targets.map(({ id, detail }) => <button aria-pressed={selectedTarget === id} className={selectedTarget === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedTarget(id)} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={16} /><span><strong>{id === "user" ? "用户级" : id}</strong><small>{detail}</small></span></button>)}</div></div>
         <div className="mount-flow-column plan"><div className="mount-flow-heading"><span>3</span><div><strong>预览挂载计划</strong><small>{previewState} · 不会执行文件变更</small></div></div><div className="mount-plan-summary"><div><Link2 size={17} /><span><strong>{asset.id}</strong><small>{asset.type}</small></span></div><i>→</i><div><FolderKanban size={17} /><span><strong>{target.id === "user" ? "用户级" : target.id}</strong><small>{preview?.target.runtimePath ?? target.detail}</small></span></div></div><div className="plan-lines">{planLines.map((line) => <span key={line}>{line}</span>)}</div></div>
       </section>
-      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button><StaticActionButton className="asset-business-action">确认挂载</StaticActionButton></div></section>
+      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} confirmationValue={confirmationValue} description="会创建软链接或编译 MCP runtime 配置；后端会校验 previewId 并在替换前创建备份。" isApplying={isApplying} onApply={handleApplyMount} onConfirmationChange={setConfirmationValue} result={applyResult} title="执行挂载" /></section>
     </div>
   );
 }

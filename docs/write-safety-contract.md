@@ -33,6 +33,8 @@ Preview commands return deterministic `previewId` values for import, mount, and 
 
 `planOnly` must produce an `ApplyResult` without writing files.
 
+The desktop UI must not call `mode: "apply"` directly from a primary action. It must first produce a successful preview and plan-only apply result, then require a local typed confirmation of `APPLY`. The backend still owns the final safety check by validating `previewId`.
+
 ## Required DTOs
 
 The frontend and Rust contract layers define:
