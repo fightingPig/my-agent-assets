@@ -2,7 +2,7 @@ import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
-import type { PageId } from "../app/pages";
+import type { AssetDetailContext } from "../app/detail-context";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -81,10 +81,10 @@ const staticSkills: readonly SkillItem[] = [
 ];
 
 type AssetListPageProps = {
-  onPageChange?: (page: PageId) => void;
+  onOpenAssetDetail?: (detail: AssetDetailContext) => void;
 };
 
-export function SkillsListPage({ onPageChange }: AssetListPageProps = {}) {
+export function SkillsListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly SkillItem[]>(staticSkills);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -119,12 +119,30 @@ export function SkillsListPage({ onPageChange }: AssetListPageProps = {}) {
       items={items}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
       stateLabel={stateLabel}
-      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
+      onOpenDetail={onOpenAssetDetail ? (skill) => onOpenAssetDetail(toAssetDetail(skill, "Skill", "SKILL.md 内容预览")) : undefined}
       renderInspector={(skill) => (
         <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
       )}
     />
   );
+}
+
+function toAssetDetail(skill: SkillItem, typeLabel: string, previewLabel: string): AssetDetailContext {
+  return {
+    name: skill.name,
+    title: skill.title,
+    summary: skill.summary,
+    status: skill.status,
+    statusTone: skill.statusTone,
+    typeLabel,
+    category: skill.category,
+    sourcePath: skill.path,
+    scope: skill.scope,
+    updated: skill.updated,
+    mountTargets: skill.mounts,
+    previewLabel,
+    preview: skill.preview,
+  };
 }
 
 function toSkillItem(asset: AssetSummary): SkillItem {

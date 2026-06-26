@@ -20,7 +20,7 @@ The page registry contains 13 implemented static pages:
 12. Sync / 同步
 13. Settings / 设置
 
-Eleven primary pages are reachable from the Sidebar. Asset Detail and Project Detail are implemented, registered, and reachable from their list-page inspector actions, but intentionally have no primary navigation entry.
+Eleven primary pages are reachable from the Sidebar. Asset Detail and Project Detail are implemented, registered, and reachable from their list-page inspector actions with the currently selected asset or project context, but intentionally have no primary navigation entry.
 
 ## Current Interaction Model
 

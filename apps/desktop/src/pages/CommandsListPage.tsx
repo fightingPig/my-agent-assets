@@ -2,7 +2,7 @@ import { TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
-import type { PageId } from "../app/pages";
+import type { AssetDetailContext } from "../app/detail-context";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -88,10 +88,10 @@ const staticCommands: readonly CommandItem[] = [
 ];
 
 type AssetListPageProps = {
-  onPageChange?: (page: PageId) => void;
+  onOpenAssetDetail?: (detail: AssetDetailContext) => void;
 };
 
-export function CommandsListPage({ onPageChange }: AssetListPageProps = {}) {
+export function CommandsListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly CommandItem[]>(staticCommands);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -126,7 +126,7 @@ export function CommandsListPage({ onPageChange }: AssetListPageProps = {}) {
       items={items}
       searchPlaceholder="搜索 Command 名称、用途或路径"
       stateLabel={stateLabel}
-      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
+      onOpenDetail={onOpenAssetDetail ? (command) => onOpenAssetDetail(toAssetDetail(command, "Command", "Markdown 内容预览")) : undefined}
       renderInspector={(command) => (
         <>
           <InspectorSection title="用途标签"><InspectorTags tags={command.tags} /></InspectorSection>
@@ -135,6 +135,24 @@ export function CommandsListPage({ onPageChange }: AssetListPageProps = {}) {
       )}
     />
   );
+}
+
+function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {
+  return {
+    name: command.name,
+    title: command.title,
+    summary: command.summary,
+    status: command.status,
+    statusTone: command.statusTone,
+    typeLabel,
+    category: command.category,
+    sourcePath: command.path,
+    scope: command.scope,
+    updated: command.updated,
+    mountTargets: command.mounts,
+    previewLabel,
+    preview: command.preview,
+  };
 }
 
 function toCommandItem(asset: AssetSummary): CommandItem {

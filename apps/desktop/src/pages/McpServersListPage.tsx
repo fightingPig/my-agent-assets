@@ -2,7 +2,7 @@ import { Blocks } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
-import type { PageId } from "../app/pages";
+import type { AssetDetailContext } from "../app/detail-context";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -99,10 +99,10 @@ const staticServers: readonly McpItem[] = [
 ];
 
 type AssetListPageProps = {
-  onPageChange?: (page: PageId) => void;
+  onOpenAssetDetail?: (detail: AssetDetailContext) => void;
 };
 
-export function McpServersListPage({ onPageChange }: AssetListPageProps = {}) {
+export function McpServersListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly McpItem[]>(staticServers);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -137,7 +137,7 @@ export function McpServersListPage({ onPageChange }: AssetListPageProps = {}) {
       items={items}
       searchPlaceholder="搜索 MCP 名称、能力或配置路径"
       stateLabel={stateLabel}
-      onOpenDetail={onPageChange ? () => onPageChange("asset-detail") : undefined}
+      onOpenDetail={onOpenAssetDetail ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览")) : undefined}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[
@@ -150,6 +150,24 @@ export function McpServersListPage({ onPageChange }: AssetListPageProps = {}) {
       )}
     />
   );
+}
+
+function toAssetDetail(server: McpItem, typeLabel: string, previewLabel: string): AssetDetailContext {
+  return {
+    name: server.name,
+    title: server.title,
+    summary: server.summary,
+    status: server.status,
+    statusTone: server.statusTone,
+    typeLabel,
+    category: server.category,
+    sourcePath: server.path,
+    scope: server.scope,
+    updated: server.updated,
+    mountTargets: server.mounts,
+    previewLabel,
+    preview: server.preview,
+  };
 }
 
 function toMcpItem(asset: AssetSummary): McpItem {

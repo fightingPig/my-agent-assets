@@ -221,6 +221,7 @@ src/
 ├── app/
 │   ├── CurrentPage.tsx
 │   ├── contracts.ts
+│   ├── detail-context.ts
 │   └── pages.ts
 ├── components/
 │   ├── assets/
@@ -265,6 +266,8 @@ src/
 `app/CurrentPage.tsx` maps page IDs to page components.
 
 `app/contracts.ts` defines the frontend TypeScript DTO boundary for future Tauri/Rust integration.
+
+`app/detail-context.ts` defines the local frontend context passed from list inspectors into hidden detail pages.
 
 Shell components own the frozen window layout and navigation frame.
 

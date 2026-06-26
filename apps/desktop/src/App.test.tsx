@@ -75,15 +75,21 @@ describe("macOS preview home", () => {
   it("opens hidden detail pages from list inspectors without adding sidebar routes", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Skills" }));
+    fireEvent.click(screen.getByRole("button", { name: "Commands" }));
+    fireEvent.click(await screen.findByRole("option", { name: "format-code" }));
     fireEvent.click(await screen.findByRole("button", { name: "查看详情" }));
     expect(screen.getByRole("heading", { name: "资产详情" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "format-code" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Markdown 内容预览" })).toBeInTheDocument();
+    expect(screen.getByText("assets/commands/format-code.md")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "资产详情" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
+    fireEvent.click(await screen.findByRole("option", { name: "my-app" }));
     fireEvent.click(await screen.findByRole("button", { name: "查看详情" }));
     expect(screen.getByRole("heading", { name: "项目详情" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "my-app" })).toBeInTheDocument();
+    expect(screen.getByText("~/workspace/my-app")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "项目详情" })).not.toBeInTheDocument();
   });
