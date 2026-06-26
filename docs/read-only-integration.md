@@ -100,16 +100,16 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Import, mount, Pull, Push, restore, and related apply actions remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings is the exception: it can call `settings_save` to persist local desktop configuration only.
+Import, mount, Pull, Push, and destructive restore execution remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings can call `settings_save` to persist local desktop configuration only, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan without writing files.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
 - Scan Import: `preview_import` after a non-empty `scan_assets` result
 - Mount Manager: `preview_mount` for the selected asset and target
 - Conflict Resolver: `preview_conflicts` for static preview asset IDs
-- Backup Restore: `preview_restore` for the selected backup ID
+- Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
 
-The UI continues to keep all apply-style buttons disabled. Preview data affects only plan text, warnings, affected paths, conflicts, and summaries.
+The UI continues to keep destructive apply-style buttons disabled. Preview and plan-only data affects only plan text, warnings, affected paths, conflicts, and summaries.
 
 ## Non-goals
 
@@ -120,5 +120,5 @@ The read-only UI milestone still does not:
 - Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
-- Enable apply-style action buttons
-- Call import, mount, restore, Git, or sync write commands from enabled UI actions
+- Enable destructive apply-style action buttons
+- Call import, mount, destructive restore, Git, or sync write commands from enabled UI actions

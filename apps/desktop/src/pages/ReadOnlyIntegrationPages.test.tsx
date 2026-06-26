@@ -33,6 +33,7 @@ const {
   previewMount,
   previewConflicts,
   previewRestore,
+  restoreApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
@@ -44,6 +45,7 @@ const {
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
   previewRestore: vi.fn(),
+  restoreApply: vi.fn(),
 }));
 
 vi.mock("../app/data-api", () => ({
@@ -57,6 +59,7 @@ vi.mock("../app/data-api", () => ({
   previewMount,
   previewConflicts,
   previewRestore,
+  restoreApply,
 }));
 
 afterEach(() => {
@@ -75,6 +78,24 @@ beforeEach(() => {
   previewMount.mockResolvedValue(mountPreviewFixture());
   previewConflicts.mockResolvedValue([]);
   previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842"));
+  restoreApply.mockResolvedValue({
+    mode: "planOnly",
+    ok: true,
+    previewId: "restore-plan:backup-20260621-1842",
+    backup: null,
+    steps: [
+      {
+        stepId: "plan-restore-backup-20260621-1842",
+        kind: "restore",
+        label: "预览恢复",
+        status: "skipped",
+        message: "Plan-only mode: 2 backup entries would be restored.",
+        affectedPaths: ["/tmp/restore/one", "/tmp/restore/two"],
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
 });
 
 describe("read-only UI integration", () => {
@@ -263,20 +284,31 @@ describe("read-only UI integration", () => {
     expect(await screen.findByText("/tmp/restore/one")).toBeInTheDocument();
     expect(screen.getByText("预览恢复影响")).toBeInTheDocument();
     expect(screen.getByText("Preview restore warning")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成恢复计划" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
   });
 
-  it("does not call write or apply command wrappers from preview pages", async () => {
+  it("generates a plan-only restore apply preview without enabling restore execution", async () => {
+    render(<BackupRestorePage />);
+
+    await screen.findByText("backup-20260621-1842");
+    fireEvent.click(screen.getByRole("button", { name: "生成恢复计划" }));
+
+    await waitFor(() => expect(restoreApply).toHaveBeenCalledWith({
+      previewId: "restore-plan:backup-20260621-1842",
+      mode: "planOnly",
+      backupId: "backup-20260621-1842",
+      backupBeforeRestore: true,
+    }));
+    expect(await screen.findByText(/Plan-only mode/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
+  });
+
+  it("does not call apply command wrappers from Scan Import preview", async () => {
     render(<ScanImportPage />);
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
     expect(previewImport).not.toHaveBeenCalled();
-    expect(Object.keys(await import("../app/data-api"))).not.toEqual(expect.arrayContaining([
-      "importApply",
-      "mountApply",
-      "restoreApply",
-      "gitPull",
-      "gitPush",
-    ]));
+    expect(restoreApply).not.toHaveBeenCalled();
   });
 });
 

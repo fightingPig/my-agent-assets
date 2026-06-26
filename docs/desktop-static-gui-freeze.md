@@ -98,7 +98,7 @@ Later integration milestones added read-only runtime and asset-center data acces
 - `app/pages.ts` provides stable page identity and metadata boundaries.
 - `app/CurrentPage.tsx` provides the page composition boundary for future data and command wiring.
 - List, inspector, detail, plan, warning, diff, and status surfaces define the static presentation targets for structured DTOs.
-- `StaticActionButton` locations mark future plan/apply command entry points without currently exposing executable behavior; Settings save is now handled by a separate controlled action.
+- `StaticActionButton` locations mark destructive apply command entry points without currently exposing executable behavior; Settings save and Backup Restore plan generation are handled by separate controlled actions.
 - The existing `app_info` bridge proves basic Tauri-to-React communication while page business data remains mocked.
 
 Future integration should place filesystem, Git, scan, mount, MCP compile, backup, restore, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.
@@ -107,7 +107,7 @@ Future integration should place filesystem, Git, scan, mount, MCP compile, backu
 
 - Asset Detail and Project Detail are not connected to list-row navigation.
 - No real Claude runtime, asset-center, project filesystem, or Git data is loaded.
-- Apply-style business actions remain intentionally disabled; Settings save is the first controlled local configuration write action added after the static freeze.
+- Destructive apply-style business actions remain intentionally disabled; Settings save and Backup Restore plan generation were added as controlled actions after the static freeze.
 - Visual QA currently batch-generates macOS-layout screenshots only.
 - Headless Chrome does not validate native Tauri window chrome, macOS traffic lights, or Windows native titlebar behavior.
 - Visual QA detects structural overflow and clipping risks, but final product review still requires human inspection on installed macOS and Windows builds.
