@@ -27,6 +27,7 @@ const {
   listProjects,
   gitStatus,
   settingsLoad,
+  settingsSave,
   scanAssets,
   previewImport,
   previewMount,
@@ -37,6 +38,7 @@ const {
   listProjects: vi.fn(),
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
+  settingsSave: vi.fn(),
   scanAssets: vi.fn(),
   previewImport: vi.fn(),
   previewMount: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("../app/data-api", () => ({
   listProjects,
   gitStatus,
   settingsLoad,
+  settingsSave,
   scanAssets,
   previewImport,
   previewMount,
@@ -66,6 +69,7 @@ beforeEach(() => {
   listProjects.mockResolvedValue([]);
   gitStatus.mockResolvedValue(gitStatusFixture());
   settingsLoad.mockResolvedValue(settingsFixture());
+  settingsSave.mockImplementation(async ({ settings }) => settings);
   scanAssets.mockResolvedValue(scanResultFixture([]));
   previewImport.mockResolvedValue(importPreviewFixture([]));
   previewMount.mockResolvedValue(mountPreviewFixture());
@@ -163,7 +167,7 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "Push" })).toBeDisabled();
   });
 
-  it("displays loaded read-only settings without enabling save behavior", async () => {
+  it("displays loaded settings and saves edited values through the settings command", async () => {
     settingsLoad.mockResolvedValue(settingsFixture({
       assetCenterPath: "/tmp/assets",
       scanRoots: ["/tmp/workspace", "/tmp/code"],
@@ -174,12 +178,23 @@ describe("read-only UI integration", () => {
 
     render(<SettingsPage />);
 
-    expect(await screen.findByDisplayValue("/tmp/assets")).toBeInTheDocument();
+    const assetCenter = await screen.findByDisplayValue("/tmp/assets");
+    expect(assetCenter).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/workspace, /tmp/code")).toBeInTheDocument();
     expect(screen.getByDisplayValue("trunk")).toBeInTheDocument();
     expect(screen.getByDisplayValue("upstream")).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/maa")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "保存设置" })).toBeDisabled();
+
+    fireEvent.change(assetCenter, { target: { value: "/tmp/edited-assets" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith({
+      settings: expect.objectContaining({
+        assetCenterPath: "/tmp/edited-assets",
+        gitDefaultBranch: "trunk",
+        gitRemote: "upstream",
+      }),
+    }));
   });
 
   it("calls scanAssets for the selected scope and keeps import disabled", async () => {
@@ -256,7 +271,6 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
     expect(previewImport).not.toHaveBeenCalled();
     expect(Object.keys(await import("../app/data-api"))).not.toEqual(expect.arrayContaining([
-      "settingsSave",
       "importApply",
       "mountApply",
       "restoreApply",

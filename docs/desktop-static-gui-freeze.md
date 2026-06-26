@@ -31,7 +31,7 @@ Navigation uses local React state rather than React Router. The static GUI permi
 - Scan scope selection.
 - Mount asset and target selection.
 - Conflict and backup master-detail selection.
-- Read-only or disabled settings controls.
+- Settings controls were static at freeze time; a later controlled-write milestone enabled local settings save without changing the page layout.
 
 These interactions update only local component state. They do not read or write the filesystem, execute Git operations, scan Claude data, mount assets, compile MCP configuration, create backups, restore data, or synchronize repositories.
 
@@ -91,14 +91,14 @@ Validated on 2026-06-23:
 - Settings values and all business-action outcomes.
 - Asset and project detail content.
 
-The desktop frontend does not yet read real Claude runtime data or the real asset center. It does not directly manipulate local files.
+Later integration milestones added read-only runtime and asset-center data access through Tauri wrappers. React still does not directly manipulate local files.
 
 ## Ready For Tauri And Rust Integration
 
 - `app/pages.ts` provides stable page identity and metadata boundaries.
 - `app/CurrentPage.tsx` provides the page composition boundary for future data and command wiring.
 - List, inspector, detail, plan, warning, diff, and status surfaces define the static presentation targets for structured DTOs.
-- `StaticActionButton` locations mark future plan/apply command entry points without currently exposing executable behavior.
+- `StaticActionButton` locations mark future plan/apply command entry points without currently exposing executable behavior; Settings save is now handled by a separate controlled action.
 - The existing `app_info` bridge proves basic Tauri-to-React communication while page business data remains mocked.
 
 Future integration should place filesystem, Git, scan, mount, MCP compile, backup, restore, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.
@@ -107,7 +107,7 @@ Future integration should place filesystem, Git, scan, mount, MCP compile, backu
 
 - Asset Detail and Project Detail are not connected to list-row navigation.
 - No real Claude runtime, asset-center, project filesystem, or Git data is loaded.
-- Business actions are intentionally disabled and have no behavior.
+- Apply-style business actions remain intentionally disabled; Settings save is the first controlled local configuration write action added after the static freeze.
 - Visual QA currently batch-generates macOS-layout screenshots only.
 - Headless Chrome does not validate native Tauri window chrome, macOS traffic lights, or Windows native titlebar behavior.
 - Visual QA detects structural overflow and clipping risks, but final product review still requires human inspection on installed macOS and Windows builds.

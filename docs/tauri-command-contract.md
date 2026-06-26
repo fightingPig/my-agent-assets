@@ -159,7 +159,7 @@ Current behavior:
 - Missing config files are not created by `settings_load`.
 - Empty path fields fall back to safe defaults.
 - Numeric settings are clamped to supported ranges.
-- The GUI Settings page remains read-only until a future UI wiring milestone.
+- The GUI Settings page can call `settings_save`; this writes only local desktop configuration and does not touch Claude runtime files.
 
 ### `import_apply`
 

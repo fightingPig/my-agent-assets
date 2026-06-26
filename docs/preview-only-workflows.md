@@ -38,4 +38,4 @@ All apply buttons remain `StaticActionButton` and stay disabled.
 - No conflict apply
 - No Git pull or push
 
-Backend `settings_save`, `import_apply`, `mount_apply`, and `restore_apply` were implemented in later safety milestones. The static GUI still keeps business action buttons disabled until a dedicated UI wiring milestone.
+Backend `settings_save`, `import_apply`, `mount_apply`, and `restore_apply` were implemented in later safety milestones. The Settings page now has a controlled save action for local desktop configuration; apply-style asset operations remain disabled until a dedicated UI wiring milestone.

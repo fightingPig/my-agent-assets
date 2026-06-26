@@ -11,7 +11,7 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `list_projects`
 - `scan_assets`
 
-`settings_save` was implemented after the original read-only milestone. The Settings page still does not expose an enabled save action.
+`settings_save` was implemented after the original read-only milestone. The Settings page now exposes the first controlled write UI action, limited to local settings persistence.
 
 ## Implemented Preview-only Commands
 
@@ -81,7 +81,7 @@ If the asset center directory is missing, is not a Git repository, has no upstre
 
 ## Frontend Boundary
 
-`apps/desktop/src/app/data-api.ts` provides typed wrappers for the five read-only commands. In a non-Tauri runtime, or when an invoke call fails, wrappers return safe fallback data:
+`apps/desktop/src/app/data-api.ts` provides typed wrappers for the read-only, preview, and controlled write commands. In a non-Tauri runtime, or when an invoke call fails, wrappers return safe fallback data:
 
 - Empty lists for assets and projects
 - Default settings
@@ -100,7 +100,7 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Business actions remain disabled. `StaticActionButton` is still used for import, mount, save, Pull, Push, restore, and related commands. No page calls preview/write commands in this phase.
+Import, mount, Pull, Push, restore, and related apply actions remain disabled. `StaticActionButton` is still used for visual-only business actions. Settings is the exception: it can call `settings_save` to persist local desktop configuration only.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
@@ -120,5 +120,5 @@ The read-only UI milestone still does not:
 - Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts
-- Enable visual-only action buttons
-- Call `settings_save` or any apply/write command from enabled UI actions
+- Enable apply-style action buttons
+- Call import, mount, restore, Git, or sync write commands from enabled UI actions

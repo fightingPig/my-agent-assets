@@ -92,14 +92,15 @@ describe("remaining V1 static pages", () => {
     expect(screen.getAllByText("静态预览：尚未读取本地 Git 仓库。").length).toBeGreaterThan(0);
   });
 
-  it("renders only the seven allowed Settings sections with static controls", () => {
+  it("renders only the seven allowed Settings sections with a local save action", () => {
     const { container } = render(<SettingsPage />);
     for (const section of ["路径设置", "扫描设置", "安全设置", "同步设置", "外观设置", "日志设置", "CLI 设置"]) {
       expect(screen.getByRole("heading", { name: section })).toBeInTheDocument();
     }
     const controls = Array.from(container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input,select"));
     expect(controls.length).toBeGreaterThan(0);
-    expect(controls.every((control) => control.disabled || (control instanceof HTMLInputElement && control.readOnly))).toBe(true);
+    expect(screen.getByRole("button", { name: "保存设置" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "检查 CLI" })).toBeDisabled();
   });
 
   it("keeps forbidden product concepts out of rendered UI", () => {
