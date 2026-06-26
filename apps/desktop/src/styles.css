@@ -1168,7 +1168,9 @@ kbd {
 .side-by-side-diff strong { display: block; margin-bottom: 6px; color: var(--secondary); font-size: 8px; }
 .side-by-side-diff pre { min-height: 145px; margin: 0; padding: 10px; border: 1px solid var(--subtle-border); border-radius: 7px; overflow: auto; color: #555d69; background: #f6f7fa; font-family: "SF Mono", ui-monospace, monospace; font-size: 8px; line-height: 1.6; user-select: text; }
 .resolution-options { padding: 0 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.resolution-options > div { min-height: 52px; padding: 8px; border: 1px solid var(--subtle-border); border-radius: 7px; display: flex; flex-direction: column; gap: 3px; background: #fafbfc; }
+.resolution-options > :is(div, button) { min-height: 52px; padding: 8px; border: 1px solid var(--subtle-border); border-radius: 7px; display: flex; flex-direction: column; gap: 3px; color: var(--text); background: #fafbfc; text-align: left; -webkit-app-region: no-drag; }
+.resolution-options > button.selected { border-color: #dcd8ff; background: #f6f4ff; }
+.resolution-options > button:disabled { opacity: .45; }
 .resolution-options strong { font-size: 9px; }
 .resolution-options span { color: var(--secondary); font-size: 7px; }
 

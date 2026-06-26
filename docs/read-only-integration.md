@@ -106,7 +106,7 @@ The preview workflow pages now consume preview-only data through the wrapper lay
 
 - Scan Import: `preview_import` after a non-empty `scan_assets` result, plus `import_apply` with `mode: "planOnly"` when generating an import plan
 - Mount Manager: `preview_mount` for the selected asset and target, plus `mount_apply` with `mode: "planOnly"` when generating a mount plan
-- Conflict Resolver: `preview_conflicts` for static preview asset IDs
+- Conflict Resolver: `preview_conflicts` for static preview asset IDs, plus local `skip` / `rename` / `overwrite` resolution preview state
 - Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
 
 The UI continues to keep destructive apply-style buttons disabled. Preview and plan-only data affects only plan text, warnings, affected paths, conflicts, and summaries.
@@ -117,6 +117,7 @@ The read-only UI milestone still does not:
 
 - Destructively import assets
 - Destructively mount or unmount assets
+- Apply conflict resolutions
 - Restore backups
 - Run Git pull, push, fetch, init, add, or commit
 - Change page layouts

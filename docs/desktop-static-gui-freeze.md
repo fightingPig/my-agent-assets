@@ -31,6 +31,7 @@ Navigation uses local React state rather than React Router. The static GUI permi
 - Scan scope selection.
 - Mount asset and target selection.
 - Conflict and backup master-detail selection.
+- Conflict resolution preview selection.
 - Settings controls were static at freeze time; a later controlled-write milestone enabled local settings save without changing the page layout.
 
 These interactions update only local component state. They do not read or write the filesystem, execute Git operations, scan Claude data, mount assets, compile MCP configuration, create backups, restore data, or synchronize repositories.

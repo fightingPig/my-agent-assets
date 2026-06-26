@@ -28,7 +28,7 @@ The static workflow pages now call preview wrappers from `apps/desktop/src/app/d
 
 - `ScanImportPage` calls `previewImport` only after `scanAssets` returns discovered assets, and can call `importApply` in `planOnly` mode to generate an import plan without writing files.
 - `MountManagerPage` calls `previewMount` when selected asset or target changes, and can call `mountApply` in `planOnly` mode to generate a mount plan without writing files.
-- `ConflictResolverPage` calls `previewConflicts` for a static preview scope.
+- `ConflictResolverPage` calls `previewConflicts` for a static preview scope and keeps `skip` / `rename` / `overwrite` as local resolution preview state.
 - `BackupRestorePage` calls `previewRestore` when the selected backup changes, and later milestones allow `restoreApply` in `planOnly` mode for restore-plan generation.
 
 Destructive apply buttons remain `StaticActionButton` and stay disabled.

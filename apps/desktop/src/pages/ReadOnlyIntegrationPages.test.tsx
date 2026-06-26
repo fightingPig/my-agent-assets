@@ -393,6 +393,31 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
   });
 
+  it("updates Conflict Resolver local resolution preview without calling apply wrappers", async () => {
+    previewConflicts.mockResolvedValue([
+      conflictPreviewFixture("conflict:skill:review", "review", "skill"),
+    ]);
+
+    render(<ConflictResolverPage />);
+
+    await waitFor(() => expect(screen.getByText("Incoming preview content for review")).toBeInTheDocument());
+    expect(screen.getByText(/review 将被跳过/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /覆盖.*使用扫描结果替换现有内容/ }));
+    expect(screen.getByText(/review 将在未来确认导入时覆盖资产中心内容/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /重命名.*以新名称导入当前内容/ }));
+    expect(screen.getByText(/review 将以新名称导入/)).toBeInTheDocument();
+    expect(screen.getByText(/新名称：review-imported/)).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "跳过" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重命名" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "覆盖" })).toBeDisabled();
+    expect(importApply).not.toHaveBeenCalled();
+    expect(mountApply).not.toHaveBeenCalled();
+    expect(restoreApply).not.toHaveBeenCalled();
+  });
+
   it("does not call apply command wrappers from Scan Import preview", async () => {
     render(<ScanImportPage />);
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
