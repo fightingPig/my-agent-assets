@@ -65,6 +65,11 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return Array.isArray(projects) ? projects as ProjectSummary[] : [];
 }
 
+export async function listBackups(): Promise<BackupSummary[]> {
+  const backups = await invokeOrFallback<unknown>("list_backups", undefined, []);
+  return Array.isArray(backups) ? backups as BackupSummary[] : [];
+}
+
 export async function gitStatus(): Promise<GitStatus> {
   const status = await invokeOrFallback<unknown>("git_status", undefined, fallbackGitStatus);
   return isRecord(status) && typeof status.repositoryPath === "string" ? status as GitStatus : fallbackGitStatus;

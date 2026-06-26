@@ -116,7 +116,7 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Output:** `BackupSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Backup Restore.
-- **Status:** Contract only; not registered.
+- **Status:** Implemented and registered as read-only.
 
 ### `preview_restore`
 

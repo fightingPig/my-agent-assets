@@ -40,6 +40,10 @@ describe("read-only desktop data api", () => {
     await api.listProjects();
     expect(invoke).toHaveBeenLastCalledWith("list_projects");
 
+    invoke.mockResolvedValueOnce([]);
+    await api.listBackups();
+    expect(invoke).toHaveBeenLastCalledWith("list_backups");
+
     invoke.mockResolvedValueOnce({} satisfies Partial<GitStatus>);
     await api.gitStatus();
     expect(invoke).toHaveBeenLastCalledWith("git_status");
@@ -208,6 +212,7 @@ describe("read-only desktop data api", () => {
 
     await expect(api.listAssets()).resolves.toEqual([]);
     await expect(api.listProjects()).resolves.toEqual([]);
+    await expect(api.listBackups()).resolves.toEqual([]);
     await expect(api.settingsLoad()).resolves.toMatchObject({
       assetCenterPath: "~/.my-agent-assets",
       scanRoots: ["~/.claude", "~/workspace", "~/code"],

@@ -1,9 +1,10 @@
 use crate::contracts::{
-    AppearanceTheme, AssetCounts, AssetStatus, AssetSummary, AssetType, DensityPreference,
-    DesktopSettings, GitStatus, ListAssetsInput, LogLevel, ProjectStatus, ProjectSummary,
-    RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
+    AppearanceTheme, AssetCounts, AssetStatus, AssetSummary, AssetType, BackupSummary,
+    DensityPreference, DesktopSettings, GitStatus, ListAssetsInput, LogLevel, ProjectStatus,
+    ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
+use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -27,6 +28,13 @@ pub fn list_assets_command(input: ListAssetsInput) -> Vec<AssetSummary> {
 pub fn list_projects_command() -> Vec<ProjectSummary> {
     match home_dir() {
         Some(home) => list_projects_for_home(&home),
+        None => vec![],
+    }
+}
+
+pub fn list_backups_command() -> Vec<BackupSummary> {
+    match home_dir() {
+        Some(home) => list_backups_for_home(&home),
         None => vec![],
     }
 }
@@ -178,6 +186,20 @@ pub fn list_projects_for_home(home: &Path) -> Vec<ProjectSummary> {
     projects
 }
 
+pub fn list_backups_for_home(home: &Path) -> Vec<BackupSummary> {
+    let backup_root = home.join(".my-agent-assets").join("backups");
+    let Ok(entries) = fs::read_dir(&backup_root) else {
+        return vec![];
+    };
+
+    let mut backups = entries
+        .flatten()
+        .filter_map(|entry| backup_summary_from_manifest(&entry.path().join("manifest.json")))
+        .collect::<Vec<_>>();
+    backups.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    backups
+}
+
 pub fn git_status_for_home(home: &Path) -> GitStatus {
     let repository_path = home.join(".my-agent-assets");
     let display_repository_path = display_path(&repository_path);
@@ -241,6 +263,37 @@ pub fn git_status_for_home(home: &Path) -> GitStatus {
         conflicts,
         last_synced_at: None,
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupManifestProbe {
+    id: String,
+    label: String,
+    created_at: String,
+    entries: Vec<BackupEntryProbe>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupEntryProbe {
+    size_bytes: u64,
+}
+
+fn backup_summary_from_manifest(path: &Path) -> Option<BackupSummary> {
+    let text = fs::read_to_string(path).ok()?;
+    let manifest = serde_json::from_str::<BackupManifestProbe>(&text).ok()?;
+    Some(BackupSummary {
+        id: manifest.id,
+        label: manifest.label,
+        created_at: manifest.created_at,
+        size_bytes: manifest
+            .entries
+            .iter()
+            .map(|entry| entry.size_bytes)
+            .sum::<u64>(),
+        entry_count: manifest.entries.len() as u32,
+    })
 }
 
 fn scan_runtime_root(

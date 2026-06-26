@@ -25,6 +25,7 @@ import { SyncPage } from "./SyncPage";
 const {
   listAssets,
   listProjects,
+  listBackups,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -40,6 +41,7 @@ const {
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
+  listBackups: vi.fn(),
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
   settingsSave: vi.fn(),
@@ -57,6 +59,7 @@ const {
 vi.mock("../app/data-api", () => ({
   listAssets,
   listProjects,
+  listBackups,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -79,6 +82,7 @@ afterEach(() => {
 beforeEach(() => {
   listAssets.mockResolvedValue([]);
   listProjects.mockResolvedValue([]);
+  listBackups.mockResolvedValue([]);
   gitStatus.mockResolvedValue(gitStatusFixture());
   settingsLoad.mockResolvedValue(settingsFixture());
   settingsSave.mockImplementation(async ({ settings }) => settings);
@@ -216,6 +220,31 @@ describe("read-only UI integration", () => {
 
     expect(await screen.findByRole("option", { name: "project-a" })).toBeInTheDocument();
     expect(container.textContent).toContain("静态预览");
+  });
+
+  it("feeds read-only backup manifests while preserving restore planning", async () => {
+    listBackups.mockResolvedValue([
+      {
+        id: "restore-20260627",
+        label: "Restore fixture backup",
+        createdAt: "2026-06-27T10:00:00Z",
+        sizeBytes: 2048,
+        entryCount: 2,
+      },
+    ]);
+    previewRestore.mockResolvedValue(restorePreviewFixture("restore-20260627", {
+      affectedPaths: ["/tmp/restore/a", "/tmp/restore/b"],
+    }));
+
+    render(<BackupRestorePage />);
+
+    const backupRow = await screen.findByRole("option", { name: "restore-20260627" });
+    expect(backupRow).toBeInTheDocument();
+    expect(screen.getAllByText("Restore fixture backup").length).toBeGreaterThan(0);
+    expect(backupRow).toHaveTextContent("2.0 KB");
+    await waitFor(() => expect(previewRestore).toHaveBeenCalledWith({ backupId: "restore-20260627" }));
+    expect(await screen.findByText("/tmp/restore/a")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
   });
 
   it("displays read-only GitStatus fields and keeps Pull and Push disabled", async () => {

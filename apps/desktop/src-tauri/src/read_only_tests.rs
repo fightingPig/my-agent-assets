@@ -2,8 +2,8 @@ use super::contracts::{
     AssetStatus, AssetType, ListAssetsInput, RuntimeScope, ScanAssetsInput, ScanScope,
 };
 use super::read_only::{
-    git_status_for_home, list_assets_for_home, list_projects_for_home, scan_assets_for_home,
-    settings_for_home,
+    git_status_for_home, list_assets_for_home, list_backups_for_home, list_projects_for_home,
+    scan_assets_for_home, settings_for_home,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -80,6 +80,54 @@ fn list_assets_returns_empty_when_asset_center_is_missing() {
     let home = TempHome::new("missing-assets");
     assert!(list_assets_for_home(home.path(), all_assets_input()).is_empty());
     assert!(!home.path().join(".my-agent-assets").exists());
+}
+
+#[test]
+fn list_backups_returns_empty_when_backup_root_is_missing() {
+    let home = TempHome::new("missing-backups");
+    assert!(list_backups_for_home(home.path()).is_empty());
+    assert!(!home.path().join(".my-agent-assets").exists());
+}
+
+#[test]
+fn list_backups_reads_manifest_summaries_without_backup_contents() {
+    let home = TempHome::new("backups");
+    home.write(
+        ".my-agent-assets/backups/import-20260627/manifest.json",
+        r#"{
+  "id": "import-20260627",
+  "label": "Import apply backup",
+  "createdAt": "2026-06-27T10:00:00Z",
+  "runtimeRoot": "/tmp/fake-home",
+  "entries": [
+    { "originalPath": "~/.claude/skills/review", "backupPath": "files/review", "kind": "file", "sizeBytes": 120 },
+    { "originalPath": "~/.claude/commands/deploy.md", "backupPath": "files/deploy.md", "kind": "file", "sizeBytes": 80 }
+  ]
+}"#,
+    );
+    home.write(
+        ".my-agent-assets/backups/mount-20260628/manifest.json",
+        r#"{
+  "id": "mount-20260628",
+  "label": "Mount apply backup",
+  "createdAt": "2026-06-28T09:00:00Z",
+  "runtimeRoot": "/tmp/fake-home",
+  "entries": [
+    { "originalPath": "~/workspace/project-a/.mcp.json", "backupPath": "files/.mcp.json", "kind": "file", "sizeBytes": 42 }
+  ]
+}"#,
+    );
+    home.write(".my-agent-assets/backups/broken/manifest.json", "{");
+
+    let backups = list_backups_for_home(home.path());
+
+    assert_eq!(backups.len(), 2);
+    assert_eq!(backups[0].id, "mount-20260628");
+    assert_eq!(backups[0].entry_count, 1);
+    assert_eq!(backups[0].size_bytes, 42);
+    assert_eq!(backups[1].id, "import-20260627");
+    assert_eq!(backups[1].entry_count, 2);
+    assert_eq!(backups[1].size_bytes, 200);
 }
 
 #[test]

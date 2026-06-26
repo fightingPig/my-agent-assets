@@ -6,7 +6,7 @@ mod read_only;
 mod settings;
 
 use contracts::{
-    AppInfo, ApplyResult, AssetSummary, ConflictPreview, DesktopSettings, GitStatus,
+    AppInfo, ApplyResult, AssetSummary, BackupSummary, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
     PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
     PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput,
@@ -47,6 +47,11 @@ fn list_assets(input: ListAssetsInput) -> Vec<AssetSummary> {
 #[tauri::command]
 fn list_projects() -> Vec<ProjectSummary> {
     read_only::list_projects_command()
+}
+
+#[tauri::command]
+fn list_backups() -> Vec<BackupSummary> {
+    read_only::list_backups_command()
 }
 
 #[tauri::command]
@@ -104,6 +109,7 @@ pub fn run() {
             git_status,
             list_assets,
             list_projects,
+            list_backups,
             scan_assets,
             preview_import,
             preview_mount,

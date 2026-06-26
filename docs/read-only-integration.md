@@ -9,6 +9,7 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `git_status`
 - `list_assets`
 - `list_projects`
+- `list_backups`
 - `scan_assets`
 
 `settings_save` was implemented after the original read-only milestone. The Settings page now exposes the first controlled write UI action, limited to local settings persistence.
@@ -50,6 +51,8 @@ Skills support both `<name>/` directories and root `.md` files. Commands read `.
 - `~/code`
 
 A directory is treated as a project when it contains `package.json`, `Cargo.toml`, `.git/`, or `.claude/`.
+
+`list_backups` reads `~/.my-agent-assets/backups/*/manifest.json` and returns manifest summaries only. It does not read backed-up file contents, create backup directories, or restore files. Missing or invalid manifests are skipped.
 
 `scan_assets` is read-only and imports nothing. It scans:
 
@@ -94,6 +97,7 @@ These pages now consume read-only data through the wrapper layer:
 - Commands list: `list_assets` with `assetType: "command"`
 - MCP Servers list: `list_assets` with `assetType: "mcp"`
 - Projects list: `list_projects`
+- Backup Restore: `list_backups`
 - Sync: `git_status`
 - Settings: `settings_load`
 - Scan Import: `scan_assets`

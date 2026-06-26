@@ -1,23 +1,62 @@
 import { ArchiveRestore, FileClock, FolderKanban } from "lucide-react";
 import { useEffect, useState } from "react";
-import { previewRestore, restoreApply } from "../app/data-api";
-import type { ApplyResult, RestorePreview } from "../app/contracts";
+import { listBackups, previewRestore, restoreApply } from "../app/data-api";
+import type { ApplyResult, BackupSummary, RestorePreview } from "../app/contracts";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
-const backups = [
+type BackupItem = {
+  id: string;
+  title: string;
+  created: string;
+  size: string;
+  paths: string[];
+  impact: string;
+};
+
+const staticBackups: readonly BackupItem[] = [
   { id: "backup-20260621-1842", title: "扫描导入前", created: "今天 18:42", size: "24 KB", paths: ["~/.claude/skills/review", "~/workspace/project-a/.mcp.json", "~/.claude/commands/deploy-prod.md"], impact: "恢复 3 项路径，覆盖 2 项当前内容" },
   { id: "backup-20260620-0915", title: "挂载变更前", created: "昨天 09:15", size: "18 KB", paths: ["~/workspace/my-app/.claude/skills/react-review", "~/workspace/my-app/.mcp.json"], impact: "恢复 2 项路径，移除 1 个新软链接" },
   { id: "backup-20260618-1630", title: "资产移除前", created: "3 天前", size: "8 KB", paths: ["~/.claude/commands/format-code.md"], impact: "恢复 1 项 Command 路径" },
 ];
 
 export function BackupRestorePage() {
-  const [selectedId, setSelectedId] = useState(backups[0].id);
+  const [backups, setBackups] = useState<readonly BackupItem[]>(staticBackups);
+  const [selectedId, setSelectedId] = useState(staticBackups[0].id);
   const [preview, setPreview] = useState<RestorePreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
   const [previewState, setPreviewState] = useState("预览中");
+  const [listState, setListState] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
-  const selected = backups.find((backup) => backup.id === selectedId)!;
+  const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0] ?? staticBackups[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    setListState("读取中");
+    listBackups()
+      .then((loaded) => {
+        if (cancelled) return;
+        if (Array.isArray(loaded) && loaded.length > 0) {
+          const mapped = loaded.map(toBackupItem);
+          setBackups(mapped);
+          setSelectedId(mapped[0]?.id ?? staticBackups[0].id);
+          setListState("只读真实数据");
+        } else {
+          setBackups(staticBackups);
+          setSelectedId(staticBackups[0].id);
+          setListState("静态预览");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBackups(staticBackups);
+        setSelectedId(staticBackups[0].id);
+        setListState("读取失败，使用静态预览");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +114,7 @@ export function BackupRestorePage() {
   return (
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
-        <div className="section-heading"><div><h3>备份记录</h3><p>本地 backup manifest 预览</p></div><span>{backups.length} 份</span></div>
+        <div className="section-heading"><div><h3>备份记录</h3><p>本地 backup manifest 预览 · {listState}</p></div><span>{backups.length} 份</span></div>
         <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => setSelectedId(backup.id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}</div>
       </section>
       <section className="panel master-inspector-panel">
@@ -87,4 +126,21 @@ export function BackupRestorePage() {
       </section>
     </div>
   );
+}
+
+function toBackupItem(backup: BackupSummary): BackupItem {
+  return {
+    id: backup.id,
+    title: backup.label,
+    created: backup.createdAt || "未知时间",
+    size: formatBytes(backup.sizeBytes),
+    paths: [],
+    impact: `恢复 ${backup.entryCount} 项路径，大小 ${formatBytes(backup.sizeBytes)}`,
+  };
+}
+
+function formatBytes(sizeBytes: number) {
+  if (sizeBytes >= 1024 * 1024) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+  if (sizeBytes >= 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${sizeBytes} B`;
 }
