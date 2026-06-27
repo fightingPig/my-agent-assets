@@ -10,11 +10,18 @@ use super::sync_apply::sync_apply_for_home;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static TEMP_HOME_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[test]
 fn fake_home_write_workflow_stays_isolated_and_sync_plan_only_does_not_mutate_remote() {
     let home = TempHome::new();
+    let non_target_home = TempHome::new();
+    non_target_home.write("real-home-sentinel.txt", "must remain unchanged");
+    let non_target_before = snapshot_tree(non_target_home.path());
+
     home.write(".claude/commands/deploy.md", "# New Deploy");
     home.write(".claude/skills/review.md", "# Review");
     home.write(".my-agent-assets/assets/commands/deploy.md", "# Old Deploy");
@@ -96,6 +103,100 @@ fn fake_home_write_workflow_stays_isolated_and_sync_plan_only_does_not_mutate_re
         remote_before
     );
     assert_eq!(git_status_for_home(home.path()).ahead, 1);
+    assert_eq!(snapshot_tree(non_target_home.path()), non_target_before);
+}
+
+#[test]
+fn fake_home_plan_only_workflow_leaves_entire_home_and_non_target_home_unchanged() {
+    let home = TempHome::new();
+    let non_target_home = TempHome::new();
+    non_target_home.write("real-home-sentinel.txt", "must remain unchanged");
+
+    home.write(".claude/commands/deploy.md", "# Deploy");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres"}"#,
+    );
+    let restore_backup_id = create_restore_fixture(&home);
+    setup_git_with_ahead_commit(home.path());
+
+    let home_before = snapshot_tree(home.path());
+    let non_target_before = snapshot_tree(non_target_home.path());
+
+    let import_scope = ScanScope::User;
+    let import_asset_ids = vec!["command:deploy".to_string()];
+    let import = import_apply_for_home(
+        home.path(),
+        ImportApplyInput {
+            preview_id: import_preview_id(&import_scope, &import_asset_ids, &[]),
+            mode: ApplyMode::PlanOnly,
+            scope: import_scope,
+            asset_ids: import_asset_ids,
+            conflict_resolutions: vec![],
+            backup_before_apply: true,
+        },
+    );
+    assert!(import.ok, "{:?}", import.errors);
+
+    let skill_target = MountTarget {
+        scope: RuntimeScope::Project,
+        runtime_path: "~/workspace/project-a/.claude/skills/review.md".into(),
+        project_path: Some("~/workspace/project-a".into()),
+    };
+    let mount = mount_apply_for_home(
+        home.path(),
+        MountApplyInput {
+            preview_id: mount_preview_id("skill:review", &skill_target),
+            mode: ApplyMode::PlanOnly,
+            asset_id: "skill:review".into(),
+            target: skill_target,
+            backup_before_apply: true,
+        },
+    );
+    assert!(mount.ok, "{:?}", mount.errors);
+
+    let mcp_target = MountTarget {
+        scope: RuntimeScope::Project,
+        runtime_path: "~/workspace/project-a/.mcp.json".into(),
+        project_path: Some("~/workspace/project-a".into()),
+    };
+    let mcp_mount = mount_apply_for_home(
+        home.path(),
+        MountApplyInput {
+            preview_id: mount_preview_id("mcp:PostgreSQL", &mcp_target),
+            mode: ApplyMode::PlanOnly,
+            asset_id: "mcp:PostgreSQL".into(),
+            target: mcp_target,
+            backup_before_apply: true,
+        },
+    );
+    assert!(mcp_mount.ok, "{:?}", mcp_mount.errors);
+
+    let restore = restore_apply_for_home(
+        home.path(),
+        RestoreApplyInput {
+            preview_id: restore_preview_id(&restore_backup_id),
+            mode: ApplyMode::PlanOnly,
+            backup_id: restore_backup_id,
+            backup_before_restore: true,
+        },
+    );
+    assert!(restore.ok, "{:?}", restore.errors);
+
+    let status = git_status_for_home(home.path());
+    let sync = sync_apply_for_home(
+        home.path(),
+        SyncApplyInput {
+            preview_id: sync_preview_id(&SyncDirection::Push, &status),
+            mode: ApplyMode::PlanOnly,
+            direction: SyncDirection::Push,
+        },
+    );
+    assert!(sync.ok, "{:?}", sync.errors);
+
+    assert_eq!(snapshot_tree(home.path()), home_before);
+    assert_eq!(snapshot_tree(non_target_home.path()), non_target_before);
 }
 
 struct TempHome {
@@ -109,9 +210,10 @@ impl TempHome {
             .expect("system time should be valid")
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "my-agent-assets-write-e2e-{}-{}",
+            "my-agent-assets-write-e2e-{}-{}-{}",
             std::process::id(),
-            nanos
+            nanos,
+            TEMP_HOME_SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&path).expect("fake HOME should be created");
         Self { path }
@@ -162,6 +264,43 @@ fn setup_git_with_ahead_commit(home: &Path) {
     run_git(&repository, &["commit", "-m", "ahead"]);
 }
 
+fn create_restore_fixture(home: &TempHome) -> String {
+    let backup_id = "restore-fixture";
+    home.write(
+        &format!(".my-agent-assets/backups/{backup_id}/files/deploy.md"),
+        "# Previous Deploy",
+    );
+    home.write(
+        &format!(".my-agent-assets/backups/{backup_id}/manifest.json"),
+        &format!(
+            r#"{{
+  "id": "{backup_id}",
+  "label": "Restore fixture",
+  "createdAt": "2026-06-27T00:00:00Z",
+  "runtimeRoot": "{}",
+  "entries": [
+    {{
+      "originalPath": "{}",
+      "backupPath": "{}",
+      "kind": "file",
+      "sizeBytes": 17
+    }}
+  ]
+}}"#,
+            home.path().display(),
+            home.path()
+                .join(".my-agent-assets/assets/commands/deploy.md")
+                .display(),
+            home.path()
+                .join(format!(
+                    ".my-agent-assets/backups/{backup_id}/files/deploy.md"
+                ))
+                .display()
+        ),
+    );
+    backup_id.into()
+}
+
 fn run_git(cwd: &Path, args: &[&str]) {
     let output = Command::new("git")
         .current_dir(cwd)
@@ -184,4 +323,48 @@ fn git_output(cwd: &Path, args: &[&str]) -> String {
         .expect("git should run");
     assert!(output.status.success());
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, String, Vec<u8>)> {
+    fn visit(root: &Path, current: &Path, snapshot: &mut Vec<(PathBuf, String, Vec<u8>)>) {
+        let mut entries = fs::read_dir(current)
+            .expect("snapshot directory should be readable")
+            .map(|entry| entry.expect("snapshot entry should be readable"))
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+
+        for entry in entries {
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .expect("snapshot path should stay below root")
+                .to_path_buf();
+            let metadata =
+                fs::symlink_metadata(&path).expect("snapshot metadata should be readable");
+            if metadata.file_type().is_symlink() {
+                snapshot.push((
+                    relative,
+                    "symlink".into(),
+                    fs::read_link(&path)
+                        .expect("snapshot symlink should be readable")
+                        .as_os_str()
+                        .as_encoded_bytes()
+                        .to_vec(),
+                ));
+            } else if metadata.is_dir() {
+                snapshot.push((relative, "directory".into(), vec![]));
+                visit(root, &path, snapshot);
+            } else {
+                snapshot.push((
+                    relative,
+                    "file".into(),
+                    fs::read(&path).expect("snapshot file should be readable"),
+                ));
+            }
+        }
+    }
+
+    let mut snapshot = vec![];
+    visit(root, root, &mut snapshot);
+    snapshot
 }
