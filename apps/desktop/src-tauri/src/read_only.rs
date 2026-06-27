@@ -7,7 +7,7 @@ use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso}
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
 
@@ -104,6 +104,12 @@ pub fn list_assets_for_home(home: &Path, input: ListAssetsInput) -> Vec<AssetSum
         ));
     }
 
+    for asset in &mut assets {
+        asset.mount_targets = discover_asset_mounts(home, asset);
+        if !asset.mount_targets.is_empty() && asset.status == AssetStatus::Ready {
+            asset.status = AssetStatus::Mounted;
+        }
+    }
     assets.sort_by(|left, right| left.id.cmp(&right.id));
     assets
 }
@@ -164,23 +170,10 @@ pub fn scan_assets_for_home(home: &Path, input: ScanAssetsInput) -> ScanResult {
 }
 
 pub fn list_projects_for_home(home: &Path) -> Vec<ProjectSummary> {
-    let mut projects = Vec::new();
-    for root_name in ["workspace", "code"] {
-        let root = home.join(root_name);
-        let Ok(entries) = fs::read_dir(&root) else {
-            continue;
-        };
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            if let Some(project) = project_summary_from_path(&path) {
-                projects.push(project);
-            }
-        }
-    }
+    let mut projects = discover_project_paths(home)
+        .iter()
+        .filter_map(|path| project_summary_from_path(path))
+        .collect::<Vec<_>>();
 
     projects.sort_by(|left, right| left.name.cmp(&right.name));
     projects
@@ -524,6 +517,13 @@ fn project_summary_from_path(path: &Path) -> Option<ProjectSummary> {
         ProjectStatus::Ready
     };
 
+    let mut warnings = vec![];
+    let runtime_assets = scan_runtime_root(path, RuntimeScope::Project, &mut warnings);
+    let mounts = runtime_assets
+        .iter()
+        .map(|asset| asset.name.clone())
+        .collect::<Vec<_>>();
+
     Some(ProjectSummary {
         id: display_path(path),
         name: name.clone(),
@@ -532,14 +532,109 @@ fn project_summary_from_path(path: &Path) -> Option<ProjectSummary> {
         status,
         description: "Local project detected from filesystem markers.".into(),
         updated_at: metadata_modified(path),
-        asset_counts: AssetCounts {
-            total: 0,
-            skills: 0,
-            commands: 0,
-            mcps: 0,
-        },
-        mounts: vec![],
+        asset_counts: count_assets(&runtime_assets),
+        mounts,
     })
+}
+
+fn discover_project_paths(home: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![];
+    for root_name in ["workspace", "code"] {
+        let root = home.join(root_name);
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        paths.extend(
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir()),
+        );
+    }
+    paths.sort();
+    paths
+}
+
+fn discover_asset_mounts(home: &Path, asset: &AssetSummary) -> Vec<String> {
+    let mut targets = vec![];
+    let mut runtime_roots = vec![home.to_path_buf()];
+    runtime_roots.extend(discover_project_paths(home));
+
+    for runtime_root in runtime_roots {
+        let is_user = runtime_root == home;
+        match asset.asset_type {
+            AssetType::Skill => {
+                let root = runtime_root.join(".claude").join("skills");
+                for candidate in [
+                    root.join(&asset.name),
+                    root.join(format!("{}.md", asset.name)),
+                ] {
+                    if symlink_points_to(&candidate, Path::new(&asset.source_path)) {
+                        targets.push(display_path(&candidate));
+                    }
+                }
+            }
+            AssetType::Command => {
+                let candidate = runtime_root
+                    .join(".claude")
+                    .join("commands")
+                    .join(format!("{}.md", asset.name));
+                if symlink_points_to(&candidate, Path::new(&asset.source_path)) {
+                    targets.push(display_path(&candidate));
+                }
+            }
+            AssetType::Mcp => {
+                let config_path = if is_user {
+                    runtime_root.join(".claude.json")
+                } else {
+                    runtime_root.join(".mcp.json")
+                };
+                if mcp_config_contains(&config_path, &asset.name) {
+                    targets.push(display_path(&config_path));
+                }
+            }
+        }
+    }
+    targets.sort();
+    targets.dedup();
+    targets
+}
+
+fn symlink_points_to(candidate: &Path, expected: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(candidate) else {
+        return false;
+    };
+    if !metadata.file_type().is_symlink() {
+        return false;
+    }
+    let Ok(target) = fs::read_link(candidate) else {
+        return false;
+    };
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        candidate
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(target)
+    };
+    match (fs::canonicalize(resolved), fs::canonicalize(expected)) {
+        (Ok(resolved), Ok(expected)) => resolved == expected,
+        _ => false,
+    }
+}
+
+fn mcp_config_contains(path: &Path, name: &str) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .and_then(|value| {
+            value
+                .get("mcpServers")
+                .and_then(Value::as_object)
+                .map(|servers| servers.contains_key(name))
+        })
+        .unwrap_or(false)
 }
 
 fn asset_summary(

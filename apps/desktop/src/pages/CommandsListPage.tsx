@@ -139,6 +139,8 @@ export function CommandsListPage({ onOpenAssetDetail }: AssetListPageProps = {})
 
 function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {
   return {
+    assetId: `command:${command.name}`,
+    assetType: "command",
     name: command.name,
     title: command.title,
     summary: command.summary,

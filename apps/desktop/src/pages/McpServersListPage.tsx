@@ -154,6 +154,8 @@ export function McpServersListPage({ onOpenAssetDetail }: AssetListPageProps = {
 
 function toAssetDetail(server: McpItem, typeLabel: string, previewLabel: string): AssetDetailContext {
   return {
+    assetId: `mcp:${server.name}`,
+    assetType: "mcp",
     name: server.name,
     title: server.title,
     summary: server.summary,

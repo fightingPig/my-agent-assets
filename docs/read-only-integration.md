@@ -45,12 +45,18 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 
 Skills support both `<name>/` directories and root `.md` files. Commands read `.md` files. MCP assets read `.json` files, with invalid JSON marked as `invalid`.
 
+Asset summaries also derive current local usage:
+
+- Skill and Command mounts are recognized when user/project runtime symlinks resolve to the asset-center source.
+- MCP usage is recognized when user `.claude.json` or project `.mcp.json` contains the server name in top-level `mcpServers`.
+
 `list_projects` scans only one level under:
 
 - `~/workspace`
 - `~/code`
 
 A directory is treated as a project when it contains `package.json`, `Cargo.toml`, `.git/`, or `.claude/`.
+Project summaries count project runtime Skills, Commands, and MCP servers and return their names as current mounts.
 
 `list_backups` reads `~/.my-agent-assets/backups/*/manifest.json` and returns manifest summaries only. It does not read backed-up file contents, create backup directories, or restore files. Missing or invalid manifests are skipped.
 
@@ -104,7 +110,7 @@ These pages now consume read-only data through the wrapper layer:
 
 Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
 
-Conflict apply remains disabled. `StaticActionButton` is still used for visual-only business actions that do not have a safe apply workflow. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, and Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan; all plan actions avoid file writes.
+`StaticActionButton` is still used for visual-only business actions that do not have a safe apply workflow. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan, and Conflict Resolver can call `conflict_apply` in `planOnly` mode; all plan actions avoid file writes.
 
 Import, mount, and restore previews return deterministic `previewId` values. Their plan-only apply calls pass the preview's ID, and the backend rejects mismatched IDs before reading or writing runtime data.
 
@@ -119,11 +125,13 @@ The preview workflow pages now consume preview-only data through the wrapper lay
 
 - Scan Import: `preview_import` after a non-empty `scan_assets` result, plus `import_apply` with `mode: "planOnly"` when generating an import plan
 - Mount Manager: `preview_mount` for the selected asset and target, plus `mount_apply` with `mode: "planOnly"` when generating a mount plan
-- Conflict Resolver: `preview_conflicts` for static preview asset IDs, plus local `skip` / `rename` / `overwrite` resolution preview state
+- Conflict Resolver: `preview_conflicts` for exact existing/incoming content, `preview_import` for a decision-bound preview ID, and `conflict_apply` behind plan-only plus typed confirmation
 - Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
 - Sync: `preview_sync` for local Pull/Push plan generation without running Git sync commands
 
-The UI continues to keep conflict-resolution apply buttons disabled. Preview and plan-only data affects plan text, warnings, affected paths, conflicts, and summaries; import, mount, restore, and Git sync can proceed to real apply only through the typed confirmation gate.
+Preview and plan-only data affects plan text, warnings, affected paths, conflicts, and summaries; import, conflict resolution, mount, restore, and Git sync can proceed to real apply only through the typed confirmation gate.
+
+Asset Detail and Project Detail consume the selected list context rather than replacing it with a fixed entity. They use `preview_mount` and `mount_apply` for their existing mount workflow. After a successful apply, Asset Detail reloads `list_assets` and Project Detail reloads `list_projects`, so derived mount targets and project counts reflect the backend state.
 
 `preview_restore` now prefers `~/.my-agent-assets/backups/<backupId>/manifest.json` when present, returning the manifest's affected paths and backup summary. Missing or invalid manifests safely fall back to synthetic preview data with a warning.
 
@@ -132,8 +140,5 @@ The UI continues to keep conflict-resolution apply buttons disabled. Preview and
 The read-only UI milestone still does not:
 
 - Unmount assets
-- Apply conflict resolutions
 - Run Git fetch, init, add, or commit
 - Change page layouts
-- Enable conflict apply-style action buttons
-- Call conflict write commands from enabled UI actions

@@ -1,7 +1,10 @@
 import type { AssetStatusTone } from "../components/assets/AssetCenterLayout";
+import type { AssetType } from "./contracts";
 import type { StaticProject } from "../pages/project-data";
 
 export type AssetDetailContext = {
+  assetId: string;
+  assetType: AssetType;
   name: string;
   title: string;
   summary: string;

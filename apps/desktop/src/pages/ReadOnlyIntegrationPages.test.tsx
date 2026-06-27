@@ -12,11 +12,14 @@ import type {
   ScanResult,
 } from "../app/contracts";
 import { BackupRestorePage } from "./BackupRestorePage";
+import { AssetDetailPage } from "./AssetDetailPage";
 import { CommandsListPage } from "./CommandsListPage";
 import { ConflictResolverPage } from "./ConflictResolverPage";
 import { McpServersListPage } from "./McpServersListPage";
 import { MountManagerPage } from "./MountManagerPage";
 import { ProjectsListPage } from "./ProjectsListPage";
+import { ProjectDetailPage } from "./ProjectDetailPage";
+import { staticProjects } from "./project-data";
 import { ScanImportPage } from "./ScanImportPage";
 import { SettingsPage } from "./SettingsPage";
 import { SkillsListPage } from "./SkillsListPage";
@@ -637,6 +640,94 @@ describe("read-only UI integration", () => {
     expect(restoreApply).not.toHaveBeenCalled();
   });
 
+  it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {
+    const asset = assetFixture("skill:real-review", "real-review", "skill");
+    listAssets.mockResolvedValue([{ ...asset, mountTargets: ["/tmp/home/.claude/skills/real-review.md"] }]);
+    previewMount.mockResolvedValue(mountPreviewFixture({
+      previewId: "preview:mount:real-review",
+      asset,
+      target: {
+        scope: "user",
+        runtimePath: "~/.claude/skills/real-review.md",
+        projectPath: null,
+      },
+    }));
+
+    render(<AssetDetailPage detail={{
+      assetId: asset.id,
+      assetType: "skill",
+      name: asset.name,
+      title: "Real Review",
+      summary: "Real selected asset",
+      status: "可用",
+      statusTone: "success",
+      typeLabel: "Skill",
+      category: "本地 Skill",
+      sourcePath: "/tmp/assets/skills/real-review.md",
+      scope: "资产中心",
+      updated: "刚刚",
+      mountTargets: [],
+      previewLabel: "SKILL.md 内容预览",
+      preview: "# Real Review",
+    }} />);
+
+    expect(screen.getByText("Real selected asset")).toBeInTheDocument();
+    await waitFor(() => expect(previewMount).toHaveBeenCalledWith({
+      assetId: "skill:real-review",
+      target: {
+        scope: "user",
+        runtimePath: "~/.claude/skills/real-review.md",
+        projectPath: null,
+      },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
+    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认挂载" }));
+    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
+    await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
+    expect(await screen.findByText("/tmp/home/.claude/skills/real-review.md")).toBeInTheDocument();
+  });
+
+  it("uses selected real project data for project mount preview, apply, and refresh", async () => {
+    const project = staticProjects[0];
+    const asset = assetFixture("skill:review", "review", "skill");
+    listAssets.mockResolvedValue([asset]);
+    listProjects.mockResolvedValue([projectFixture({
+      id: project.id,
+      name: project.name,
+      path: project.path,
+      mounts: ["review"],
+      assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
+    })]);
+    previewMount.mockResolvedValue(mountPreviewFixture({
+      previewId: "preview:mount:project-detail",
+      asset,
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+    }));
+
+    render(<ProjectDetailPage detail={project} />);
+
+    await waitFor(() => expect(previewMount).toHaveBeenCalledWith({
+      assetId: "skill:review",
+      target: {
+        scope: "project",
+        runtimePath: "~/workspace/project-a/.claude/skills/review",
+        projectPath: "~/workspace/project-a",
+      },
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
+    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
+    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
+    await waitFor(() => expect(listProjects).toHaveBeenCalled());
+  });
+
   it("does not call apply command wrappers from Scan Import preview", async () => {
     render(<ScanImportPage />);
     await waitFor(() => expect(scanAssets).toHaveBeenCalled());
@@ -660,6 +751,21 @@ function assetFixture(id: string, name: string, assetType: AssetSummary["assetTy
     scope: "local",
     updatedAt: "2026-06-25T08:00:00Z",
     mountTargets: ["/tmp/runtime"],
+  };
+}
+
+function projectFixture(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
+  return {
+    id: "/tmp/project-a",
+    name: "project-a",
+    title: "Project A",
+    path: "/tmp/project-a",
+    status: "ready",
+    description: "Local project",
+    updatedAt: "2026-06-27T00:00:00Z",
+    assetCounts: { total: 0, skills: 0, commands: 0, mcps: 0 },
+    mounts: [],
+    ...overrides,
   };
 }
 

@@ -250,7 +250,7 @@ async function main() {
           width: viewport.width,
           height: viewport.height,
         });
-        await delay(120);
+        await delay(300);
         await evaluate(
           client,
           "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
@@ -259,7 +259,14 @@ async function main() {
         const screenshot = await client.send("Page.captureScreenshot", {
           format: "png",
           fromSurface: true,
-          captureBeyondViewport: false,
+          captureBeyondViewport: true,
+          clip: {
+            x: 0,
+            y: 0,
+            width: viewport.width,
+            height: viewport.height,
+            scale: 1,
+          },
         });
         const screenshotPath = join(artifactDir, `${page.id}-${viewport.width}x${viewport.height}-macos.png`);
         await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));

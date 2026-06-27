@@ -129,6 +129,8 @@ export function SkillsListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
 
 function toAssetDetail(skill: SkillItem, typeLabel: string, previewLabel: string): AssetDetailContext {
   return {
+    assetId: `skill:${skill.name}`,
+    assetType: "skill",
     name: skill.name,
     title: skill.title,
     summary: skill.summary,

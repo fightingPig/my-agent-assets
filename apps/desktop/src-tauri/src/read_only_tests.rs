@@ -165,6 +165,44 @@ fn list_assets_reads_skills_commands_and_mcp_json_safely() {
 }
 
 #[test]
+fn list_assets_derives_symlink_and_mcp_mount_targets() {
+    let home = TempHome::new("asset-mounts");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"postgres"}"#,
+    );
+    let skill_source = home.path().join(".my-agent-assets/assets/skills/review.md");
+    let skill_target = home.path().join(".claude/skills/review.md");
+    fs::create_dir_all(skill_target.parent().unwrap()).unwrap();
+    create_test_file_symlink(&skill_source, &skill_target);
+    home.write(
+        "workspace/project-a/.mcp.json",
+        r#"{"mcpServers":{"PostgreSQL":{"command":"postgres"}}}"#,
+    );
+    home.write("workspace/project-a/package.json", "{}");
+
+    let assets = list_assets_for_home(home.path(), all_assets_input());
+    let skill = assets
+        .iter()
+        .find(|asset| asset.id == "skill:review")
+        .unwrap();
+    let mcp = assets
+        .iter()
+        .find(|asset| asset.id == "mcp:PostgreSQL")
+        .unwrap();
+    assert_eq!(skill.status, AssetStatus::Mounted);
+    assert_eq!(skill.mount_targets, vec![skill_target.to_string_lossy()]);
+    assert_eq!(
+        mcp.mount_targets,
+        vec![home
+            .path()
+            .join("workspace/project-a/.mcp.json")
+            .to_string_lossy()]
+    );
+}
+
+#[test]
 fn scan_assets_reads_user_runtime_and_top_level_mcp_servers() {
     let home = TempHome::new("scan-user");
     home.write(".claude/skills/review.md", "# Review");
@@ -258,6 +296,11 @@ fn list_projects_detects_first_level_project_markers() {
         "[package]\nname = \"rust-app\"\n",
     );
     home.mkdir("workspace/claude-app/.claude");
+    home.write("workspace/claude-app/.claude/skills/review.md", "# Review");
+    home.write(
+        "workspace/claude-app/.mcp.json",
+        r#"{"mcpServers":{"Filesystem":{"command":"fs"}}}"#,
+    );
     home.write("workspace/nested/child/package.json", "{}");
 
     let projects = list_projects_for_home(home.path());
@@ -265,7 +308,23 @@ fn list_projects_detects_first_level_project_markers() {
     assert!(projects.iter().any(|project| project.name == "web-app"));
     assert!(projects.iter().any(|project| project.name == "rust-app"));
     assert!(projects.iter().any(|project| project.name == "claude-app"));
+    let claude_project = projects
+        .iter()
+        .find(|project| project.name == "claude-app")
+        .unwrap();
+    assert_eq!(claude_project.asset_counts.total, 2);
+    assert_eq!(claude_project.mounts, vec!["review", "Filesystem"]);
     assert!(!projects.iter().any(|project| project.name == "child"));
+}
+
+#[cfg(unix)]
+fn create_test_file_symlink(source: &Path, target: &Path) {
+    std::os::unix::fs::symlink(source, target).expect("test symlink should be created");
+}
+
+#[cfg(windows)]
+fn create_test_file_symlink(source: &Path, target: &Path) {
+    std::os::windows::fs::symlink_file(source, target).expect("test symlink should be created");
 }
 
 #[test]
