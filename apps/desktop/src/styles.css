@@ -1279,6 +1279,24 @@ kbd {
   grid-column: 1 / -1;
 }
 
+.apply-confirmation-panel .apply-result-summary {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border: 1px solid #e5e8f0;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.apply-confirmation-panel .apply-result-summary.succeeded {
+  border-color: #cce8d8;
+  background: #f6fcf8;
+}
+
+.apply-confirmation-panel .apply-result-summary.failed {
+  border-color: #ffd1d1;
+  background: #fff4f4;
+}
+
 .mount-review-bar {
   align-items: stretch;
 }

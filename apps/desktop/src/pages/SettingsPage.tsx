@@ -26,6 +26,7 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<DesktopSettings>(fallbackSettings);
   const [stateLabel, setStateLabel] = useState("读取中");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,12 +63,16 @@ export function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     setStateLabel("保存中");
+    setSaveMessage(null);
     try {
-      const saved = await settingsSave({ settings });
-      setSettings(saved);
-      setStateLabel("已保存");
-    } catch {
+      await settingsSave({ settings });
+      const refreshed = await settingsLoad();
+      setSettings(refreshed);
+      setStateLabel("已保存并重新读取");
+      setSaveMessage("设置已写入本地配置，并已从后端重新读取确认。");
+    } catch (error) {
       setStateLabel("保存失败");
+      setSaveMessage(`保存失败：${errorMessage(error)} 请检查资产中心路径权限后重试。`);
     } finally {
       setIsSaving(false);
     }
@@ -81,7 +86,11 @@ export function SettingsPage() {
       <section className="panel settings-section"><div className="settings-section-title"><RefreshCw size={17} /><div><h3>同步设置</h3><p>本地 Git 仓库同步偏好</p></div></div><div className="settings-controls two"><label><span>默认分支</span><input data-no-drag="true" onChange={(event) => updateSetting("gitDefaultBranch", event.target.value)} style={noDragControl} value={settings.gitDefaultBranch} /></label><label><span>远程仓库</span><input data-no-drag="true" onChange={(event) => updateSetting("gitRemote", event.target.value)} style={noDragControl} value={settings.gitRemote} /></label></div></section>
       <section className="panel settings-section"><div className="settings-section-title"><Palette size={17} /><div><h3>外观设置</h3><p>桌面界面显示偏好</p></div></div><div className="settings-controls two"><label><span>主题</span><select data-no-drag="true" onChange={(event) => updateSetting("appearanceTheme", event.target.value as DesktopSettings["appearanceTheme"])} style={noDragControl} value={settings.appearanceTheme}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label><label><span>界面密度</span><select data-no-drag="true" onChange={(event) => updateSetting("density", event.target.value as DesktopSettings["density"])} style={noDragControl} value={settings.density}><option value="compact">紧凑</option><option value="comfortable">舒适</option></select></label></div></section>
       <section className="panel settings-section"><div className="settings-section-title"><FileText size={17} /><div><h3>日志设置</h3><p>本地诊断日志与保留周期</p></div></div><div className="settings-controls two"><label><span>日志级别</span><select data-no-drag="true" onChange={(event) => updateSetting("logLevel", event.target.value as DesktopSettings["logLevel"])} style={noDragControl} value={settings.logLevel}><option value="error">Error</option><option value="warn">Warn</option><option value="info">Info</option><option value="debug">Debug</option></select></label><label><span>保留周期</span><input data-no-drag="true" min={1} max={365} onChange={(event) => updateSetting("logRetentionDays", Number(event.target.value))} style={noDragControl} type="number" value={settings.logRetentionDays} /></label></div></section>
-      <section className="panel settings-section"><div className="settings-section-title"><TerminalSquare size={17} /><div><h3>CLI 设置</h3><p>maa 命令行工具信息</p></div></div><div className="settings-controls two"><label><span>可执行文件</span><input data-no-drag="true" onChange={(event) => updateSetting("cliPath", event.target.value)} style={noDragControl} value={settings.cliPath} /></label><label><span>版本</span><input data-no-drag="true" readOnly style={noDragControl} value="0.1.0" /></label></div><div className="settings-actions"><StaticActionButton className="asset-secondary-action">检查 CLI</StaticActionButton><button className="asset-business-action" data-no-drag="true" disabled={isSaving} onClick={handleSave} style={noDragControl} type="button">{isSaving ? "保存中" : "保存设置"}</button></div></section>
+      <section className="panel settings-section"><div className="settings-section-title"><TerminalSquare size={17} /><div><h3>CLI 设置</h3><p>maa 命令行工具信息</p></div></div><div className="settings-controls two"><label><span>可执行文件</span><input data-no-drag="true" onChange={(event) => updateSetting("cliPath", event.target.value)} style={noDragControl} value={settings.cliPath} /></label><label><span>版本</span><input data-no-drag="true" readOnly style={noDragControl} value="0.1.0" /></label></div>{saveMessage ? <p className={stateLabel === "保存失败" ? "warning-text" : "success-text"} role="status">{saveMessage}</p> : null}<div className="settings-actions"><StaticActionButton className="asset-secondary-action">检查 CLI</StaticActionButton><button className="asset-business-action" data-no-drag="true" disabled={isSaving} onClick={handleSave} style={noDragControl} type="button">{isSaving ? "保存中" : "保存设置"}</button></div></section>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法调用设置保存操作。";
 }

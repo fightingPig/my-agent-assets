@@ -32,6 +32,8 @@ export function BackupRestorePage() {
   const [listState, setListState] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0] ?? staticBackups[0];
 
   useEffect(() => {
@@ -60,14 +62,13 @@ export function BackupRestorePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
     setPreviewState("预览中");
     setPlanResult(null);
-    setApplyResult(null);
-    setConfirmationValue("");
+    setOperationError(null);
     previewRestore({ backupId: selectedId })
       .then((result) => {
         if (cancelled) return;
@@ -102,6 +103,7 @@ export function BackupRestorePage() {
     if (!preview?.previewId) return;
 
     setIsPlanning(true);
+    setOperationError(null);
     setPreviewState("生成恢复计划中");
     try {
       const result = await restoreApply({
@@ -112,8 +114,9 @@ export function BackupRestorePage() {
       });
       setPlanResult(result);
       setPreviewState(result.ok ? "恢复计划已生成" : "恢复计划失败");
-    } catch {
+    } catch (error) {
       setPlanResult(null);
+      setOperationError(errorMessage(error));
       setPreviewState("恢复计划失败");
     } finally {
       setIsPlanning(false);
@@ -124,6 +127,7 @@ export function BackupRestorePage() {
     if (!canApply || !preview?.previewId) return;
 
     setIsApplying(true);
+    setOperationError(null);
     setPreviewState("执行恢复中");
     try {
       const result = await restoreApply({
@@ -134,8 +138,13 @@ export function BackupRestorePage() {
       });
       setApplyResult(result);
       setPreviewState(result.ok ? "恢复已执行" : "恢复失败");
-    } catch {
+      if (result.ok) {
+        setConfirmationValue("");
+        setRefreshKey((current) => current + 1);
+      }
+    } catch (error) {
       setApplyResult(null);
+      setOperationError(errorMessage(error));
       setPreviewState("恢复失败");
     } finally {
       setIsApplying(false);
@@ -146,7 +155,7 @@ export function BackupRestorePage() {
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
         <div className="section-heading"><div><h3>备份记录</h3><p>本地 backup manifest 预览 · {listState}</p></div><span>{backups.length} 份</span></div>
-        <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => setSelectedId(backup.id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}</div>
+        <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => { setSelectedId(backup.id); setApplyResult(null); setConfirmationValue(""); }} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}</div>
       </section>
       <section className="panel master-inspector-panel">
         <div className="section-heading"><div><h3>{selected.title}</h3><p>{selected.id}</p></div><span className="healthy-badge">{previewState}</span></div>
@@ -154,10 +163,14 @@ export function BackupRestorePage() {
         <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
         <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{planSummary ?? preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
         <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button></div>
-        <ApplyConfirmationPanel actionLabel="恢复此备份" canApply={canApply} confirmationValue={confirmationValue} description="会从 backup manifest 恢复受影响路径；后端会校验 previewId 并先备份当前状态。" isApplying={isApplying} onApply={handleApplyRestore} onConfirmationChange={setConfirmationValue} result={applyResult} title="执行恢复" />
+        <ApplyConfirmationPanel actionLabel="恢复此备份" canApply={canApply} confirmationValue={confirmationValue} description="会从 backup manifest 恢复受影响路径；后端会校验 previewId 并先备份当前状态。" isApplying={isApplying} onApply={handleApplyRestore} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行恢复" />
       </section>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法调用恢复操作。";
 }
 
 function toBackupItem(backup: BackupSummary): BackupItem {

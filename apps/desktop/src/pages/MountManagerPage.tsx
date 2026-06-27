@@ -27,6 +27,8 @@ export function MountManagerPage() {
   const [previewState, setPreviewState] = useState("预览中");
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const asset = assets.find((item) => item.id === selectedAsset)!;
   const target = targets.find((item) => item.id === selectedTarget)!;
   const previewInput = useMemo(() => toPreviewMountInput(asset, target), [asset, target]);
@@ -35,8 +37,7 @@ export function MountManagerPage() {
     let cancelled = false;
     setPreviewState("预览中");
     setPlanResult(null);
-    setApplyResult(null);
-    setConfirmationValue("");
+    setOperationError(null);
     previewMount(previewInput)
       .then((result) => {
         if (cancelled) return;
@@ -56,7 +57,7 @@ export function MountManagerPage() {
     return () => {
       cancelled = true;
     };
-  }, [previewInput]);
+  }, [previewInput, refreshKey]);
 
   const planLines = preview?.steps.map((step) => step.label) ?? [
     "验证资产中心来源",
@@ -73,6 +74,7 @@ export function MountManagerPage() {
     if (!preview?.previewId) return;
 
     setIsPlanning(true);
+    setOperationError(null);
     setPreviewState("生成挂载计划中");
     try {
       const result = await mountApply({
@@ -84,8 +86,9 @@ export function MountManagerPage() {
       });
       setPlanResult(result);
       setPreviewState(result.ok ? "挂载计划已生成" : "挂载计划失败");
-    } catch {
+    } catch (error) {
       setPlanResult(null);
+      setOperationError(errorMessage(error));
       setPreviewState("挂载计划失败");
     } finally {
       setIsPlanning(false);
@@ -96,6 +99,7 @@ export function MountManagerPage() {
     if (!canApply || !preview?.previewId) return;
 
     setIsApplying(true);
+    setOperationError(null);
     setPreviewState("执行挂载中");
     try {
       const result = await mountApply({
@@ -107,8 +111,13 @@ export function MountManagerPage() {
       });
       setApplyResult(result);
       setPreviewState(result.ok ? "挂载已执行" : "挂载失败");
-    } catch {
+      if (result.ok) {
+        setConfirmationValue("");
+        setRefreshKey((current) => current + 1);
+      }
+    } catch (error) {
       setApplyResult(null);
+      setOperationError(errorMessage(error));
       setPreviewState("挂载失败");
     } finally {
       setIsApplying(false);
@@ -118,13 +127,17 @@ export function MountManagerPage() {
   return (
     <div className="operation-workspace">
       <section className="panel mount-workflow">
-        <div className="mount-flow-column"><div className="mount-flow-heading"><span>1</span><div><strong>选择资产</strong><small>资产中心静态数据</small></div></div><div className="selectable-stack">{assets.map(({ id, type, detail, icon: Icon }) => <button aria-pressed={selectedAsset === id} className={selectedAsset === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedAsset(id)} style={NO_DRAG_REGION_STYLE} type="button"><Icon size={16} /><span><strong>{id}</strong><small>{type} · {detail}</small></span></button>)}</div></div>
-        <div className="mount-flow-column"><div className="mount-flow-heading"><span>2</span><div><strong>选择目标</strong><small>本地运行目标</small></div></div><div className="selectable-stack">{targets.map(({ id, detail }) => <button aria-pressed={selectedTarget === id} className={selectedTarget === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedTarget(id)} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={16} /><span><strong>{id === "user" ? "用户级" : id}</strong><small>{detail}</small></span></button>)}</div></div>
+        <div className="mount-flow-column"><div className="mount-flow-heading"><span>1</span><div><strong>选择资产</strong><small>资产中心静态数据</small></div></div><div className="selectable-stack">{assets.map(({ id, type, detail, icon: Icon }) => <button aria-pressed={selectedAsset === id} className={selectedAsset === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => { setSelectedAsset(id); setApplyResult(null); setConfirmationValue(""); }} style={NO_DRAG_REGION_STYLE} type="button"><Icon size={16} /><span><strong>{id}</strong><small>{type} · {detail}</small></span></button>)}</div></div>
+        <div className="mount-flow-column"><div className="mount-flow-heading"><span>2</span><div><strong>选择目标</strong><small>本地运行目标</small></div></div><div className="selectable-stack">{targets.map(({ id, detail }) => <button aria-pressed={selectedTarget === id} className={selectedTarget === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => { setSelectedTarget(id); setApplyResult(null); setConfirmationValue(""); }} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={16} /><span><strong>{id === "user" ? "用户级" : id}</strong><small>{detail}</small></span></button>)}</div></div>
         <div className="mount-flow-column plan"><div className="mount-flow-heading"><span>3</span><div><strong>预览挂载计划</strong><small>{previewState} · 不会执行文件变更</small></div></div><div className="mount-plan-summary"><div><Link2 size={17} /><span><strong>{asset.id}</strong><small>{asset.type}</small></span></div><i>→</i><div><FolderKanban size={17} /><span><strong>{target.id === "user" ? "用户级" : target.id}</strong><small>{preview?.target.runtimePath ?? target.detail}</small></span></div></div><div className="plan-lines">{planLines.map((line) => <span key={line}>{line}</span>)}</div></div>
       </section>
-      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} confirmationValue={confirmationValue} description="会创建软链接或编译 MCP runtime 配置；后端会校验 previewId 并在替换前创建备份。" isApplying={isApplying} onApply={handleApplyMount} onConfirmationChange={setConfirmationValue} result={applyResult} title="执行挂载" /></section>
+      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{planSummary}</span></div></div><div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出计划</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} confirmationValue={confirmationValue} description="会创建软链接或编译 MCP runtime 配置；后端会校验 previewId 并在替换前创建备份。" isApplying={isApplying} onApply={handleApplyMount} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行挂载" /></section>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法调用挂载操作。";
 }
 
 function toPreviewMountInput(asset: (typeof assets)[number], target: (typeof targets)[number]): PreviewMountInput {

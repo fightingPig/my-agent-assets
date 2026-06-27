@@ -11,6 +11,7 @@ export type ApplyConfirmationPanelProps = {
   isApplying: boolean;
   actionLabel: string;
   result: ApplyResult | null;
+  operationError?: string | null;
 };
 
 const CONFIRMATION_TOKEN = "APPLY";
@@ -25,14 +26,23 @@ export function ApplyConfirmationPanel({
   isApplying,
   actionLabel,
   result,
+  operationError = null,
 }: ApplyConfirmationPanelProps) {
   const confirmed = confirmationValue.trim() === CONFIRMATION_TOKEN;
   const disabled = !canApply || !confirmed || isApplying;
+  const successfulSteps = result?.steps.filter((step) => step.status === "success").length ?? 0;
+  const skippedSteps = result?.steps.filter((step) => step.status === "skipped").length ?? 0;
+  const failedSteps = result?.steps.filter((step) => step.status === "failed").length ?? 0;
   const resultMessage = result
     ? result.ok
-      ? `执行完成：${result.steps.length} 个步骤，${result.backup ? "已创建备份" : "未创建备份"}。`
+      ? `执行完成：成功 ${successfulSteps} 项，跳过 ${skippedSteps} 项。`
       : `执行失败：${result.errors[0] ?? "请查看步骤结果。"}`
+    : operationError
+      ? `执行失败：${operationError}`
     : "执行前会再次调用后端 apply，并校验 previewId。";
+  const failureGuidance = result?.ok === false || operationError
+    ? "未完成的变更不会自动重试。请检查错误信息，刷新预览并重新生成计划后再执行。"
+    : null;
 
   return (
     <div className="apply-confirmation-panel">
@@ -60,7 +70,21 @@ export function ApplyConfirmationPanel({
       >
         {isApplying ? "执行中" : actionLabel}
       </button>
-      <p className={result?.ok === false ? "warning-text" : "success-text"}>{resultMessage}</p>
+      <div
+        className={`apply-result-summary ${result?.ok === false || operationError ? "failed" : result?.ok ? "succeeded" : ""}`}
+        role="status"
+      >
+        <p className={result?.ok === false || operationError ? "warning-text" : "success-text"}>{resultMessage}</p>
+        {result?.backup ? (
+          <p>
+            备份：{result.backup.label}（{result.backup.id}，{result.backup.entryCount} 项）
+          </p>
+        ) : result?.ok ? <p>本次执行未创建备份。</p> : null}
+        {failedSteps > 0 ? <p>失败步骤：{failedSteps} 项。</p> : null}
+        {result?.warnings.map((warning) => <p className="warning-text" key={warning}>提示：{warning}</p>)}
+        {result?.errors.slice(1).map((error) => <p className="warning-text" key={error}>错误：{error}</p>)}
+        {failureGuidance ? <p>{failureGuidance}</p> : null}
+      </div>
     </div>
   );
 }

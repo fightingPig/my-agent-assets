@@ -29,6 +29,8 @@ export function ScanImportPage() {
   const [stateLabel, setStateLabel] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const input = useMemo(() => toScanScope(selectedScope), [selectedScope]);
 
@@ -36,8 +38,7 @@ export function ScanImportPage() {
     let cancelled = false;
     setStateLabel("读取中");
     setPlanResult(null);
-    setApplyResult(null);
-    setConfirmationValue("");
+    setOperationError(null);
     scanAssets({ scope: input })
       .then((result) => {
         if (cancelled) return;
@@ -74,7 +75,7 @@ export function ScanImportPage() {
     return () => {
       cancelled = true;
     };
-  }, [input]);
+  }, [input, refreshKey]);
 
   const rows = scanResult?.assets.length ? scanResult.assets.map(toScanRow) : staticResults;
   const counts = scanResult?.assets.length
@@ -94,6 +95,7 @@ export function ScanImportPage() {
     if (scannedAssetIds.length === 0 || !importPreview?.previewId) return;
 
     setIsPlanning(true);
+    setOperationError(null);
     setStateLabel("生成导入计划中");
     try {
       const result = await importApply({
@@ -106,8 +108,9 @@ export function ScanImportPage() {
       });
       setPlanResult(result);
       setStateLabel(result.ok ? "导入计划已生成" : "导入计划失败");
-    } catch {
+    } catch (error) {
       setPlanResult(null);
+      setOperationError(errorMessage(error));
       setStateLabel("导入计划失败");
     } finally {
       setIsPlanning(false);
@@ -118,6 +121,7 @@ export function ScanImportPage() {
     if (!canApply || !importPreview?.previewId) return;
 
     setIsApplying(true);
+    setOperationError(null);
     setStateLabel("执行导入中");
     try {
       const result = await importApply({
@@ -130,8 +134,13 @@ export function ScanImportPage() {
       });
       setApplyResult(result);
       setStateLabel(result.ok ? "导入已执行" : "导入失败");
-    } catch {
+      if (result.ok) {
+        setConfirmationValue("");
+        setRefreshKey((current) => current + 1);
+      }
+    } catch (error) {
       setApplyResult(null);
+      setOperationError(errorMessage(error));
       setStateLabel("导入失败");
     } finally {
       setIsApplying(false);
@@ -147,7 +156,7 @@ export function ScanImportPage() {
       <section className="panel operation-section">
         <div className="section-heading"><div><h3>选择扫描范围</h3><p>选择仅更新本地预览，不执行导入</p></div><span className="preview-label">{stateLabel}</span></div>
         <div className="scope-card-grid">
-          {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => setSelectedScope(id)} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
+          {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); setConfirmationValue(""); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
         </div>
       </section>
 
@@ -168,12 +177,17 @@ export function ScanImportPage() {
           isApplying={isApplying}
           onApply={handleApplyImport}
           onConfirmationChange={setConfirmationValue}
+          operationError={operationError}
           result={applyResult}
           title="执行导入"
         />
       </section>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法调用导入操作。";
 }
 
 function toScanScope(selectedScope: (typeof scopes)[number]["id"]): ScanScope {

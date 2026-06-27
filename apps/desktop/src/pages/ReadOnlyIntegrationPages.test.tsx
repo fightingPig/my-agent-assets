@@ -319,6 +319,7 @@ describe("read-only UI integration", () => {
       direction: "push",
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+    await waitFor(() => expect(gitStatus).toHaveBeenCalledTimes(2));
   });
 
   it("displays loaded settings and saves edited values through the settings command", async () => {
@@ -349,6 +350,8 @@ describe("read-only UI integration", () => {
         gitRemote: "upstream",
       }),
     }));
+    await waitFor(() => expect(settingsLoad).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("设置已写入本地配置，并已从后端重新读取确认。")).toBeInTheDocument();
   });
 
   it("calls scanAssets for the selected scope and keeps import disabled", async () => {
@@ -438,6 +441,7 @@ describe("read-only UI integration", () => {
       backupBeforeApply: true,
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+    await waitFor(() => expect(scanAssets).toHaveBeenCalledTimes(2));
   });
 
   it("renders preview-only mount, conflict, and restore data while keeping actions disabled", async () => {
@@ -514,6 +518,7 @@ describe("read-only UI integration", () => {
       backupBeforeRestore: true,
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+    await waitFor(() => expect(listBackups).toHaveBeenCalledTimes(2));
   });
 
   it("generates a plan-only mount apply preview without enabling mount execution", async () => {
@@ -562,6 +567,7 @@ describe("read-only UI integration", () => {
       backupBeforeApply: true,
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+    await waitFor(() => expect(previewMount).toHaveBeenCalledTimes(2));
   });
 
   it("updates Conflict Resolver local resolution preview without calling apply wrappers", async () => {
