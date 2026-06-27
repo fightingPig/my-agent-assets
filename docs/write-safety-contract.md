@@ -12,7 +12,7 @@ Implemented write commands cover:
 - Sync apply
 - Settings save
 
-They must not be implemented until this contract is satisfied by code, tests, and fake HOME end-to-end verification.
+They remain supported only while this contract is satisfied by code, tests, and fake HOME end-to-end verification.
 
 ## Required Apply Contract
 
@@ -33,6 +33,16 @@ Preview commands return deterministic `previewId` values for import, mount, rest
 - `apply`
 
 `planOnly` must produce an `ApplyResult` without writing files.
+
+All path-bearing inputs are untrusted. Before path construction or filesystem mutation, the backend:
+
+- validates asset IDs and backup IDs as one safe path component
+- rejects `/`, `\`, `:`, control characters, leading/trailing whitespace, `.` and `..`
+- rejects `ParentDir` components instead of normalizing them away
+- requires every write target to remain below the resolved fake or real HOME
+- rejects symlinked parent components that could redirect a write outside its allowed root
+
+These checks are backend invariants and do not rely on frontend validation.
 
 The desktop UI must not call `mode: "apply"` directly from a primary action. It must first produce a successful preview and plan-only apply result, then require a local typed confirmation of `APPLY`. The backend still owns the final safety check by validating `previewId`.
 
@@ -101,6 +111,12 @@ For restore:
 4. verify restored paths
 5. stop on first unrecoverable failure and report partial state
 
+Backup manifests are treated as untrusted input. Restore verifies the requested backup ID, manifest
+ID, `runtimeRoot`, every `originalPath`, every `backupPath`, entry kind, and stored symlink target
+before plan-only reporting or apply. Backup content paths must be regular descendants of the
+selected backup directory's fixed `files/` subtree and may not traverse symlinks. Restore targets
+cannot overwrite the selected backup directory. Restored symlinks must resolve below HOME.
+
 ## Fake HOME Requirement
 
 All apply tests must run under fake HOME or explicit temporary runtime roots.
@@ -145,6 +161,8 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - MCP servers by reading the top-level `mcpServers.<name>` object from `.claude.json` or `.mcp.json`
 - Destination replacement with backup when `backupBeforeApply` is true
 - `planOnly` mode with no filesystem writes
+- Unsafe asset IDs, scope traversal, symlinked runtime roots, and symlinks nested inside imported
+  directories are rejected before asset-center or backup creation
 
 `import_apply` does not delete or modify runtime Claude files. MCP import extracts a server JSON object into the asset center and leaves the source config unchanged.
 
@@ -153,6 +171,8 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Source assets are resolved from `~/.my-agent-assets/assets/skills` or `~/.my-agent-assets/assets/commands`
 - MCP source assets are resolved from `~/.my-agent-assets/assets/mcps/<name>.json`
 - Mount or compile targets must resolve under the backend's HOME
+- Mount sources must resolve inside the asset center without symlink traversal
+- ParentDir targets and symlinked target parents are rejected before creating directories or backups
 - Existing mount targets are backed up before replacement when `backupBeforeApply` is true
 - MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
 - `planOnly` mode creates no symlink, writes no JSON, and creates no backup
@@ -163,6 +183,8 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - File, directory, and symlink backup entries can be restored
 - Restore targets must stay under the backend's HOME
 - Backup entry paths must stay under the selected backup directory
+- Manifest IDs and runtime roots must match the selected fake/real HOME context
+- Manifest paths, entry kinds, and restored symlink targets are validated before `planOnly` or apply
 - Current runtime state is backed up before replacement when `backupBeforeRestore` is true
 - `planOnly` mode reads the manifest but restores no files and creates no backup
 
@@ -171,12 +193,14 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Settings are written to `~/.my-agent-assets/config.json`
 - `settings_load` returns defaults when no config exists and reads the saved config when present
 - Settings writes do not touch Claude runtime files
+- The fixed settings destination is guarded against symlinked parent directories
 - Empty path fields are normalized to defaults
 - Numeric settings are clamped to supported ranges
 
 `sync_apply` currently supports fake-HOME-tested Git sync execution:
 
 - Targets only `~/.my-agent-assets`
+- Rejects a symlinked asset-center repository before running Git
 - Recomputes `previewId` from current Git status before running a command
 - Rejects dirty worktrees, conflicts, missing upstreams, and non-repositories
 - `planOnly` mode runs no Git commands
@@ -200,3 +224,19 @@ Before registering additional apply commands, add tests proving:
 - interrupted write reporting
 - restore from backup manifest
 - no direct real HOME access
+
+## Safety Hardening Verification
+
+The Rust suite includes:
+
+- strict unsafe asset ID and backup ID rejection tests
+- ParentDir and outside-root path tests
+- import, mount, settings, sync, manifest, backup-content, and restored-symlink escape tests
+- deterministic preview ID mismatch tests that assert no write occurs
+- full-tree snapshots proving import, mount, MCP compile, and restore `planOnly` modes create or
+  change no files, directories, symlinks, or backups
+- a single fake-HOME end-to-end workflow covering import, mount, restore, settings save/load, and
+  sync `planOnly`, with a local bare remote proving no Git mutation
+
+All test roots are created under the operating system temporary directory and passed explicitly to
+backend functions. Tests do not resolve or touch the developer's real HOME.

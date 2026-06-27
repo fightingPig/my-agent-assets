@@ -2,7 +2,7 @@ use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, PlanStepKind, SyncApplyInput,
     SyncDirection,
 };
-use crate::path_utils::{display_path, home_dir};
+use crate::path_utils::{display_path, guard_existing_path, home_dir};
 use crate::preview;
 use crate::read_only;
 use std::path::Path;
@@ -25,6 +25,20 @@ pub fn sync_apply_command(input: SyncApplyInput) -> ApplyResult {
 
 pub fn sync_apply_for_home(home: &Path, input: SyncApplyInput) -> ApplyResult {
     let repository_path = home.join(".my-agent-assets");
+    if let Err(error) = guard_existing_path(home, &repository_path) {
+        return result(
+            input,
+            vec![step(
+                "sync-repository-path",
+                "校验同步仓库路径",
+                ApplyStepStatus::Failed,
+                error.to_string(),
+                vec![display_path(&repository_path)],
+            )],
+            vec![],
+            vec![error.to_string()],
+        );
+    }
     let status = read_only::git_status_for_home(home);
     let expected_preview_id = preview::sync_preview_id(&input.direction, &status);
     let mut steps = Vec::new();

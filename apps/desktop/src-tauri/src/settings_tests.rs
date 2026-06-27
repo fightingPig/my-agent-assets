@@ -138,3 +138,36 @@ fn settings_load_invalid_config_falls_back_without_overwriting() {
         "{"
     );
 }
+
+#[test]
+fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
+    let home = TempHome::new("symlink-escape");
+    let outside = TempHome::new("symlink-outside");
+    let link = home.path().join(".my-agent-assets");
+    create_test_directory_symlink(outside.path(), &link);
+
+    let result = settings_save_for_home(
+        home.path(),
+        SettingsSaveInput {
+            settings: custom_settings(home.path()),
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(result
+        .expect_err("symlink path must fail")
+        .to_string()
+        .contains("Symlink traversal"));
+    assert!(!outside.config_path().exists());
+}
+
+#[cfg(unix)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::unix::fs::symlink(source, destination).expect("directory symlink should be created");
+}
+
+#[cfg(windows)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::windows::fs::symlink_dir(source, destination)
+        .expect("directory symlink should be created");
+}

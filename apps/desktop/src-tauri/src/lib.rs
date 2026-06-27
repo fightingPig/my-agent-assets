@@ -157,3 +157,6 @@ mod settings_tests;
 
 #[cfg(test)]
 mod sync_apply_tests;
+
+#[cfg(test)]
+mod write_safety_e2e_tests;

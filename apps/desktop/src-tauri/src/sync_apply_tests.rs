@@ -59,6 +59,7 @@ fn sync_apply_plan_only_does_not_push_commits() {
     assert!(result.ok, "{:?}", result.errors);
     assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
     assert_eq!(git_status_for_home(home.path()).ahead, 1);
+    assert_eq!(git_output(&home.repo(), &["status", "--porcelain"]), "");
 }
 
 #[test]
@@ -117,6 +118,27 @@ fn sync_apply_rejects_dirty_worktree() {
     assert!(result.errors[0].contains("not applyable"));
 }
 
+#[test]
+fn sync_apply_rejects_symlinked_repository_before_git_execution() {
+    let home = TempGitHome::new("symlink-repository");
+    let outside = setup_home_with_ahead_commit("symlink-repository-outside");
+    create_test_directory_symlink(&outside.repo(), &home.repo());
+    let status = git_status_for_home(home.path());
+
+    let result = sync_apply_for_home(
+        home.path(),
+        SyncApplyInput {
+            preview_id: sync_preview_id(&SyncDirection::Push, &status),
+            mode: ApplyMode::PlanOnly,
+            direction: SyncDirection::Push,
+        },
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("Symlink traversal"));
+    assert_eq!(git_status_for_home(outside.path()).ahead, 1);
+}
+
 fn setup_home_with_ahead_commit(name: &str) -> TempGitHome {
     let home = TempGitHome::new(name);
     let remote = home.path().join("remote.git");
@@ -157,4 +179,25 @@ fn run_git(cwd: &Path, args: &[&str]) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn git_output(cwd: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .expect("git command should run");
+    assert!(output.status.success());
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[cfg(unix)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::unix::fs::symlink(source, destination).expect("directory symlink should be created");
+}
+
+#[cfg(windows)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::windows::fs::symlink_dir(source, destination)
+        .expect("directory symlink should be created");
 }

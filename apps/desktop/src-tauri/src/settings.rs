@@ -1,5 +1,5 @@
 use crate::contracts::{DesktopSettings, SettingsSaveInput};
-use crate::path_utils::home_dir;
+use crate::path_utils::{guard_write_path, home_dir};
 use crate::read_only::settings_for_home;
 use std::fs;
 use std::io;
@@ -37,7 +37,7 @@ pub fn settings_save_for_home(
     input: SettingsSaveInput,
 ) -> io::Result<DesktopSettings> {
     let settings = normalize_settings(home, input.settings);
-    let path = settings_path(home);
+    let path = guard_write_path(home, &settings_path(home))?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

@@ -5,7 +5,9 @@ use crate::contracts::{
     PreviewRestoreInput, PreviewSyncInput, RestorePreview, RiskLevel, RuntimeScope, ScanScope,
     SyncDirection, SyncPreview,
 };
-use crate::path_utils::{display_path, home_dir};
+use crate::path_utils::{
+    display_path, guard_existing_path, home_dir, validate_single_path_component,
+};
 use crate::read_only;
 use serde::Deserialize;
 use std::fs;
@@ -196,11 +198,30 @@ pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
 }
 
 pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> RestorePreview {
+    if let Err(error) = validate_single_path_component(&input.backup_id, "backup ID") {
+        let mut preview = preview_restore(input);
+        preview.can_apply = false;
+        preview.warnings.push(error);
+        return preview;
+    }
     let manifest_path = home
         .join(".my-agent-assets")
         .join("backups")
         .join(&input.backup_id)
         .join("manifest.json");
+    let manifest_path = match guard_existing_path(home, &manifest_path) {
+        Ok(path) => path,
+        Err(error) => {
+            let mut preview = preview_restore(input);
+            preview.can_apply = false;
+            preview.warnings.push(format!(
+                "Could not safely resolve backup manifest {}; using synthetic restore preview: {}",
+                display_path(&manifest_path),
+                error
+            ));
+            return preview;
+        }
+    };
     let text = match fs::read_to_string(&manifest_path) {
         Ok(text) => text,
         Err(error) => {

@@ -106,6 +106,7 @@ fn restore_input(
 fn import_apply_plan_only_does_not_create_asset_center_or_backup() {
     let home = TempHome::new("plan-only");
     home.write(".claude/skills/review.md", "# Review");
+    let before = snapshot_tree(home.path());
 
     let result = import_apply_for_home(
         home.path(),
@@ -118,6 +119,7 @@ fn import_apply_plan_only_does_not_create_asset_center_or_backup() {
     assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
     assert!(!home.exists(".my-agent-assets"));
     assert!(result.backup.is_none());
+    assert_eq!(snapshot_tree(home.path()), before);
 }
 
 #[test]
@@ -260,9 +262,89 @@ fn import_apply_rejects_mismatched_preview_id_before_writing() {
 }
 
 #[test]
+fn import_apply_rejects_unsafe_asset_ids_before_path_construction() {
+    for asset_id in [
+        "skill:../escape",
+        "command:nested/name",
+        r"mcp:nested\name",
+        "skill:.",
+        "command: name",
+        "mcp:name:extra",
+    ] {
+        let home = TempHome::new("unsafe-asset-id");
+        let result = import_apply_for_home(
+            home.path(),
+            import_input(ApplyMode::Apply, ScanScope::User, vec![asset_id]),
+        );
+
+        assert!(!result.ok, "{asset_id} should be rejected");
+        assert!(result.errors[0].contains("safe path component"));
+        assert!(!home.exists(".my-agent-assets"));
+    }
+}
+
+#[test]
+fn import_apply_rejects_scope_parentdir_and_symlink_escape() {
+    let home = TempHome::new("import-scope-escape");
+    let outside = TempHome::new("import-scope-outside");
+    outside.write(".claude/commands/deploy.md", "# Outside");
+
+    let parent_result = import_apply_for_home(
+        home.path(),
+        import_input(
+            ApplyMode::Apply,
+            ScanScope::Custom {
+                path: home.path().join("../escape").to_string_lossy().into_owned(),
+            },
+            vec!["command:deploy"],
+        ),
+    );
+    assert!(!parent_result.ok);
+    assert!(parent_result.errors[0].contains("ParentDir"));
+
+    let link = home.path().join("linked-runtime");
+    create_test_directory_symlink(outside.path(), &link);
+    let symlink_result = import_apply_for_home(
+        home.path(),
+        import_input(
+            ApplyMode::Apply,
+            ScanScope::Custom {
+                path: link.to_string_lossy().into_owned(),
+            },
+            vec!["command:deploy"],
+        ),
+    );
+    assert!(!symlink_result.ok);
+    assert!(symlink_result.errors[0].contains("Symlink traversal"));
+    assert!(!home.exists(".my-agent-assets"));
+}
+
+#[test]
+fn import_apply_rejects_nested_skill_symlink_before_creating_asset_center() {
+    let home = TempHome::new("import-nested-symlink");
+    let outside = TempHome::new("import-nested-outside");
+    home.write(".claude/skills/review/SKILL.md", "# Review");
+    outside.write("secret.md", "secret");
+    create_test_symlink(
+        &outside.path().join("secret.md"),
+        &home.path().join(".claude/skills/review/secret.md"),
+    );
+
+    let result = import_apply_for_home(
+        home.path(),
+        import_input(ApplyMode::Apply, ScanScope::User, vec!["skill:review"]),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("Symlinks are forbidden"));
+    assert!(!home.exists(".my-agent-assets"));
+}
+
+#[test]
 fn mount_apply_plan_only_does_not_create_runtime_target() {
     let home = TempHome::new("mount-plan-only");
     home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+    let before = snapshot_tree(home.path());
 
     let result = mount_apply_for_home(
         home.path(),
@@ -279,6 +361,7 @@ fn mount_apply_plan_only_does_not_create_runtime_target() {
     assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
     assert!(!home.exists("workspace/project-a/.claude/skills/review.md"));
     assert!(result.backup.is_none());
+    assert_eq!(snapshot_tree(home.path()), before);
 }
 
 #[test]
@@ -369,7 +452,7 @@ fn mount_apply_rejects_target_outside_home() {
     );
 
     assert!(!result.ok);
-    assert!(result.errors[0].contains("must stay under resolved HOME"));
+    assert!(result.errors[0].contains("allowed root"));
     assert!(!outside.exists());
 }
 
@@ -388,8 +471,48 @@ fn mount_apply_reports_missing_asset_without_creating_target() {
     );
 
     assert!(!result.ok);
-    assert!(result.errors[0].contains("Asset center path does not exist"));
+    assert!(result.errors[0].contains("Path does not exist"));
     assert!(!home.exists("workspace/project-a/.claude/skills/missing.md"));
+}
+
+#[test]
+fn mount_apply_rejects_parentdir_and_symlink_parent_before_writing() {
+    let home = TempHome::new("mount-path-escape");
+    let outside = TempHome::new("mount-path-outside");
+    home.write(".my-agent-assets/assets/skills/review.md", "# Review");
+
+    let parent_result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "skill:review",
+            home.path()
+                .join("workspace/../escape.md")
+                .to_string_lossy()
+                .into_owned(),
+            true,
+        ),
+    );
+    assert!(!parent_result.ok);
+    assert!(parent_result.errors[0].contains("ParentDir"));
+
+    let linked_parent = home.path().join("workspace");
+    create_test_directory_symlink(outside.path(), &linked_parent);
+    let symlink_result = mount_apply_for_home(
+        home.path(),
+        mount_input(
+            ApplyMode::Apply,
+            "skill:review",
+            linked_parent
+                .join("project/.claude/skills/review.md")
+                .to_string_lossy()
+                .into_owned(),
+            true,
+        ),
+    );
+    assert!(!symlink_result.ok);
+    assert!(symlink_result.errors[0].contains("Symlink traversal"));
+    assert!(!outside.exists("project/.claude/skills/review.md"));
 }
 
 #[test]
@@ -418,6 +541,7 @@ fn mount_apply_plan_only_does_not_compile_mcp_runtime_config() {
         ".my-agent-assets/assets/mcps/PostgreSQL.json",
         r#"{"command":"postgres"}"#,
     );
+    let before = snapshot_tree(home.path());
 
     let result = mount_apply_for_home(
         home.path(),
@@ -432,6 +556,7 @@ fn mount_apply_plan_only_does_not_compile_mcp_runtime_config() {
     assert!(result.ok, "{:?}", result.errors);
     assert_eq!(result.steps[0].status, ApplyStepStatus::Skipped);
     assert!(!home.exists("workspace/project-a/.mcp.json"));
+    assert_eq!(snapshot_tree(home.path()), before);
 }
 
 #[test]
@@ -534,6 +659,7 @@ fn restore_apply_plan_only_reads_manifest_without_changing_files() {
     );
     let backup_id = import_result.backup.expect("backup should exist").id;
     home.write(".my-agent-assets/assets/commands/deploy.md", "# Mutated");
+    let before = snapshot_tree(home.path());
 
     let restore_result = restore_apply_for_home(
         home.path(),
@@ -547,6 +673,7 @@ fn restore_apply_plan_only_reads_manifest_without_changing_files() {
         "# Mutated"
     );
     assert!(restore_result.backup.is_none());
+    assert_eq!(snapshot_tree(home.path()), before);
 }
 
 #[test]
@@ -711,8 +838,117 @@ fn restore_apply_rejects_tampered_manifest_outside_home() {
     );
 
     assert!(!result.ok);
-    assert!(result.errors[0].contains("must stay under resolved HOME"));
+    assert!(result.errors[0].contains("allowed root"));
     assert!(!outside.exists());
+}
+
+#[test]
+fn restore_apply_rejects_parentdir_backup_path_and_manifest_id_tampering() {
+    let home = TempHome::new("restore-manifest-validation");
+    let backup_root = home.path().join(".my-agent-assets/backups/tampered");
+    fs::create_dir_all(backup_root.join("files")).expect("backup root should be created");
+    let backup_file = backup_root.join("files/value.md");
+    fs::write(&backup_file, "backup").expect("backup file should be written");
+
+    write_manifest(
+        &backup_root,
+        "different-id",
+        home.path(),
+        &home.path().join("target.md"),
+        &backup_file,
+        "file",
+    );
+    let id_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::Apply, "tampered".into(), true),
+    );
+    assert!(!id_result.ok);
+    assert!(id_result.errors[0].contains("manifest ID"));
+
+    write_manifest(
+        &backup_root,
+        "tampered",
+        home.path(),
+        &home.path().join("target.md"),
+        &backup_root.join("files/../value.md"),
+        "file",
+    );
+    let path_result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::PlanOnly, "tampered".into(), true),
+    );
+    assert!(!path_result.ok);
+    assert!(path_result.errors[0].contains("ParentDir"));
+    assert!(!home.exists("target.md"));
+}
+
+#[test]
+fn restore_apply_rejects_backup_content_outside_files_subtree() {
+    let home = TempHome::new("restore-backup-content-root");
+    let backup_root = home.path().join(".my-agent-assets/backups/tampered");
+    fs::create_dir_all(backup_root.join("files")).expect("backup root should be created");
+    let metadata_file = backup_root.join("metadata.md");
+    fs::write(&metadata_file, "not backup content").expect("metadata should be written");
+    write_manifest(
+        &backup_root,
+        "tampered",
+        home.path(),
+        &home.path().join("target.md"),
+        &metadata_file,
+        "file",
+    );
+
+    let result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::PlanOnly, "tampered".into(), true),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("allowed root"));
+    assert!(!home.exists("target.md"));
+}
+
+#[test]
+fn restore_apply_rejects_symlink_target_escape_even_in_plan_only() {
+    let home = TempHome::new("restore-symlink-escape");
+    let backup_root = home.path().join(".my-agent-assets/backups/tampered");
+    fs::create_dir_all(backup_root.join("files")).expect("backup root should be created");
+    let backup_file = backup_root.join("files/link");
+    let outside = std::env::temp_dir().join(format!(
+        "my-agent-assets-forbidden-link-{}",
+        std::process::id()
+    ));
+    fs::write(&backup_file, outside.to_string_lossy().as_bytes())
+        .expect("symlink backup should be written");
+    write_manifest(
+        &backup_root,
+        "tampered",
+        home.path(),
+        &home.path().join("runtime/link"),
+        &backup_file,
+        "symlink",
+    );
+
+    let result = restore_apply_for_home(
+        home.path(),
+        restore_input(ApplyMode::PlanOnly, "tampered".into(), false),
+    );
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("allowed root"));
+    assert!(!home.exists("runtime/link"));
+}
+
+#[test]
+fn restore_apply_rejects_unsafe_backup_id_before_manifest_lookup() {
+    let home = TempHome::new("restore-backup-id");
+    let input = restore_input(ApplyMode::Apply, "../tampered".into(), true);
+
+    let result = restore_apply_for_home(home.path(), input);
+
+    assert!(!result.ok);
+    assert!(result.errors[0].contains("safe path component"));
+    assert!(!home.exists(".my-agent-assets"));
 }
 
 #[test]
@@ -736,9 +972,90 @@ fn read_json(path: impl AsRef<Path>) -> serde_json::Value {
     serde_json::from_str(&text).expect("JSON should parse")
 }
 
+fn write_manifest(
+    backup_root: &Path,
+    id: &str,
+    runtime_root: &Path,
+    original_path: &Path,
+    backup_path: &Path,
+    kind: &str,
+) {
+    let manifest = serde_json::json!({
+        "id": id,
+        "label": "Tampered",
+        "createdAt": "test",
+        "runtimeRoot": runtime_root,
+        "entries": [{
+            "originalPath": original_path,
+            "backupPath": backup_path,
+            "kind": kind,
+            "sizeBytes": 6
+        }]
+    });
+    fs::write(
+        backup_root.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).expect("manifest should serialize"),
+    )
+    .expect("manifest should be written");
+}
+
+fn snapshot_tree(root: &Path) -> Vec<(PathBuf, String, Vec<u8>)> {
+    fn visit(root: &Path, current: &Path, snapshot: &mut Vec<(PathBuf, String, Vec<u8>)>) {
+        let mut entries = fs::read_dir(current)
+            .expect("snapshot directory should be readable")
+            .map(|entry| entry.expect("snapshot entry should be readable"))
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(root)
+                .expect("snapshot path should stay under root")
+                .to_path_buf();
+            let metadata =
+                fs::symlink_metadata(&path).expect("snapshot metadata should be readable");
+            if metadata.file_type().is_symlink() {
+                snapshot.push((
+                    relative,
+                    "symlink".into(),
+                    fs::read_link(&path)
+                        .expect("snapshot link should be readable")
+                        .to_string_lossy()
+                        .as_bytes()
+                        .to_vec(),
+                ));
+            } else if metadata.is_dir() {
+                snapshot.push((relative, "directory".into(), vec![]));
+                visit(root, &path, snapshot);
+            } else {
+                snapshot.push((
+                    relative,
+                    "file".into(),
+                    fs::read(&path).expect("snapshot file should be readable"),
+                ));
+            }
+        }
+    }
+
+    let mut snapshot = vec![];
+    visit(root, root, &mut snapshot);
+    snapshot
+}
+
 #[cfg(unix)]
 fn create_test_symlink(source: &Path, destination: &Path) {
     std::os::unix::fs::symlink(source, destination).expect("test symlink should be created");
+}
+
+#[cfg(unix)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::unix::fs::symlink(source, destination).expect("directory symlink should be created");
+}
+
+#[cfg(windows)]
+fn create_test_directory_symlink(source: &Path, destination: &Path) {
+    std::os::windows::fs::symlink_dir(source, destination)
+        .expect("directory symlink should be created");
 }
 
 #[cfg(windows)]

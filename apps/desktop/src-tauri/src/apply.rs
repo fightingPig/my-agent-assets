@@ -2,7 +2,10 @@ use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, AssetType, BackupManifestSummary,
     ImportApplyInput, MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
 };
-use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
+use crate::path_utils::{
+    display_path, expand_tilde, guard_existing_path, guard_write_path, home_dir, modified_time_iso,
+    path_is_within, validate_single_path_component,
+};
 use crate::preview;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -122,6 +125,15 @@ impl<'a> ImportApplyRunner<'a> {
                     continue;
                 }
             };
+            if let Err(error) = intent.validate(self.home) {
+                self.push_failed_step(
+                    &asset_id,
+                    "校验导入路径",
+                    error.to_string(),
+                    vec![display_path(&intent.destination)],
+                );
+                continue;
+            }
 
             if self.input.mode == ApplyMode::PlanOnly {
                 self.steps.push(ApplyStepResult {
@@ -200,32 +212,25 @@ impl<'a> ImportApplyRunner<'a> {
     }
 
     fn apply_filesystem_intent(&mut self, intent: &ImportIntent) -> io::Result<()> {
-        if !intent.source.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Source path does not exist: {}",
-                    display_path(&intent.source)
-                ),
-            ));
-        }
+        let source = guard_existing_path(self.home, &intent.source)?;
+        let destination = guard_write_path(self.home, &intent.destination)?;
 
-        self.backup_destination_if_needed(&intent.destination)?;
-        if let Some(parent) = intent.destination.parent() {
+        self.backup_destination_if_needed(&destination)?;
+        if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        if intent.source.is_dir() {
-            let temp = temp_path_for(&intent.destination);
+        if source.is_dir() {
+            let temp = temp_path_for(&destination);
             if temp.exists() {
                 remove_path(&temp)?;
             }
-            copy_dir_recursive(&intent.source, &temp)?;
-            verify_dir_equal(&intent.source, &temp)?;
-            replace_path(&temp, &intent.destination)?;
-            verify_dir_equal(&intent.source, &intent.destination)?;
+            copy_dir_recursive(&source, &temp)?;
+            verify_dir_equal(&source, &temp)?;
+            replace_path(&temp, &destination)?;
+            verify_dir_equal(&source, &destination)?;
         } else {
-            copy_file_verified(&intent.source, &intent.destination)?;
+            copy_file_verified(&source, &destination)?;
         }
 
         self.steps.push(ApplyStepResult {
@@ -240,7 +245,9 @@ impl<'a> ImportApplyRunner<'a> {
     }
 
     fn apply_mcp_intent(&mut self, intent: &ImportIntent) -> io::Result<()> {
-        let config_text = fs::read_to_string(&intent.source)?;
+        let source = guard_existing_path(self.home, &intent.source)?;
+        let destination = guard_write_path(self.home, &intent.destination)?;
+        let config_text = fs::read_to_string(source)?;
         let config: Value = serde_json::from_str(&config_text).map_err(|error| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -258,13 +265,13 @@ impl<'a> ImportApplyRunner<'a> {
                 )
             })?;
 
-        self.backup_destination_if_needed(&intent.destination)?;
-        if let Some(parent) = intent.destination.parent() {
+        self.backup_destination_if_needed(&destination)?;
+        if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
 
         let pretty = serde_json::to_vec_pretty(server).map_err(io::Error::other)?;
-        write_file_verified(&pretty, &intent.destination)?;
+        write_file_verified(&pretty, &destination)?;
         self.steps.push(ApplyStepResult {
             step_id: format!("import-{}", sanitize_step_id(&intent.asset_id)),
             kind: PlanStepKind::Import,
@@ -371,6 +378,21 @@ impl<'a> RestoreApplyRunner<'a> {
             .join("backups")
             .join(&self.input.backup_id)
             .join("manifest.json");
+        if let Err(error) = validate_single_path_component(&self.input.backup_id, "backup ID") {
+            self.push_failed_step("校验备份 ID", error, vec![]);
+            return self.result();
+        }
+        let manifest_path = match guard_existing_path(self.home, &manifest_path) {
+            Ok(path) => path,
+            Err(error) => {
+                self.push_failed_step(
+                    "校验备份清单路径",
+                    error.to_string(),
+                    vec![display_path(&manifest_path)],
+                );
+                return self.result();
+            }
+        };
 
         let manifest = match read_backup_manifest(&manifest_path) {
             Ok(manifest) => manifest,
@@ -383,6 +405,33 @@ impl<'a> RestoreApplyRunner<'a> {
                 return self.result();
             }
         };
+        if manifest.id != self.input.backup_id {
+            self.push_failed_step(
+                "校验备份清单",
+                "Backup manifest ID does not match the requested backup ID.",
+                vec![display_path(&manifest_path)],
+            );
+            return self.result();
+        }
+        if PathBuf::from(&manifest.runtime_root) != self.home {
+            self.push_failed_step(
+                "校验备份清单",
+                "Backup manifest runtimeRoot does not match resolved HOME.",
+                vec![display_path(&manifest_path)],
+            );
+            return self.result();
+        }
+        if let Err(error) = manifest.entries.iter().try_for_each(|entry| {
+            self.validate_restore_entry(entry, &manifest_path)
+                .map(|_| ())
+        }) {
+            self.push_failed_step(
+                "校验备份清单",
+                error.to_string(),
+                vec![display_path(&manifest_path)],
+            );
+            return self.result();
+        }
 
         if self.input.mode == ApplyMode::PlanOnly {
             self.steps.push(ApplyStepResult {
@@ -435,36 +484,7 @@ impl<'a> RestoreApplyRunner<'a> {
     }
 
     fn restore_entry(&mut self, entry: &BackupEntry, manifest_path: &Path) -> io::Result<()> {
-        let original = PathBuf::from(&entry.original_path);
-        let backup = PathBuf::from(&entry.backup_path);
-        let backup_root = manifest_path
-            .parent()
-            .ok_or_else(|| io::Error::other("Backup manifest has no parent directory."))?;
-
-        if !original.starts_with(self.home) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "Restore target must stay under resolved HOME: {}",
-                    display_path(&original)
-                ),
-            ));
-        }
-        if !backup.starts_with(backup_root) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "Backup entry must stay under backup root: {}",
-                    display_path(&backup)
-                ),
-            ));
-        }
-        if !path_exists_no_follow(&backup) {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("Backup entry does not exist: {}", display_path(&backup)),
-            ));
-        }
+        let (original, backup) = self.validate_restore_entry(entry, manifest_path)?;
 
         self.backup_current_if_needed(&original)?;
         if let Some(parent) = original.parent() {
@@ -482,12 +502,9 @@ impl<'a> RestoreApplyRunner<'a> {
                 replace_path(&temp, &original)?;
                 verify_dir_equal(&backup, &original)?;
             }
-            "file" => {
-                copy_file_verified(&backup, &original)?;
-            }
+            "file" => copy_file_verified(&backup, &original)?,
             "symlink" => {
-                let target_text = fs::read_to_string(&backup)?;
-                let target = PathBuf::from(target_text);
+                let target = PathBuf::from(fs::read_to_string(&backup)?);
                 let temp = temp_path_for(&original);
                 if path_exists_no_follow(&temp) {
                     remove_path(&temp)?;
@@ -497,12 +514,7 @@ impl<'a> RestoreApplyRunner<'a> {
                 replace_path(&temp, &original)?;
                 verify_symlink_target(&original, &target)?;
             }
-            other => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Unsupported backup entry kind: {}", other),
-                ));
-            }
+            _ => unreachable!("entry kind was validated before restore"),
         }
 
         self.steps.push(ApplyStepResult {
@@ -513,6 +525,49 @@ impl<'a> RestoreApplyRunner<'a> {
             message: "Restored path from backup manifest.".into(),
             affected_paths: vec![entry.original_path.clone()],
         });
+        Ok(())
+    }
+
+    fn validate_restore_entry(
+        &self,
+        entry: &BackupEntry,
+        manifest_path: &Path,
+    ) -> io::Result<(PathBuf, PathBuf)> {
+        let original = guard_write_path(self.home, Path::new(&entry.original_path))?;
+        let backup_root = manifest_path
+            .parent()
+            .ok_or_else(|| io::Error::other("Backup manifest has no parent directory."))?;
+        let backup_files_root = backup_root.join("files");
+        let backup = guard_existing_path(&backup_files_root, Path::new(&entry.backup_path))?;
+        if path_is_within(backup_root, &original)? {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Restore target must not overwrite the selected backup directory.",
+            ));
+        }
+        if !matches!(entry.kind.as_str(), "directory" | "file" | "symlink") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Unsupported backup entry kind: {}", entry.kind),
+            ));
+        }
+        if entry.kind == "symlink" {
+            self.validate_restored_symlink(&original, &backup)?;
+        }
+        Ok((original, backup))
+    }
+
+    fn validate_restored_symlink(&self, original: &Path, backup: &Path) -> io::Result<()> {
+        let target = PathBuf::from(fs::read_to_string(backup)?);
+        let resolved = if target.is_absolute() {
+            target
+        } else {
+            original
+                .parent()
+                .ok_or_else(|| io::Error::other("Restore symlink has no parent."))?
+                .join(target)
+        };
+        guard_write_path(self.home, &resolved)?;
         Ok(())
     }
 
@@ -620,6 +675,14 @@ impl<'a> MountApplyRunner<'a> {
                 return self.result();
             }
         };
+        if let Err(error) = intent.validate(self.home) {
+            self.push_failed_step(
+                "校验挂载路径",
+                error.to_string(),
+                vec![display_path(&intent.destination)],
+            );
+            return self.result();
+        }
 
         if self.input.mode == ApplyMode::PlanOnly {
             self.steps.push(ApplyStepResult {
@@ -665,38 +728,23 @@ impl<'a> MountApplyRunner<'a> {
         if intent.asset_type == AssetType::Mcp {
             return self.apply_mcp_compile_intent(intent);
         }
-        if !intent.source.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Asset center path does not exist: {}",
-                    display_path(&intent.source)
-                ),
-            ));
-        }
-        if !intent.destination.starts_with(self.home) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "Mount target must stay under resolved HOME: {}",
-                    display_path(&intent.destination)
-                ),
-            ));
-        }
+        let asset_root = self.home.join(".my-agent-assets").join("assets");
+        let source = guard_existing_path(&asset_root, &intent.source)?;
+        let destination = guard_write_path(self.home, &intent.destination)?;
 
-        self.backup_destination_if_needed(&intent.destination)?;
-        if let Some(parent) = intent.destination.parent() {
+        self.backup_destination_if_needed(&destination)?;
+        if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let temp = temp_path_for(&intent.destination);
+        let temp = temp_path_for(&destination);
         if temp.exists() {
             remove_path(&temp)?;
         }
-        create_symlink(&intent.source, &temp)?;
-        verify_symlink_target(&temp, &intent.source)?;
-        replace_path(&temp, &intent.destination)?;
-        verify_symlink_target(&intent.destination, &intent.source)?;
+        create_symlink(&source, &temp)?;
+        verify_symlink_target(&temp, &source)?;
+        replace_path(&temp, &destination)?;
+        verify_symlink_target(&destination, &source)?;
 
         self.steps.push(ApplyStepResult {
             step_id: format!("mount-{}", sanitize_step_id(&self.input.asset_id)),
@@ -710,28 +758,13 @@ impl<'a> MountApplyRunner<'a> {
     }
 
     fn apply_mcp_compile_intent(&mut self, intent: &MountIntent) -> io::Result<()> {
-        if !intent.source.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Asset center path does not exist: {}",
-                    display_path(&intent.source)
-                ),
-            ));
-        }
-        if !intent.destination.starts_with(self.home) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "MCP compile target must stay under resolved HOME: {}",
-                    display_path(&intent.destination)
-                ),
-            ));
-        }
+        let asset_root = self.home.join(".my-agent-assets").join("assets");
+        let source = guard_existing_path(&asset_root, &intent.source)?;
+        let destination = guard_write_path(self.home, &intent.destination)?;
 
-        let server = read_json_file(&intent.source)?;
-        let mut runtime_config = if intent.destination.exists() {
-            let value = read_json_file(&intent.destination)?;
+        let server = read_json_file(&source)?;
+        let mut runtime_config = if destination.exists() {
+            let value = read_json_file(&destination)?;
             match value {
                 Value::Object(object) => object,
                 _ => {
@@ -762,13 +795,13 @@ impl<'a> MountApplyRunner<'a> {
             }
         }
 
-        self.backup_destination_if_needed(&intent.destination)?;
-        if let Some(parent) = intent.destination.parent() {
+        self.backup_destination_if_needed(&destination)?;
+        if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
         let bytes =
             serde_json::to_vec_pretty(&Value::Object(runtime_config)).map_err(io::Error::other)?;
-        write_file_verified(&bytes, &intent.destination)?;
+        write_file_verified(&bytes, &destination)?;
 
         self.steps.push(ApplyStepResult {
             step_id: format!("compile-mcp-{}", sanitize_step_id(&self.input.asset_id)),
@@ -890,6 +923,13 @@ impl MountIntent {
             destination: expand_tilde(&input.target.runtime_path, home),
         })
     }
+
+    fn validate(&self, home: &Path) -> io::Result<()> {
+        let asset_root = home.join(".my-agent-assets").join("assets");
+        guard_existing_path(&asset_root, &self.source)?;
+        guard_write_path(home, &self.destination)?;
+        Ok(())
+    }
 }
 
 struct ImportIntent {
@@ -949,6 +989,15 @@ impl ImportIntent {
             source,
             destination,
         })
+    }
+
+    fn validate(&self, home: &Path) -> io::Result<()> {
+        let source = guard_existing_path(home, &self.source)?;
+        if source.is_dir() {
+            ensure_tree_has_no_symlinks(&source)?;
+        }
+        guard_write_path(home, &self.destination)?;
+        Ok(())
     }
 }
 
@@ -1013,30 +1062,31 @@ impl BackupBuilder {
     }
 
     fn add_path(&mut self, original: &Path) -> io::Result<()> {
+        let original = guard_write_path(&self.runtime_root, original)?;
         let relative = original
             .strip_prefix(&self.runtime_root)
-            .unwrap_or(original)
+            .map_err(|_| io::Error::other("Backup source escaped runtime root."))?
             .to_path_buf();
         let backup_path = self.root.join("files").join(&relative);
         if let Some(parent) = backup_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let metadata = fs::symlink_metadata(original)?;
+        let metadata = fs::symlink_metadata(&original)?;
         let (kind, size_bytes) = if metadata.file_type().is_symlink() {
-            let target = fs::read_link(original)?;
+            let target = fs::read_link(&original)?;
             fs::write(&backup_path, target.to_string_lossy().as_bytes())?;
             ("symlink".into(), fs::metadata(&backup_path)?.len())
         } else if metadata.is_dir() {
-            copy_dir_recursive(original, &backup_path)?;
-            ("directory".into(), dir_size(original)?)
+            copy_dir_recursive(&original, &backup_path)?;
+            ("directory".into(), dir_size(&original)?)
         } else {
-            fs::copy(original, &backup_path)?;
-            ("file".into(), fs::metadata(original)?.len())
+            fs::copy(&original, &backup_path)?;
+            ("file".into(), fs::metadata(&original)?.len())
         };
 
         self.entries.push(BackupEntry {
-            original_path: display_path(original),
+            original_path: display_path(&original),
             backup_path: display_path(&backup_path),
             kind,
             size_bytes,
@@ -1081,10 +1131,11 @@ impl BackupBuilder {
 fn parse_asset_id(asset_id: &str) -> Result<(AssetType, String), String> {
     let mut parts = asset_id.splitn(2, ':');
     let prefix = parts.next().unwrap_or_default();
-    let name = parts.next().unwrap_or_default().trim();
+    let name = parts.next().unwrap_or_default();
     if name.is_empty() {
         return Err(format!("Invalid asset ID '{}': missing name.", asset_id));
     }
+    validate_single_path_component(name, "asset name")?;
     let asset_type = match prefix {
         "skill" => AssetType::Skill,
         "command" => AssetType::Command,
@@ -1223,15 +1274,45 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> io::Result<()> {
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(source)? {
         let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Symlinks are forbidden inside copied directories: {}",
+                    display_path(&entry.path())
+                ),
+            ));
+        }
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
-        if source_path.is_dir() {
+        if file_type.is_dir() {
             copy_dir_recursive(&source_path, &destination_path)?;
         } else {
             if let Some(parent) = destination_path.parent() {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(&source_path, &destination_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_tree_has_no_symlinks(root: &Path) -> io::Result<()> {
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Symlinks are forbidden inside copied directories: {}",
+                    display_path(&entry.path())
+                ),
+            ));
+        }
+        if file_type.is_dir() {
+            ensure_tree_has_no_symlinks(&entry.path())?;
         }
     }
     Ok(())
@@ -1260,8 +1341,18 @@ fn collect_files(root: &Path, current: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = vec![];
     for entry in fs::read_dir(current)? {
         let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "Symlinks are forbidden inside verified directories: {}",
+                    display_path(&entry.path())
+                ),
+            ));
+        }
         let path = entry.path();
-        if path.is_dir() {
+        if file_type.is_dir() {
             files.extend(collect_files(root, &path)?);
         } else {
             files.push(path.strip_prefix(root).unwrap_or(&path).to_path_buf());

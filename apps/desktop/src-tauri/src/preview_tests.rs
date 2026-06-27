@@ -192,6 +192,24 @@ fn preview_restore_reads_manifest_paths_without_restoring_files() {
 }
 
 #[test]
+fn preview_restore_rejects_unsafe_backup_id_without_path_traversal() {
+    let home = TempProbe::new("restore-unsafe-id");
+    let preview = preview_restore_for_home(
+        &home.path,
+        PreviewRestoreInput {
+            backup_id: "../outside".into(),
+        },
+    );
+
+    assert!(!preview.can_apply);
+    assert!(preview
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("safe path component")));
+    assert!(!home.path.join(".my-agent-assets").exists());
+}
+
+#[test]
 fn preview_sync_returns_git_plan_without_writes() {
     let probe = TempProbe::new("sync");
     let before = probe.snapshot();
