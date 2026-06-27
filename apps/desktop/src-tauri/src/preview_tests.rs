@@ -4,8 +4,9 @@ use super::contracts::{
     SyncDirection,
 };
 use super::preview::{
-    import_preview_id, preview_conflicts, preview_import, preview_mount, preview_restore,
-    preview_restore_for_home, preview_sync, restore_preview_id, sync_preview_id,
+    import_preview_id, preview_conflicts, preview_conflicts_for_home, preview_import,
+    preview_mount, preview_restore, preview_restore_for_home, preview_sync, restore_preview_id,
+    sync_preview_id,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -40,12 +41,49 @@ impl TempProbe {
         entries.sort();
         entries
     }
+
+    fn write(&self, relative: &str, contents: &str) {
+        let path = self.path.join(relative);
+        fs::create_dir_all(path.parent().expect("fixture path should have parent"))
+            .expect("fixture parent should be created");
+        fs::write(path, contents).expect("fixture should be written");
+    }
 }
 
 impl Drop for TempProbe {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+fn snapshot_tree(root: &std::path::Path) -> Vec<(PathBuf, Vec<u8>)> {
+    fn visit(
+        root: &std::path::Path,
+        current: &std::path::Path,
+        result: &mut Vec<(PathBuf, Vec<u8>)>,
+    ) {
+        let mut entries = fs::read_dir(current)
+            .expect("snapshot directory should be readable")
+            .map(|entry| entry.expect("snapshot entry should be readable"))
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                visit(root, &path, result);
+            } else {
+                result.push((
+                    path.strip_prefix(root)
+                        .expect("snapshot path should stay below root")
+                        .to_path_buf(),
+                    fs::read(path).expect("snapshot file should be readable"),
+                ));
+            }
+        }
+    }
+    let mut result = vec![];
+    visit(root, root, &mut result);
+    result
 }
 
 #[test]
@@ -123,6 +161,39 @@ fn preview_conflicts_synthesizes_allowed_resolutions_without_writes() {
     assert_eq!(conflicts.len(), 2);
     assert_eq!(conflicts[0].name, "review");
     assert_eq!(conflicts[0].allowed_resolutions.len(), 3);
+}
+
+#[test]
+fn preview_conflicts_reads_exact_mcp_json_and_omits_identical_content_without_writes() {
+    let home = TempProbe::new("real-conflicts");
+    home.write(
+        ".claude.json",
+        r#"{"mcpServers":{"PostgreSQL":{"command":"incoming","args":["--schema","public"]},"SQLite":{"command":"same"}}}"#,
+    );
+    home.write(
+        ".my-agent-assets/assets/mcps/PostgreSQL.json",
+        r#"{"command":"existing","args":["--read-only"]}"#,
+    );
+    home.write(
+        ".my-agent-assets/assets/mcps/SQLite.json",
+        r#"{"command":"same"}"#,
+    );
+    let before = snapshot_tree(&home.path);
+
+    let conflicts = preview_conflicts_for_home(
+        &home.path,
+        PreviewConflictsInput {
+            scope: ScanScope::User,
+            asset_ids: vec!["mcp:PostgreSQL".into(), "mcp:SQLite".into()],
+        },
+    );
+
+    assert_eq!(snapshot_tree(&home.path), before);
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].name, "PostgreSQL");
+    assert!(conflicts[0].existing_content.contains("\"existing\""));
+    assert!(conflicts[0].incoming_content.contains("\"incoming\""));
+    assert!(!conflicts[0].existing_content.contains("\"incoming\""));
 }
 
 #[test]

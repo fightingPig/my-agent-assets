@@ -250,6 +250,11 @@ async function main() {
           width: viewport.width,
           height: viewport.height,
         });
+        await delay(120);
+        await evaluate(
+          client,
+          "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+        );
         await client.send("Runtime.evaluate", { expression: "window.scrollTo(0, 0)" });
         const screenshot = await client.send("Page.captureScreenshot", {
           format: "png",

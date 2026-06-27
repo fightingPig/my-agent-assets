@@ -1,6 +1,7 @@
 use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, AssetType, BackupManifestSummary,
-    ImportApplyInput, MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
+    ConflictApplyInput, ConflictResolution, ConflictResolutionChoice, ImportApplyInput,
+    MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
 };
 use crate::path_utils::{
     display_path, expand_tilde, guard_existing_path, guard_write_path, home_dir, modified_time_iso,
@@ -33,6 +34,48 @@ pub fn import_apply_command(input: ImportApplyInput) -> ApplyResult {
 pub fn import_apply_for_home(home: &Path, input: ImportApplyInput) -> ApplyResult {
     let mut result = ImportApplyRunner::new(home, input);
     result.run()
+}
+
+#[tauri::command]
+pub fn conflict_apply_command(input: ConflictApplyInput) -> ApplyResult {
+    match home_dir() {
+        Some(home) => conflict_apply_for_home(&home, input),
+        None => ApplyResult {
+            mode: input.mode,
+            ok: false,
+            preview_id: input.preview_id,
+            backup: None,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec!["Could not resolve HOME for conflict apply.".into()],
+        },
+    }
+}
+
+pub fn conflict_apply_for_home(home: &Path, input: ConflictApplyInput) -> ApplyResult {
+    if let Err(error) = validate_conflict_apply_input(&input) {
+        return ApplyResult {
+            mode: input.mode,
+            ok: false,
+            preview_id: input.preview_id,
+            backup: None,
+            steps: vec![],
+            warnings: vec![],
+            errors: vec![error],
+        };
+    }
+
+    import_apply_for_home(
+        home,
+        ImportApplyInput {
+            preview_id: input.preview_id,
+            mode: input.mode,
+            scope: input.scope,
+            asset_ids: input.asset_ids,
+            conflict_resolutions: input.conflict_resolutions,
+            backup_before_apply: input.backup_before_apply,
+        },
+    )
 }
 
 #[tauri::command]
@@ -117,14 +160,59 @@ impl<'a> ImportApplyRunner<'a> {
         }
 
         for asset_id in self.input.asset_ids.clone() {
-            let intent = match ImportIntent::from_asset_id(self.home, &self.input.scope, &asset_id)
-            {
-                Ok(intent) => intent,
-                Err(error) => {
-                    self.push_failed_step(&asset_id, "解析资产 ID", error, vec![]);
-                    continue;
+            let resolution = self.resolution_for(&asset_id).cloned();
+            if matches!(
+                resolution.as_ref().map(|choice| &choice.resolution),
+                Some(ConflictResolution::Skip)
+            ) {
+                self.steps.push(ApplyStepResult {
+                    step_id: format!("skip-conflict-{}", sanitize_step_id(&asset_id)),
+                    kind: PlanStepKind::Import,
+                    label: format!("跳过冲突 {}", asset_id),
+                    status: ApplyStepStatus::Skipped,
+                    message: "Conflict resolution is skip; no files were written.".into(),
+                    affected_paths: vec![],
+                });
+                continue;
+            }
+
+            let mut intent =
+                match ImportIntent::from_asset_id(self.home, &self.input.scope, &asset_id) {
+                    Ok(intent) => intent,
+                    Err(error) => {
+                        self.push_failed_step(&asset_id, "解析资产 ID", error, vec![]);
+                        continue;
+                    }
+                };
+            if let Some(choice) = resolution.as_ref() {
+                if choice.resolution == ConflictResolution::Rename {
+                    let rename_to = choice
+                        .rename_to
+                        .as_deref()
+                        .expect("rename input was validated before runner creation");
+                    if let Err(error) = intent.rename_destination(rename_to) {
+                        self.push_failed_step(
+                            &asset_id,
+                            "校验重命名",
+                            error,
+                            vec![display_path(&intent.destination)],
+                        );
+                        continue;
+                    }
+                    if intent.destination.exists() {
+                        self.push_failed_step(
+                            &asset_id,
+                            "校验重命名目标",
+                            format!(
+                                "Rename target already exists: {}",
+                                display_path(&intent.destination)
+                            ),
+                            vec![display_path(&intent.destination)],
+                        );
+                        continue;
+                    }
                 }
-            };
+            }
             if let Err(error) = intent.validate(self.home) {
                 self.push_failed_step(
                     &asset_id,
@@ -204,6 +292,12 @@ impl<'a> ImportApplyRunner<'a> {
         false
     }
 
+    fn resolution_for(&self, asset_id: &str) -> Option<&ConflictResolutionChoice> {
+        self.input.conflict_resolutions.iter().find(|choice| {
+            choice.conflict_id == asset_id || choice.conflict_id == format!("conflict:{}", asset_id)
+        })
+    }
+
     fn apply_intent(&mut self, intent: &ImportIntent) -> io::Result<()> {
         match intent.asset_type {
             AssetType::Skill | AssetType::Command => self.apply_filesystem_intent(intent),
@@ -257,11 +351,11 @@ impl<'a> ImportApplyRunner<'a> {
         let server = config
             .get("mcpServers")
             .and_then(Value::as_object)
-            .and_then(|servers| servers.get(&intent.name))
+            .and_then(|servers| servers.get(&intent.source_name))
             .ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::NotFound,
-                    format!("mcpServers.{} was not found.", intent.name),
+                    format!("mcpServers.{} was not found.", intent.source_name),
                 )
             })?;
 
@@ -936,6 +1030,7 @@ struct ImportIntent {
     asset_id: String,
     asset_type: AssetType,
     name: String,
+    source_name: String,
     source: PathBuf,
     destination: PathBuf,
 }
@@ -985,6 +1080,7 @@ impl ImportIntent {
         Ok(Self {
             asset_id: asset_id.into(),
             asset_type,
+            source_name: name.clone(),
             name,
             source,
             destination,
@@ -999,6 +1095,76 @@ impl ImportIntent {
         guard_write_path(home, &self.destination)?;
         Ok(())
     }
+
+    fn rename_destination(&mut self, rename_to: &str) -> Result<(), String> {
+        validate_single_path_component(rename_to, "Conflict rename target")
+            .map_err(|error| error.to_string())?;
+        self.name = rename_to.into();
+        self.destination = match self.asset_type {
+            AssetType::Skill if self.source.is_dir() => self
+                .destination
+                .parent()
+                .expect("skill destination should have a parent")
+                .join(rename_to),
+            AssetType::Skill | AssetType::Command => self
+                .destination
+                .parent()
+                .expect("asset destination should have a parent")
+                .join(format!("{}.md", rename_to)),
+            AssetType::Mcp => self
+                .destination
+                .parent()
+                .expect("MCP destination should have a parent")
+                .join(format!("{}.json", rename_to)),
+        };
+        Ok(())
+    }
+}
+
+fn validate_conflict_apply_input(input: &ConflictApplyInput) -> Result<(), String> {
+    if input.asset_ids.is_empty() {
+        return Err("Conflict apply requires at least one asset ID.".into());
+    }
+    if input.conflict_resolutions.len() != input.asset_ids.len() {
+        return Err("Conflict apply requires exactly one resolution for every asset.".into());
+    }
+
+    for asset_id in &input.asset_ids {
+        parse_asset_id(asset_id)?;
+        let matches = input
+            .conflict_resolutions
+            .iter()
+            .filter(|choice| {
+                choice.conflict_id == *asset_id
+                    || choice.conflict_id == format!("conflict:{}", asset_id)
+            })
+            .collect::<Vec<_>>();
+        if matches.len() != 1 {
+            return Err(format!(
+                "Conflict apply requires one unambiguous resolution for {}.",
+                asset_id
+            ));
+        }
+        let choice = matches[0];
+        match choice.resolution {
+            ConflictResolution::Rename => {
+                let rename_to = choice.rename_to.as_deref().ok_or_else(|| {
+                    format!("Rename resolution for {} requires renameTo.", asset_id)
+                })?;
+                validate_single_path_component(rename_to, "Conflict rename target")
+                    .map_err(|error| error.to_string())?;
+            }
+            ConflictResolution::Skip | ConflictResolution::Overwrite => {
+                if choice.rename_to.is_some() {
+                    return Err(format!(
+                        "renameTo is only allowed for rename resolution: {}.",
+                        asset_id
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

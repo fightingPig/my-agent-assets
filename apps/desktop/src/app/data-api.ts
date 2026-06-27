@@ -4,6 +4,7 @@ import type {
   AssetSummary,
   BackupSummary,
   ConflictPreview,
+  ConflictApplyInput,
   DesktopSettings,
   GitStatus,
   ApplyResult,
@@ -194,6 +195,22 @@ export async function importApply(input: ImportApplyInput): Promise<ApplyResult>
     errors: ["import_apply could not run outside the Tauri runtime."],
   };
   const result = await invokeOrFallback<unknown>("import_apply", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
+    ? result as ApplyResult
+    : fallback;
+}
+
+export async function conflictApply(input: ConflictApplyInput): Promise<ApplyResult> {
+  const fallback: ApplyResult = {
+    mode: input.mode,
+    ok: false,
+    previewId: input.previewId,
+    backup: null,
+    steps: [],
+    warnings: [],
+    errors: ["conflict_apply could not run outside the Tauri runtime."],
+  };
+  const result = await invokeOrFallback<unknown>("conflict_apply", { input }, fallback);
   return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
     ? result as ApplyResult
     : fallback;

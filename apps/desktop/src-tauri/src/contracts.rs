@@ -462,6 +462,17 @@ pub struct ImportApplyInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConflictApplyInput {
+    pub preview_id: String,
+    pub mode: ApplyMode,
+    pub scope: ScanScope,
+    pub asset_ids: Vec<String>,
+    pub conflict_resolutions: Vec<ConflictResolutionChoice>,
+    pub backup_before_apply: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MountApplyInput {
     pub preview_id: String,
     pub mode: ApplyMode,
@@ -709,6 +720,30 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<ImportApplyInput>(value).unwrap(),
             input
+        );
+
+        let conflict_input = ConflictApplyInput {
+            preview_id: "preview-conflict-1".into(),
+            mode: ApplyMode::Apply,
+            scope: ScanScope::User,
+            asset_ids: vec!["skill:review".into()],
+            conflict_resolutions: vec![ConflictResolutionChoice {
+                conflict_id: "conflict:skill:review".into(),
+                resolution: ConflictResolution::Overwrite,
+                rename_to: None,
+            }],
+            backup_before_apply: true,
+        };
+        let conflict_value = wire_value(&conflict_input);
+        assert_eq!(conflict_value["previewId"], json!("preview-conflict-1"));
+        assert_eq!(conflict_value["mode"], json!("apply"));
+        assert_eq!(
+            conflict_value["conflictResolutions"][0]["resolution"],
+            json!("overwrite")
+        );
+        assert_eq!(
+            serde_json::from_value::<ConflictApplyInput>(conflict_value).unwrap(),
+            conflict_input
         );
     }
 

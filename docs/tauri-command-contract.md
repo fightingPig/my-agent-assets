@@ -230,6 +230,23 @@ Current behavior:
 - Existing target paths are backed up before replacement when `backupBeforeApply` is true.
 - MCP compile writes the selected server into the target file's top-level `mcpServers.<name>` field while preserving existing JSON object fields and other MCP servers.
 
+### `conflict_apply`
+
+- **Purpose:** Apply previewed per-asset conflict decisions.
+- **Input:** `ConflictApplyInput { previewId, mode, scope, assetIds, conflictResolutions, backupBeforeApply }`.
+- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
+- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
+- **Consumer:** Conflict Resolver.
+- **Status:** Implemented and registered.
+
+Current behavior:
+
+- Uses the `preview_import` identity generated from the same scope, selected assets, and conflict decisions.
+- Requires exactly one `skip`, `rename`, or `overwrite` decision for every selected asset.
+- Rename targets are validated as a single safe path component and must not already exist.
+- Overwrite uses import backup-before-replacement behavior.
+- MCP conflict previews read and display the exact existing asset JSON and incoming top-level `mcpServers.<name>` object.
+
 ### `restore_apply`
 
 - **Purpose:** Restore paths from a backup manifest and optionally back up current state before replacement.
@@ -309,4 +326,4 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.

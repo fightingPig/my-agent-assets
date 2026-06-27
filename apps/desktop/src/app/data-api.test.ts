@@ -168,6 +168,42 @@ describe("read-only desktop data api", () => {
     invoke.mockResolvedValueOnce({
       mode: "planOnly",
       ok: true,
+      previewId: "preview-conflict-1",
+      backup: null,
+      steps: [],
+      warnings: [],
+      errors: [],
+    });
+    await api.conflictApply({
+      previewId: "preview-conflict-1",
+      mode: "planOnly",
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [{
+        conflictId: "conflict:skill:review",
+        resolution: "overwrite",
+        renameTo: null,
+      }],
+      backupBeforeApply: true,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("conflict_apply", {
+      input: {
+        previewId: "preview-conflict-1",
+        mode: "planOnly",
+        scope: { kind: "user" },
+        assetIds: ["skill:review"],
+        conflictResolutions: [{
+          conflictId: "conflict:skill:review",
+          resolution: "overwrite",
+          renameTo: null,
+        }],
+        backupBeforeApply: true,
+      },
+    });
+
+    invoke.mockResolvedValueOnce({
+      mode: "planOnly",
+      ok: true,
       previewId: "preview-mount-1",
       backup: null,
       steps: [],
@@ -284,6 +320,22 @@ describe("read-only desktop data api", () => {
       previewId: "preview-import-1",
       warnings: ["Tauri runtime is unavailable; import apply skipped."],
       errors: ["import_apply could not run outside the Tauri runtime."],
+    });
+    await expect(api.conflictApply({
+      previewId: "preview-conflict-1",
+      mode: "apply",
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [{
+        conflictId: "conflict:skill:review",
+        resolution: "overwrite",
+        renameTo: null,
+      }],
+      backupBeforeApply: true,
+    })).resolves.toMatchObject({
+      ok: false,
+      previewId: "preview-conflict-1",
+      errors: ["conflict_apply could not run outside the Tauri runtime."],
     });
     await expect(api.mountApply({
       previewId: "preview-mount-1",

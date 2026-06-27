@@ -34,6 +34,7 @@ const {
   previewSync,
   syncApply,
   importApply,
+  conflictApply,
   previewMount,
   previewConflicts,
   previewRestore,
@@ -51,6 +52,7 @@ const {
   previewSync: vi.fn(),
   syncApply: vi.fn(),
   importApply: vi.fn(),
+  conflictApply: vi.fn(),
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
   previewRestore: vi.fn(),
@@ -70,6 +72,7 @@ vi.mock("../app/data-api", () => ({
   previewSync,
   syncApply,
   importApply,
+  conflictApply,
   previewMount,
   previewConflicts,
   previewRestore,
@@ -135,6 +138,24 @@ beforeEach(() => {
         status: "skipped",
         message: "Plan-only mode: 1 asset would be imported.",
         affectedPaths: ["~/.my-agent-assets/assets/skills/live-scan"],
+      },
+    ],
+    warnings: [],
+    errors: [],
+  });
+  conflictApply.mockResolvedValue({
+    mode: "planOnly",
+    ok: true,
+    previewId: "preview:import:test",
+    backup: null,
+    steps: [
+      {
+        stepId: "plan-conflict-review",
+        kind: "import",
+        label: "预览冲突处理",
+        status: "skipped",
+        message: "Plan-only mode: no files were written.",
+        affectedPaths: [],
       },
     ],
     warnings: [],
@@ -472,7 +493,7 @@ describe("read-only UI integration", () => {
 
     rerender(<ConflictResolverPage />);
     await waitFor(() => expect(screen.getByText("Incoming preview content for review")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "覆盖" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "执行冲突处理" })).toBeDisabled();
 
     rerender(<BackupRestorePage />);
     expect(await screen.findByText("/tmp/restore/one")).toBeInTheDocument();
@@ -570,7 +591,7 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(previewMount).toHaveBeenCalledTimes(2));
   });
 
-  it("updates Conflict Resolver local resolution preview without calling apply wrappers", async () => {
+  it("updates Conflict Resolver decisions and requires a plan plus typed confirmation", async () => {
     previewConflicts.mockResolvedValue([
       conflictPreviewFixture("conflict:skill:review", "review", "skill"),
     ]);
@@ -587,9 +608,30 @@ describe("read-only UI integration", () => {
     expect(screen.getByText(/review 将以新名称导入/)).toBeInTheDocument();
     expect(screen.getByText(/新名称：review-imported/)).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: "跳过" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重命名" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "覆盖" })).toBeDisabled();
+    await waitFor(() => expect(previewImport).toHaveBeenLastCalledWith({
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [{
+        conflictId: "conflict:skill:review",
+        resolution: "rename",
+        renameTo: "review-imported",
+      }],
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "生成处理计划" }));
+    await waitFor(() => expect(conflictApply).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "planOnly",
+      assetIds: ["skill:review"],
+    })));
+    const applyButton = screen.getByRole("button", { name: "执行冲突处理" });
+    expect(applyButton).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(applyButton).toBeEnabled();
+    fireEvent.click(applyButton);
+    await waitFor(() => expect(conflictApply).toHaveBeenLastCalledWith(expect.objectContaining({
+      mode: "apply",
+      assetIds: ["skill:review"],
+    })));
     expect(importApply).not.toHaveBeenCalled();
     expect(mountApply).not.toHaveBeenCalled();
     expect(restoreApply).not.toHaveBeenCalled();

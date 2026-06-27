@@ -18,6 +18,7 @@ import {
   type GitStatus,
   type ImportApplyInput,
   type ApplyResult,
+  type ConflictApplyInput,
   type PreviewSyncInput,
   type SyncApplyInput,
   type SyncPreview,
@@ -144,6 +145,24 @@ describe("Tauri command contracts", () => {
     expect(input.mode).toBe("apply");
     expect(input.direction).toBe("push");
     expectTypeOf(input).toMatchTypeOf<SyncApplyInput>();
+  });
+
+  it("keeps conflict apply tied to previewed per-asset decisions", () => {
+    const input = {
+      previewId: "preview:import:conflicts",
+      mode: "apply",
+      scope: { kind: "user" },
+      assetIds: ["skill:review"],
+      conflictResolutions: [{
+        conflictId: "conflict:skill:review",
+        resolution: "rename",
+        renameTo: "review-imported",
+      }],
+      backupBeforeApply: true,
+    } satisfies ConflictApplyInput;
+
+    expect(input.conflictResolutions[0].resolution).toBe("rename");
+    expectTypeOf(input).toMatchTypeOf<ConflictApplyInput>();
   });
 
   it("keeps ApplyResult explicit about backup, step outcomes, warnings, and errors", () => {

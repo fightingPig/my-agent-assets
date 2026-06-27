@@ -6,12 +6,13 @@ use crate::contracts::{
     SyncDirection, SyncPreview,
 };
 use crate::path_utils::{
-    display_path, guard_existing_path, home_dir, validate_single_path_component,
+    display_path, expand_tilde, guard_existing_path, home_dir, validate_single_path_component,
 };
 use crate::read_only;
 use serde::Deserialize;
+use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn preview_import_command(input: PreviewImportInput) -> ImportPreview {
     preview_import(input)
@@ -22,7 +23,10 @@ pub fn preview_mount_command(input: PreviewMountInput) -> MountPreview {
 }
 
 pub fn preview_conflicts_command(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
-    preview_conflicts(input)
+    match home_dir() {
+        Some(home) => preview_conflicts_for_home(&home, input),
+        None => preview_conflicts(input),
+    }
 }
 
 pub fn preview_restore_command(input: PreviewRestoreInput) -> RestorePreview {
@@ -146,6 +150,21 @@ pub fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
         .asset_ids
         .iter()
         .map(|asset_id| conflict_from_id(asset_id))
+        .collect()
+}
+
+pub fn preview_conflicts_for_home(
+    home: &Path,
+    input: PreviewConflictsInput,
+) -> Vec<ConflictPreview> {
+    input
+        .asset_ids
+        .iter()
+        .filter_map(|asset_id| {
+            real_conflict_from_id(home, &input.scope, asset_id)
+                .ok()
+                .flatten()
+        })
         .collect()
 }
 
@@ -520,6 +539,100 @@ fn conflict_from_id(asset_id: &str) -> ConflictPreview {
             ConflictResolution::Overwrite,
         ],
     }
+}
+
+fn real_conflict_from_id(
+    home: &Path,
+    scope: &ScanScope,
+    asset_id: &str,
+) -> Result<Option<ConflictPreview>, String> {
+    let (asset_type, name) = parse_asset_id(asset_id);
+    validate_single_path_component(&name, "Conflict asset name")?;
+    let asset_root = home.join(".my-agent-assets").join("assets");
+    let runtime_root = match scope {
+        ScanScope::User => home.to_path_buf(),
+        ScanScope::Project { project_path } => expand_tilde(project_path, home),
+        ScanScope::Custom { path } => expand_tilde(path, home),
+    };
+
+    let (existing_path, incoming_path) = match asset_type {
+        AssetType::Skill => (
+            preferred_skill_path(&asset_root.join("skills"), &name),
+            preferred_skill_path(&runtime_root.join(".claude").join("skills"), &name),
+        ),
+        AssetType::Command => (
+            asset_root.join("commands").join(format!("{}.md", name)),
+            runtime_root
+                .join(".claude")
+                .join("commands")
+                .join(format!("{}.md", name)),
+        ),
+        AssetType::Mcp => (
+            asset_root.join("mcps").join(format!("{}.json", name)),
+            match scope {
+                ScanScope::User => runtime_root.join(".claude.json"),
+                ScanScope::Project { .. } | ScanScope::Custom { .. } => {
+                    runtime_root.join(".mcp.json")
+                }
+            },
+        ),
+    };
+
+    let existing_content = read_conflict_content(home, &existing_path, &asset_type, &name, false)?;
+    let incoming_content = read_conflict_content(home, &incoming_path, &asset_type, &name, true)?;
+    if existing_content == incoming_content {
+        return Ok(None);
+    }
+
+    Ok(Some(ConflictPreview {
+        id: format!("conflict:{}", asset_id),
+        asset_id: asset_id.into(),
+        asset_type,
+        name,
+        reason: "同名资产内容不同".into(),
+        existing_content,
+        incoming_content,
+        allowed_resolutions: vec![
+            ConflictResolution::Skip,
+            ConflictResolution::Rename,
+            ConflictResolution::Overwrite,
+        ],
+    }))
+}
+
+fn preferred_skill_path(root: &Path, name: &str) -> PathBuf {
+    let directory = root.join(name);
+    if directory.is_dir() {
+        directory.join("SKILL.md")
+    } else {
+        root.join(format!("{}.md", name))
+    }
+}
+
+fn read_conflict_content(
+    home: &Path,
+    path: &Path,
+    asset_type: &AssetType,
+    name: &str,
+    extract_runtime_mcp: bool,
+) -> Result<String, String> {
+    let path = guard_existing_path(home, path).map_err(|error| error.to_string())?;
+    let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    if *asset_type != AssetType::Mcp || !extract_runtime_mcp {
+        if *asset_type == AssetType::Mcp {
+            let value: Value = serde_json::from_str(&content).map_err(|error| error.to_string())?;
+            return serde_json::to_string_pretty(&value).map_err(|error| error.to_string());
+        }
+        return Ok(content);
+    }
+
+    let config: Value = serde_json::from_str(&content).map_err(|error| error.to_string())?;
+    let server = config
+        .get("mcpServers")
+        .and_then(Value::as_object)
+        .and_then(|servers| servers.get(name))
+        .ok_or_else(|| format!("mcpServers.{} was not found.", name))?;
+    serde_json::to_string_pretty(server).map_err(|error| error.to_string())
 }
 
 fn parse_asset_id(asset_id: &str) -> (AssetType, String) {

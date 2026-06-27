@@ -1,12 +1,13 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are implemented.
+This document defines the safety boundary for write/apply commands. `import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are implemented.
 
 ## Scope
 
 Implemented write commands cover:
 
 - Import apply
+- Conflict apply
 - Mount apply
 - Restore apply
 - Sync apply
@@ -56,11 +57,12 @@ The frontend and Rust contract layers define:
 - `BackupManifestSummary`
 - `ApplyResult`
 - `ImportApplyInput`
+- `ConflictApplyInput`
 - `MountApplyInput`
 - `RestoreApplyInput`
 - `SyncApplyInput`
 
-`import_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are registered and use these DTOs.
+`import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are registered and use these DTOs.
 
 ## Backup Rule
 
@@ -208,11 +210,15 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Push executes `git push`
 - Git commands are executed through `std::process::Command` argument arrays, not shell strings
 
-## Still Forbidden
+`conflict_apply` currently supports fake-HOME-tested per-asset conflict decisions:
 
-These operations are still not implemented:
-
-- Conflict apply
+- Uses the deterministic import preview ID for the same scope, asset IDs, and decisions
+- Requires exactly one unambiguous `skip`, `rename`, or `overwrite` decision per asset
+- `skip` writes nothing
+- `rename` validates one safe new name and rejects an already-existing target
+- `overwrite` uses the existing import backup-before-replacement path
+- MCP preview shows the exact existing asset JSON and incoming top-level `mcpServers.<name>` JSON
+- `planOnly` validates paths and decisions without writing
 
 ## Next Implementation Gate
 

@@ -251,6 +251,14 @@ export type ImportApplyInput = {
   conflictResolutions: ConflictResolutionChoice[];
   backupBeforeApply: boolean;
 };
+export type ConflictApplyInput = {
+  previewId: string;
+  mode: ApplyMode;
+  scope: ScanScope;
+  assetIds: string[];
+  conflictResolutions: ConflictResolutionChoice[];
+  backupBeforeApply: boolean;
+};
 export type MountApplyInput = {
   previewId: string;
   mode: ApplyMode;

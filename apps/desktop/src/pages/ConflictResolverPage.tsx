@@ -1,7 +1,8 @@
 import { AlertTriangle, Blocks, BookOpen } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { previewConflicts } from "../app/data-api";
-import type { ConflictPreview, ConflictResolution, ConflictResolutionChoice } from "../app/contracts";
+import { conflictApply, previewConflicts, previewImport } from "../app/data-api";
+import type { ApplyResult, ConflictPreview, ConflictResolution, ConflictResolutionChoice, ImportPreview } from "../app/contracts";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -37,6 +38,14 @@ export function ConflictResolverPage() {
   const [selectedId, setSelectedId] = useState(conflicts[0].id);
   const [resolutions, setResolutions] = useState<Record<string, ConflictResolution>>({});
   const [previewState, setPreviewState] = useState("预览中");
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
+  const [confirmationValue, setConfirmationValue] = useState("");
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +76,7 @@ export function ConflictResolverPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const selected = items.find((conflict) => conflict.id === selectedId) ?? items[0];
   const selectedResolution = resolutions[selected.id] ?? "skip";
@@ -81,6 +90,94 @@ export function ConflictResolverPage() {
   );
   const selectedChoice = resolutionChoices.find((choice) => choice.conflictId === selected.id);
   const selectedPlan = describeResolution(selectedResolution, selected.name);
+  const assetIds = useMemo(() => items.map((item) => item.assetId), [items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (resolutionChoices.length !== items.length || items.length === 0) return undefined;
+    setPreviewState("生成决策预览中");
+    setPlanResult(null);
+    setOperationError(null);
+    previewImport({
+      scope: { kind: "user" },
+      assetIds,
+      conflictResolutions: resolutionChoices,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setImportPreview(result.canApply ? result : null);
+        setPreviewState(result.canApply ? "决策预览已生成" : "决策预览不可执行");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setImportPreview(null);
+        setOperationError(errorMessage(error));
+        setPreviewState("决策预览失败");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assetIds, items.length, resolutionChoices]);
+
+  const canApply = Boolean(planResult?.ok && importPreview?.previewId);
+
+  const updateResolution = (resolution: ConflictResolution) => {
+    setResolutions((current) => ({ ...current, [selected.id]: resolution }));
+    setApplyResult(null);
+    setConfirmationValue("");
+  };
+
+  const handlePlanConflictApply = async () => {
+    if (!importPreview?.previewId) return;
+    setIsPlanning(true);
+    setOperationError(null);
+    try {
+      const result = await conflictApply({
+        previewId: importPreview.previewId,
+        mode: "planOnly",
+        scope: { kind: "user" },
+        assetIds,
+        conflictResolutions: resolutionChoices,
+        backupBeforeApply: true,
+      });
+      setPlanResult(result);
+      setPreviewState(result.ok ? "冲突处理计划已生成" : "冲突处理计划失败");
+    } catch (error) {
+      setPlanResult(null);
+      setOperationError(errorMessage(error));
+      setPreviewState("冲突处理计划失败");
+    } finally {
+      setIsPlanning(false);
+    }
+  };
+
+  const handleApplyConflicts = async () => {
+    if (!canApply || !importPreview?.previewId) return;
+    setIsApplying(true);
+    setOperationError(null);
+    try {
+      const result = await conflictApply({
+        previewId: importPreview.previewId,
+        mode: "apply",
+        scope: { kind: "user" },
+        assetIds,
+        conflictResolutions: resolutionChoices,
+        backupBeforeApply: true,
+      });
+      setApplyResult(result);
+      setPreviewState(result.ok ? "冲突处理已执行" : "冲突处理失败");
+      if (result.ok) {
+        setConfirmationValue("");
+        setRefreshKey((current) => current + 1);
+      }
+    } catch (error) {
+      setApplyResult(null);
+      setOperationError(errorMessage(error));
+      setPreviewState("冲突处理失败");
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   return (
     <div className="master-detail-workspace conflict-workspace">
@@ -95,13 +192,18 @@ export function ConflictResolverPage() {
         <div className="resolution-options">{(["skip", "rename", "overwrite"] as ConflictResolution[]).map((resolution) => {
           const option = describeResolution(resolution, selected.name);
           const disabled = !selected.allowedResolutions.includes(resolution);
-          return <button aria-pressed={selectedResolution === resolution} className={selectedResolution === resolution ? "selected" : ""} data-no-drag="true" disabled={disabled} key={resolution} onClick={() => setResolutions((current) => ({ ...current, [selected.id]: resolution }))} style={NO_DRAG_REGION_STYLE} type="button"><strong>{option.label}</strong><span>{option.description}</span></button>;
+          return <button aria-pressed={selectedResolution === resolution} className={selectedResolution === resolution ? "selected" : ""} data-no-drag="true" disabled={disabled} key={resolution} onClick={() => updateResolution(resolution)} style={NO_DRAG_REGION_STYLE} type="button"><strong>{option.label}</strong><span>{option.description}</span></button>;
         })}</div>
-        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>处理计划预览</strong><span>{selectedPlan.planText}{selectedChoice?.renameTo ? `；新名称：${selectedChoice.renameTo}` : ""}。当前 {resolutionChoices.length} 个冲突均只记录本地决策，不执行写入。</span></div></div>
-        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">跳过</StaticActionButton><StaticActionButton className="asset-secondary-action">重命名</StaticActionButton><StaticActionButton className="asset-business-action">覆盖</StaticActionButton></div>
+        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>处理计划预览</strong><span>{selectedPlan.planText}{selectedChoice?.renameTo ? `；新名称：${selectedChoice.renameTo}` : ""}。共 {resolutionChoices.length} 个冲突；覆盖或重命名前将创建本地备份。</span></div></div>
+        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出决策</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !importPreview?.previewId} onClick={handlePlanConflictApply} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成处理计划"}</button></div>
+        <ApplyConfirmationPanel actionLabel="执行冲突处理" canApply={canApply} confirmationValue={confirmationValue} description="会按逐项决策跳过、重命名或覆盖资产；后端会校验 previewId、路径并在破坏性变更前备份。" isApplying={isApplying} onApply={handleApplyConflicts} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行冲突处理" />
       </section>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法调用冲突处理操作。";
 }
 
 function toConflictItem(conflict: ConflictPreview): (typeof conflicts)[number] {
