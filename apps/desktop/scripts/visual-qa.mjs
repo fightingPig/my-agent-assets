@@ -200,9 +200,14 @@ async function main() {
       "--disable-default-apps",
       "--disable-extensions",
       "--disable-features=Translate",
+      "--disable-gpu",
       "--disable-sync",
+      "--disable-threaded-animation",
+      "--disable-threaded-scrolling",
       "--metrics-recording-only",
       "--no-first-run",
+      "--run-all-compositor-stages-before-draw",
+      "--window-size=1440,900",
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${chromeProfile}`,
       "about:blank",
@@ -241,6 +246,10 @@ async function main() {
           deviceScaleFactor: 1,
           mobile: false,
         });
+        await client.send("Emulation.setVisibleSize", {
+          width: viewport.width,
+          height: viewport.height,
+        });
         const url = `${viteUrl}/visual-qa.html?platform=macos&page=${encodeURIComponent(page.id)}`;
         await clearQaReport(client);
         await client.send("Page.navigate", { url });
@@ -256,18 +265,18 @@ async function main() {
           "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
         );
         await client.send("Runtime.evaluate", { expression: "window.scrollTo(0, 0)" });
-        const screenshot = await client.send("Page.captureScreenshot", {
+        const screenshotOptions = {
           format: "png",
           fromSurface: true,
-          captureBeyondViewport: true,
-          clip: {
-            x: 0,
-            y: 0,
-            width: viewport.width,
-            height: viewport.height,
-            scale: 1,
-          },
-        });
+          captureBeyondViewport: false,
+        };
+        await client.send("Page.captureScreenshot", screenshotOptions);
+        await delay(50);
+        await evaluate(
+          client,
+          "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+        );
+        const screenshot = await client.send("Page.captureScreenshot", screenshotOptions);
         const screenshotPath = join(artifactDir, `${page.id}-${viewport.width}x${viewport.height}-macos.png`);
         await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
         results.push({ ...report, screenshotPath });
