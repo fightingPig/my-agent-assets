@@ -27,6 +27,10 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   searchPlaceholder: string;
   actionLabel: string;
   stateLabel?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  usageLabel?: string;
+  usageCountLabel?: string;
   onOpenDetail?: (item: T) => void;
   renderInspector: (item: T) => ReactNode;
 };
@@ -59,6 +63,10 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   searchPlaceholder,
   actionLabel,
   stateLabel,
+  emptyTitle,
+  emptyDescription,
+  usageLabel = "挂载 / 使用摘要",
+  usageCountLabel = "个挂载",
   onOpenDetail,
   renderInspector,
 }: AssetCenterLayoutProps<T>) {
@@ -131,7 +139,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
                   <small>{item.title}</small>
                   <span>{item.category} · {item.updated}</span>
                 </span>
-                <span className="asset-usage-count">{item.mounts.length} 个挂载</span>
+                <span className="asset-usage-count">{item.mounts.length} {usageCountLabel}</span>
                 <span className={`asset-status ${item.statusTone}`}>{item.status}</span>
                 <ChevronRight className="asset-row-chevron" size={15} />
               </button>
@@ -140,8 +148,8 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
           {visibleItems.length === 0 && (
             <div className="asset-empty-state">
               <Search size={22} />
-              <strong>没有匹配的{itemLabel}</strong>
-              <span>调整搜索关键词或状态筛选。</span>
+              <strong>{items.length === 0 && emptyTitle ? emptyTitle : `没有匹配的${itemLabel}`}</strong>
+              <span>{items.length === 0 && emptyDescription ? emptyDescription : "调整搜索关键词或状态筛选。"}</span>
             </div>
           )}
         </div>
@@ -165,7 +173,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
                 { label: "来源路径", value: selectedItem.path },
                 { label: "最近更新", value: selectedItem.updated },
               ]} />
-              <InspectorSection title={`挂载 / 使用摘要 · ${selectedItem.mounts.length}`}>
+              <InspectorSection title={`${usageLabel} · ${selectedItem.mounts.length}`}>
                 {selectedItem.mounts.length > 0
                   ? <InspectorTags tags={selectedItem.mounts} />
                   : <p className="asset-muted-copy">当前没有挂载目标。</p>}

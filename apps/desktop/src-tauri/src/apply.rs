@@ -525,7 +525,7 @@ impl<'a> RestoreApplyRunner<'a> {
             );
             return self.result();
         }
-        if PathBuf::from(&manifest.runtime_root) != self.home {
+        if Path::new(&manifest.runtime_root) != self.home {
             self.push_failed_step(
                 "校验备份清单",
                 "Backup manifest runtimeRoot does not match resolved HOME.",

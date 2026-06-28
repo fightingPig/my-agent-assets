@@ -6,6 +6,8 @@ import {
   ASSET_STATUSES,
   ASSET_TYPES,
   CONFLICT_RESOLUTIONS,
+  CODEX_MCP_TRANSPORTS,
+  CODEX_SCOPES,
   DENSITY_PREFERENCES,
   LOG_LEVELS,
   PLAN_STEP_KINDS,
@@ -30,6 +32,8 @@ describe("Tauri command contracts", () => {
     expect(ASSET_STATUSES).toEqual(["ready", "mounted", "unmounted", "conflict", "invalid"]);
     expect(PROJECT_STATUSES).toEqual(["ready", "changed", "needsSync", "invalid"]);
     expect(RUNTIME_SCOPES).toEqual(["user", "local", "project"]);
+    expect(CODEX_SCOPES).toEqual(["global", "project", "system"]);
+    expect(CODEX_MCP_TRANSPORTS).toEqual(["stdio", "streamableHttp", "unknown"]);
     expect(CONFLICT_RESOLUTIONS).toEqual(["skip", "rename", "overwrite"]);
     expect(PLAN_STEP_KINDS).toEqual(["check", "import", "mount", "compileMcp", "backup", "restore", "git", "settings"]);
     expect(RISK_LEVELS).toEqual(["none", "low", "medium", "high"]);

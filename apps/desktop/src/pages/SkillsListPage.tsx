@@ -1,8 +1,9 @@
 import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listAssets } from "../app/data-api";
-import type { AssetSummary } from "../app/contracts";
+import { listAssets, listCodexSkills } from "../app/data-api";
+import type { AssetSummary, CodexSkillSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
+import type { AssetProvider } from "../app/provider";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -81,50 +82,99 @@ const staticSkills: readonly SkillItem[] = [
 ];
 
 type AssetListPageProps = {
+  demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  provider?: AssetProvider;
 };
 
-export function SkillsListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
-  const [items, setItems] = useState<readonly SkillItem[]>(staticSkills);
+export function SkillsListPage({
+  demoMode = false,
+  onOpenAssetDetail,
+  provider = "claude",
+}: AssetListPageProps = {}) {
+  const [items, setItems] = useState<readonly SkillItem[]>(demoMode ? staticSkills : []);
   const [stateLabel, setStateLabel] = useState("读取中");
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setItems(staticSkills);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+
+    setItems([]);
     setStateLabel("读取中");
-    listAssets({ assetType: "skill" })
+    const request = provider === "codex"
+      ? listCodexSkills({ projectPath: null }).then((result) => result.skills.map(toCodexSkillItem))
+      : listAssets({ assetType: "skill" }).then((assets) => assets.map(toSkillItem));
+    request
       .then((assets) => {
         if (cancelled) return;
-        if (Array.isArray(assets) && assets.length > 0) {
-          setItems(assets.map(toSkillItem));
-          setStateLabel("只读真实数据");
-        } else {
-          setItems(staticSkills);
-          setStateLabel("静态预览");
-        }
+        setItems(assets);
+        setStateLabel(assets.length > 0 ? "只读真实数据" : "未发现本地数据");
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setItems(staticSkills);
-        setStateLabel("读取失败，使用静态预览");
+        setItems([]);
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode, provider]);
 
   return (
     <AssetCenterLayout
-      actionLabel="挂载 Skill"
+      actionLabel={provider === "codex" ? "Codex Skill 只读" : "挂载 Skill"}
+      emptyDescription={provider === "codex"
+        ? "请在 ~/.agents/skills、项目 .agents/skills 或 /etc/codex/skills 中添加包含 SKILL.md 的目录。"
+        : "请先扫描或导入 Claude Skill。"}
+      emptyTitle={provider === "codex" ? "未发现 Codex Skills" : "未发现 Skills"}
       itemLabel="Skills"
       items={items}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
       stateLabel={stateLabel}
-      onOpenDetail={onOpenAssetDetail ? (skill) => onOpenAssetDetail(toAssetDetail(skill, "Skill", "SKILL.md 内容预览")) : undefined}
+      usageLabel={provider === "codex" ? "内容特征" : "挂载与使用"}
+      usageCountLabel={provider === "codex" ? "项特征" : "个挂载"}
+      onOpenDetail={provider === "claude" && onOpenAssetDetail
+        ? (skill) => onOpenAssetDetail(toAssetDetail(skill, "Skill", "SKILL.md 内容预览"))
+        : undefined}
       renderInspector={(skill) => (
         <InspectorCode label="SKILL.md 预览">{skill.preview}</InspectorCode>
       )}
     />
   );
+}
+
+function toCodexSkillItem(skill: CodexSkillSummary): SkillItem {
+  const features = [
+    skill.hasScripts ? "scripts/" : null,
+    skill.hasReferences ? "references/" : null,
+    skill.hasAssets ? "assets/" : null,
+    skill.hasOpenaiMetadata ? "agents/openai.yaml" : null,
+  ].filter((value): value is string => Boolean(value));
+  const warningText = skill.warnings.length > 0
+    ? `\n\nWarnings:\n${skill.warnings.map((warning) => `- ${warning}`).join("\n")}`
+    : "";
+  const symlinkText = skill.symlinkTarget ? `\n\nSymlink target: ${skill.symlinkTarget}` : "";
+
+  return {
+    id: `${skill.scope}:${skill.name}:${skill.path}`,
+    name: skill.name,
+    title: skill.name,
+    category: "Codex Skill",
+    summary: skill.description || "本地 Codex Skill",
+    status: skill.warnings.length > 0 ? "需要检查" : "已发现",
+    statusTone: skill.warnings.length > 0 ? "warning" : "success",
+    scope: codexScopeLabel(skill.scope),
+    path: skill.path,
+    icon: BookOpen,
+    updated: skill.updatedAt ?? "未知",
+    mounts: features,
+    preview: `# ${skill.name}\n\n${skill.description || "未提供描述。"}${symlinkText}${warningText}`,
+    searchTerms: [skill.scope, ...features, ...skill.warnings],
+  };
 }
 
 function toAssetDetail(skill: SkillItem, typeLabel: string, previewLabel: string): AssetDetailContext {
@@ -170,4 +220,14 @@ function scopeLabel(scope: AssetSummary["scope"]) {
   if (scope === "user") return "用户级";
   if (scope === "project") return "项目级";
   return "资产中心";
+}
+
+function codexScopeLabel(scope: CodexSkillSummary["scope"]) {
+  if (scope === "global") return "全局";
+  if (scope === "project") return "项目级";
+  return "系统级";
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法读取本地 Skill。";
 }

@@ -14,7 +14,7 @@ afterEach(cleanup);
 
 describe("remaining V1 static pages", () => {
   it("filters projects and updates the selected inspector", () => {
-    render(<ProjectsListPage />);
+    render(<ProjectsListPage demoMode />);
     const inspector = screen.getByRole("complementary", { name: "项目检查器" });
     const projectA = screen.getByRole("option", { name: "project-a" });
     expect(projectA).toHaveAttribute("aria-selected", "true");
@@ -35,18 +35,18 @@ describe("remaining V1 static pages", () => {
   });
 
   it("renders project and asset detail workspaces", () => {
-    const { rerender } = render(<ProjectDetailPage />);
+    const { rerender } = render(<ProjectDetailPage demoMode />);
     for (const heading of ["项目概览", "本地环境", "已挂载资产", "最近活动", "挂载计划预览"]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
-    rerender(<AssetDetailPage />);
+    rerender(<AssetDetailPage demoMode />);
     expect(screen.getByRole("heading", { name: "资产信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "挂载目标" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
   });
 
   it("updates only the local Scan scope selection", () => {
-    render(<ScanImportPage />);
+    render(<ScanImportPage demoMode />);
     const userScope = screen.getByRole("button", { name: /用户级/ });
     const projectScope = screen.getByRole("button", { name: /项目级/ });
     expect(userScope).toHaveAttribute("aria-pressed", "true");
@@ -58,7 +58,7 @@ describe("remaining V1 static pages", () => {
   });
 
   it("updates the Mount asset and target preview", () => {
-    render(<MountManagerPage />);
+    render(<MountManagerPage demoMode />);
     const deploy = screen.getByRole("button", { name: /deploy-prod/ });
     const myApp = screen.getByRole("button", { name: /my-app/ });
     fireEvent.click(deploy);
@@ -71,12 +71,12 @@ describe("remaining V1 static pages", () => {
   });
 
   it("switches Conflict and Backup master-detail selections", () => {
-    const { rerender } = render(<ConflictResolverPage />);
+    const { rerender } = render(<ConflictResolverPage demoMode />);
     fireEvent.click(screen.getByRole("option", { name: "review" }));
     expect(screen.getByText("资产中心已存在同名 Skill")).toBeInTheDocument();
     expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument();
 
-    rerender(<BackupRestorePage />);
+    rerender(<BackupRestorePage demoMode />);
     fireEvent.click(screen.getByRole("option", { name: "backup-20260620-0915" }));
     expect(screen.getAllByText("挂载变更前").length).toBeGreaterThan(1);
     expect(screen.getByText("恢复 2 项路径，移除 1 个新软链接")).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("remaining V1 static pages", () => {
   });
 
   it("renders local Git sync status and history", () => {
-    render(<SyncPage />);
+    render(<SyncPage demoMode />);
     expect(screen.getByRole("heading", { name: "本地 Git 仓库" })).toBeInTheDocument();
     expect(screen.getByText("Ahead")).toBeInTheDocument();
     expect(screen.getByText("Behind")).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe("remaining V1 static pages", () => {
   });
 
   it("renders only the seven allowed Settings sections with a local save action", () => {
-    const { container } = render(<SettingsPage />);
+    const { container } = render(<SettingsPage demoMode />);
     for (const section of ["路径设置", "扫描设置", "安全设置", "同步设置", "外观设置", "日志设置", "CLI 设置"]) {
       expect(screen.getByRole("heading", { name: section })).toBeInTheDocument();
     }
@@ -104,10 +104,15 @@ describe("remaining V1 static pages", () => {
   });
 
   it("keeps forbidden product concepts out of rendered UI", () => {
-    const pages = [ProjectsListPage, ProjectDetailPage, AssetDetailPage, ScanImportPage, MountManagerPage, ConflictResolverPage, BackupRestorePage, SyncPage, SettingsPage];
+    const pages = [ProjectDetailPage, AssetDetailPage, ScanImportPage];
     const forbidden = ["登录", "账号", "OAuth", "云账号", "团队空间", "订阅", "Billing", "GitHub 绑定"];
     for (const Page of pages) {
       const { container, unmount } = render(<Page />);
+      for (const phrase of forbidden) expect(container.textContent).not.toContain(phrase);
+      unmount();
+    }
+    for (const Page of [ProjectsListPage, MountManagerPage, ConflictResolverPage, BackupRestorePage, SyncPage, SettingsPage]) {
+      const { container, unmount } = render(<Page demoMode />);
       for (const phrase of forbidden) expect(container.textContent).not.toContain(phrase);
       unmount();
     }

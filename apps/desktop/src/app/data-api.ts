@@ -5,6 +5,9 @@ import type {
   BackupSummary,
   ConflictPreview,
   ConflictApplyInput,
+  CodexDiscoveryInput,
+  CodexMcpListResult,
+  CodexSkillListResult,
   DesktopSettings,
   GitStatus,
   ApplyResult,
@@ -58,27 +61,27 @@ const fallbackGitStatus: GitStatus = {
 };
 
 export async function listAssets(input: ListAssetsInput = { assetType: null }): Promise<AssetSummary[]> {
-  const assets = await invokeOrFallback<unknown>("list_assets", { input }, []);
+  const assets = await invokeRead<unknown>("list_assets", { input }, []);
   return Array.isArray(assets) ? assets as AssetSummary[] : [];
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
-  const projects = await invokeOrFallback<unknown>("list_projects", undefined, []);
+  const projects = await invokeRead<unknown>("list_projects", undefined, []);
   return Array.isArray(projects) ? projects as ProjectSummary[] : [];
 }
 
 export async function listBackups(): Promise<BackupSummary[]> {
-  const backups = await invokeOrFallback<unknown>("list_backups", undefined, []);
+  const backups = await invokeRead<unknown>("list_backups", undefined, []);
   return Array.isArray(backups) ? backups as BackupSummary[] : [];
 }
 
 export async function gitStatus(): Promise<GitStatus> {
-  const status = await invokeOrFallback<unknown>("git_status", undefined, fallbackGitStatus);
+  const status = await invokeRead<unknown>("git_status", undefined, fallbackGitStatus);
   return isRecord(status) && typeof status.repositoryPath === "string" ? status as GitStatus : fallbackGitStatus;
 }
 
 export async function settingsLoad(): Promise<DesktopSettings> {
-  const settings = await invokeOrFallback<unknown>("settings_load", undefined, fallbackSettings);
+  const settings = await invokeRead<unknown>("settings_load", undefined, fallbackSettings);
   return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : fallbackSettings;
 }
 
@@ -100,8 +103,28 @@ export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
     conflictCount: 0,
     warnings: ["Tauri runtime is unavailable; scan skipped."],
   };
-  const result = await invokeOrFallback<unknown>("scan_assets", { input }, fallback);
+  const result = await invokeRead<unknown>("scan_assets", { input }, fallback);
   return isRecord(result) && Array.isArray(result.assets) && isRecord(result.counts) ? result as ScanResult : fallback;
+}
+
+export async function listCodexSkills(
+  input: CodexDiscoveryInput = { projectPath: null },
+): Promise<CodexSkillListResult> {
+  const fallback: CodexSkillListResult = { skills: [], warnings: [] };
+  const result = await invokeRead<unknown>("list_codex_skills", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.skills) && Array.isArray(result.warnings)
+    ? result as CodexSkillListResult
+    : fallback;
+}
+
+export async function listCodexMcpServers(
+  input: CodexDiscoveryInput = { projectPath: null },
+): Promise<CodexMcpListResult> {
+  const fallback: CodexMcpListResult = { servers: [], warnings: [] };
+  const result = await invokeRead<unknown>("list_codex_mcp_servers", { input }, fallback);
+  return isRecord(result) && Array.isArray(result.servers) && Array.isArray(result.warnings)
+    ? result as CodexMcpListResult
+    : fallback;
 }
 
 export async function previewImport(input: PreviewImportInput): Promise<ImportPreview> {
@@ -264,6 +287,15 @@ async function invokeOrFallback<T>(
   } catch {
     return fallback;
   }
+}
+
+async function invokeRead<T>(
+  command: string,
+  args: Record<string, unknown> | undefined,
+  browserFallback: T,
+): Promise<T> {
+  if (!isTauriRuntime()) return browserFallback;
+  return args === undefined ? invoke<T>(command) : invoke<T>(command, args);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

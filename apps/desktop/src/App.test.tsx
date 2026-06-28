@@ -43,9 +43,9 @@ describe("macOS preview home", () => {
     });
   });
 
-  it("labels all business content as preview data", async () => {
-    render(<App />);
-    expect(screen.getByText("预览数据")).toBeInTheDocument();
+  it("uses explicit demo data only when demo mode is enabled", async () => {
+    render(<App demoMode />);
+    expect(screen.getAllByText("Visual QA 示例数据").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "首页" })).toBeInTheDocument();
     expect(await screen.findByText("已连接")).toBeInTheDocument();
   });
@@ -67,13 +67,13 @@ describe("macOS preview home", () => {
   });
 
   it("keeps detail pages out of primary sidebar navigation", () => {
-    render(<App />);
+    render(<App demoMode />);
     expect(screen.queryByRole("button", { name: "资产详情" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "项目详情" })).not.toBeInTheDocument();
   });
 
   it("opens hidden detail pages from list inspectors without adding sidebar routes", async () => {
-    render(<App />);
+    render(<App demoMode />);
 
     fireEvent.click(screen.getByRole("button", { name: "Commands" }));
     fireEvent.click(await screen.findByRole("option", { name: "format-code" }));
@@ -95,7 +95,7 @@ describe("macOS preview home", () => {
   });
 
   it("renders the required static skeleton content", () => {
-    render(<App />);
+    render(<App demoMode />);
     const expectedContent = [
       ["Skills", "review"],
       ["Commands", "deploy-prod"],
@@ -128,9 +128,9 @@ describe("macOS preview home", () => {
 
   it("provides static detail page skeletons outside sidebar navigation", () => {
     const appInfo = { name: "My Agent Assets", version: "0.1.0", platform: "macOS", arch: "arm64", backendReady: true };
-    const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} />);
+    const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} demoMode />);
     expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
-    rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} />);
+    rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} demoMode />);
     expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
   });
 
@@ -188,13 +188,12 @@ describe("macOS preview home", () => {
     consoleError.mockRestore();
   });
 
-  it("fills the webview and keeps all business actions in PageHeader", () => {
+  it("fills the webview and keeps PageHeader free of removed placeholder controls", () => {
     const { container } = render(<App />);
     const frame = container.querySelector(".app-frame");
     const body = container.querySelector(".app-body");
     const main = container.querySelector(".app-main");
     const pageHeader = container.querySelector(".page-header");
-    const actions = container.querySelector(".page-header-actions");
 
     expect(frame).toBeInTheDocument();
     expect(body).toBeInTheDocument();
@@ -204,21 +203,55 @@ describe("macOS preview home", () => {
     expect(styles).toMatch(/\.app-body\s*\{[^}]*height:\s*calc\(100vh - var\(--overlay-height\)\);/s);
     expect(styles).toMatch(/\.app-main\s*\{[^}]*padding:\s*34px 36px 36px;/s);
     expect(styles).toMatch(/\.page-header\s*\{[^}]*margin-top:\s*0;/s);
-    expect(actions).toContainElement(screen.getByRole("button", { name: /搜索/ }));
-    expect(actions).toContainElement(screen.getByRole("button", { name: "预览数据" }));
-    expect(actions).toContainElement(screen.getByRole("button", { name: "快速操作" }));
-    expect(screen.getAllByText("预览数据")).toHaveLength(1);
+    expect(container.querySelector(".page-header-actions")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /搜索/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "预览数据" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "快速操作" })).not.toBeInTheDocument();
   });
 
-  it("marks every interactive shell control as no-drag", () => {
-    render(<App />);
-    expect(screen.getByRole("button", { name: /搜索/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "预览数据" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "快速操作" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "首页" })).toBeInTheDocument();
-    expect(styles).toMatch(/\.search-button, \.preview-button, \.primary-button\s*\{[^}]*-webkit-app-region:\s*no-drag;/s);
+  it("marks provider and navigation controls as no-drag", () => {
+    render(<App demoMode />);
+    expect(screen.getByRole("button", { name: "Claude Code" })).toHaveAttribute("data-no-drag", "true");
+    expect(screen.getByRole("button", { name: "Codex" })).toHaveAttribute("data-no-drag", "true");
+    expect(screen.getByRole("button", { name: "首页" })).toHaveAttribute("data-no-drag", "true");
     expect(styles).toMatch(/\.nav-item\s*\{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).toMatch(/\.dropdown-menu,[^}]*-webkit-app-region:\s*no-drag;/s);
+  });
+
+  it("switches providers and hides Commands for Codex", () => {
+    render(<App demoMode />);
+    expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    expect(screen.queryByRole("button", { name: "Commands" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skills" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "MCP Servers" })).toBeInTheDocument();
+  });
+
+  it("does not show demo rows across normal production pages", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Skills" }));
+    expect(await screen.findByText("未发现 Skills")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Commands" }));
+    expect(await screen.findByText("未发现 Commands")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "deploy-prod" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP Servers" }));
+    expect(await screen.findByText("未发现 MCP Servers")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
+    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "冲突处理" }));
+    expect(screen.getByText("暂无待处理冲突")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "备份恢复" }));
+    expect(await screen.findByText("暂无本地备份")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "backup-20260621-1842" })).not.toBeInTheDocument();
   });
 });
 
@@ -239,14 +272,14 @@ describe("Windows app shell", () => {
     });
   });
 
-  it("uses native Windows decorations and shortcuts without custom controls", () => {
+  it("uses native Windows decorations without overlay or custom controls", () => {
     const { container } = render(<App />);
     expect(container.querySelector(".mac-overlay-drag-area")).not.toBeInTheDocument();
     expect(container.querySelector(".windows-controls")).not.toBeInTheDocument();
     expect(container.querySelector(".macos-controls")).not.toBeInTheDocument();
     expect(container.querySelector(".app-body")).toBeInTheDocument();
     expect(styles).toMatch(/\.platform-windows \.app-body,[^}]*\{\s*height:\s*100vh;/s);
-    expect(screen.getByText("Ctrl+K")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /搜索/ })).toHaveAttribute("title", "全局搜索 Ctrl+K");
+    expect(screen.queryByText("Ctrl+K")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /搜索/ })).not.toBeInTheDocument();
   });
 });

@@ -10,6 +10,12 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const RUNTIME_SCOPES = ["user", "local", "project"] as const;
 export type RuntimeScope = (typeof RUNTIME_SCOPES)[number];
 
+export const CODEX_SCOPES = ["global", "project", "system"] as const;
+export type CodexScope = (typeof CODEX_SCOPES)[number];
+
+export const CODEX_MCP_TRANSPORTS = ["stdio", "streamableHttp", "unknown"] as const;
+export type CodexMcpTransport = (typeof CODEX_MCP_TRANSPORTS)[number];
+
 export const CONFLICT_RESOLUTIONS = ["skip", "rename", "overwrite"] as const;
 export type ConflictResolution = (typeof CONFLICT_RESOLUTIONS)[number];
 
@@ -76,6 +82,52 @@ export type ProjectSummary = {
   updatedAt: string | null;
   assetCounts: AssetCounts;
   mounts: string[];
+};
+
+export type CodexDiscoveryInput = {
+  projectPath: string | null;
+};
+
+export type CodexSkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  scope: CodexScope;
+  path: string;
+  status: AssetStatus;
+  hasScripts: boolean;
+  hasReferences: boolean;
+  hasAssets: boolean;
+  hasOpenaiMetadata: boolean;
+  symlinkTarget: string | null;
+  updatedAt: string | null;
+  warnings: string[];
+};
+
+export type CodexSkillListResult = {
+  skills: CodexSkillSummary[];
+  warnings: string[];
+};
+
+export type CodexMcpServerSummary = {
+  id: string;
+  name: string;
+  scope: CodexScope;
+  configPath: string;
+  transport: CodexMcpTransport;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  enabled: boolean;
+  enabledTools: string[];
+  disabledTools: string[];
+  approvalMode: string | null;
+  warnings: string[];
+};
+
+export type CodexMcpListResult = {
+  servers: CodexMcpServerSummary[];
+  warnings: string[];
 };
 
 export type ScanScope =

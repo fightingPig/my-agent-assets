@@ -23,7 +23,7 @@ cargo run -p my-agent-assets-cli --bin maa -- --help
 ## macOS Desktop Preview
 
 The first GUI milestone is an installable, home-page-only Tauri preview. It
-uses mock content and does not read Claude runtime or asset-center data.
+uses typed Tauri commands for local Claude data and read-only Codex Skill/MCP discovery. Tests and Visual QA may enable explicit demo fixtures, but production pages show only real data, empty states, or read errors.
 
 ```bash
 cd apps/desktop

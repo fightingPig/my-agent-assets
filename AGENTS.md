@@ -17,9 +17,17 @@ Current V1 scope:
 - Sync
 - Settings
 
-Out of scope for V1:
+Current V2 read-only provider scope:
 
-- Codex assets
+- Codex Skills
+- Codex MCP Servers
+
+Out of scope for V1/V2:
+
+- Codex AGENTS.md assets
+- Codex custom commands
+- Codex asset import, mount, adoption, or config writes
+- Codex OAuth token management
 - Cursor rules
 - Hooks bundle
 - Prompt marketplace
@@ -166,9 +174,7 @@ Do not use:
 
 Interactive controls must be no-drag:
 
-- Search
-- Preview Data
-- Quick Action
+- Provider switch
 - Sidebar nav item
 - Dropdown menu
 - Buttons
@@ -194,14 +200,13 @@ Pages to implement:
 12. 同步
 13. 设置
 
-For this phase:
+Production pages must use Tauri data or explicit empty/error states.
 
-- Use mock data only.
-- Do not access real Claude data.
-- Do not add new Tauri commands.
-- Do not change Rust business logic.
-- Do not modify window config.
-- Do not modify AppShell window strategy.
+Mock data is allowed only in tests, Visual QA, or an explicitly enabled demo mode. It must never be the default production fallback.
+
+Provider-specific business logic belongs in Rust. Codex support is read-only for Skills and MCP Servers; do not route Codex assets into Claude import, mount, or apply workflows.
+
+Do not modify window config or AppShell window strategy while adding provider support.
 
 ## Static GUI Freeze
 
@@ -223,6 +228,7 @@ src/
 │   ├── contracts.ts
 │   ├── data-api.ts
 │   ├── detail-context.ts
+│   ├── provider.ts
 │   └── pages.ts
 ├── components/
 │   ├── assets/
@@ -275,7 +281,7 @@ src/
 
 Shell components own the frozen window layout and navigation frame.
 
-Page components may use local static data during the current frontend-only phase.
+Page components use real Tauri data in production and may use local static fixtures only in tests, Visual QA, or explicit demo mode.
 
 `ApplyConfirmationPanel.tsx` provides the typed confirmation gate used before real import, mount, or restore apply commands are executed.
 

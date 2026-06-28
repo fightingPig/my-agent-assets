@@ -1,4 +1,5 @@
 mod apply;
+mod codex;
 mod contracts;
 mod path_utils;
 mod preview;
@@ -7,11 +8,12 @@ mod settings;
 mod sync_apply;
 
 use contracts::{
-    AppInfo, ApplyResult, AssetSummary, BackupSummary, ConflictApplyInput, ConflictPreview,
-    DesktopSettings, GitStatus, ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput,
-    MountPreview, PreviewConflictsInput, PreviewImportInput, PreviewMountInput,
-    PreviewRestoreInput, PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview,
-    ScanAssetsInput, ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
+    AppInfo, ApplyResult, AssetSummary, BackupSummary, CodexDiscoveryInput, CodexMcpListResult,
+    CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, GitStatus,
+    ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
+    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
+    PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput,
+    ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
 };
 
 #[tauri::command]
@@ -53,6 +55,16 @@ fn list_projects() -> Vec<ProjectSummary> {
 #[tauri::command]
 fn list_backups() -> Vec<BackupSummary> {
     read_only::list_backups_command()
+}
+
+#[tauri::command]
+fn list_codex_skills(input: CodexDiscoveryInput) -> CodexSkillListResult {
+    codex::list_codex_skills_command(input)
+}
+
+#[tauri::command]
+fn list_codex_mcp_servers(input: CodexDiscoveryInput) -> CodexMcpListResult {
+    codex::list_codex_mcp_servers_command(input)
 }
 
 #[tauri::command]
@@ -121,6 +133,8 @@ pub fn run() {
             list_assets,
             list_projects,
             list_backups,
+            list_codex_skills,
+            list_codex_mcp_servers,
             scan_assets,
             preview_import,
             preview_mount,
@@ -169,3 +183,6 @@ mod sync_apply_tests;
 
 #[cfg(test)]
 mod write_safety_e2e_tests;
+
+#[cfg(test)]
+mod codex_tests;

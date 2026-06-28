@@ -1,18 +1,116 @@
 import {
   Activity,
-  ChevronRight,
+  Blocks,
+  BookOpen,
   CircleCheck,
   FolderKanban,
   ListChecks,
+  TerminalSquare,
+  type LucideIcon,
 } from "lucide-react";
-import type { AppInfo } from "../app/contracts";
-import { projects, recentActivity, stats, systemChecks } from "../mock-data";
+import { useEffect, useState } from "react";
+import { gitStatus, listAssets, listProjects } from "../app/data-api";
+import type { AppInfo, AssetSummary, GitStatus, ProjectSummary } from "../app/contracts";
+import {
+  projects as demoProjects,
+  recentActivity as demoRecentActivity,
+  stats as demoStats,
+  systemChecks as demoSystemChecks,
+} from "../mock-data";
 
 type DashboardPageProps = {
   appInfo: AppInfo;
+  demoMode?: boolean;
 };
 
-export function DashboardPage({ appInfo }: DashboardPageProps) {
+type DashboardStat = {
+  label: string;
+  value: number;
+  change: string;
+  icon: LucideIcon;
+  tone: "green" | "blue" | "violet" | "amber";
+};
+
+const emptyGitStatus: GitStatus = {
+  repositoryPath: "~/.my-agent-assets",
+  isRepository: false,
+  statusMessage: "尚未读取本地 Git 仓库。",
+  branch: "",
+  remote: null,
+  clean: true,
+  ahead: 0,
+  behind: 0,
+  changedFiles: [],
+  conflicts: [],
+  lastSyncedAt: null,
+};
+
+export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps) {
+  const [assets, setAssets] = useState<readonly AssetSummary[]>([]);
+  const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
+  const [stateLabel, setStateLabel] = useState(demoMode ? "Visual QA 示例数据" : "读取中");
+
+  useEffect(() => {
+    if (demoMode) {
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+
+    let cancelled = false;
+    setStateLabel("读取中");
+    Promise.all([listAssets({ assetType: null }), listProjects(), gitStatus()])
+      .then(([loadedAssets, loadedProjects, loadedRepository]) => {
+        if (cancelled) return;
+        setAssets(loadedAssets);
+        setProjects(loadedProjects);
+        setRepository(loadedRepository);
+        setStateLabel("只读真实数据");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAssets([]);
+        setProjects([]);
+        setRepository(emptyGitStatus);
+        setStateLabel(`读取失败：${errorMessage(error)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode]);
+
+  const stats = demoMode ? demoStats : realStats(assets, projects);
+  const visibleProjects = demoMode
+    ? demoProjects
+    : projects.slice(0, 3).map((project) => ({
+      name: project.name,
+      path: project.path,
+      assets: project.assetCounts.total,
+      state: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : "正常",
+    }));
+  const systemChecks = demoMode ? demoSystemChecks : [
+    {
+      label: "资产中心",
+      detail: repository.repositoryPath,
+      status: repository.isRepository ? "可用" : "未初始化",
+    },
+    {
+      label: "Git",
+      detail: repository.statusMessage,
+      status: repository.isRepository ? (repository.clean ? "正常" : "有变更") : "未连接",
+    },
+    {
+      label: "Claude Runtime",
+      detail: `${assets.length} 项资产已读取`,
+      status: appInfo.backendReady ? "已连接" : "未连接",
+    },
+    {
+      label: "数据状态",
+      detail: stateLabel,
+      status: stateLabel.startsWith("读取失败") ? "需检查" : "正常",
+    },
+  ];
+
   return (
     <>
       <section className="stats-grid" aria-label="资产统计">
@@ -29,9 +127,9 @@ export function DashboardPage({ appInfo }: DashboardPageProps) {
 
       <div className="dashboard-grid">
         <section className="panel activity-panel">
-          <div className="panel-header"><div><h2>最近活动</h2><p>资产中心的最新变更</p></div><button className="text-button">查看全部<ChevronRight size={14} /></button></div>
+          <div className="panel-header"><div><h2>最近活动</h2><p>资产中心的最新变更</p></div></div>
           <div className="activity-list">
-            {recentActivity.map((item) => {
+            {(demoMode ? demoRecentActivity : []).map((item) => {
               const Icon = item.icon;
               return (
                 <div className="activity-item" key={item.title}>
@@ -41,24 +139,38 @@ export function DashboardPage({ appInfo }: DashboardPageProps) {
                 </div>
               );
             })}
+            {!demoMode && (
+              <div className="asset-empty-state">
+                <Activity size={22} />
+                <strong>暂无活动记录</strong>
+                <span>完成扫描、导入或同步后，真实活动会显示在这里。</span>
+              </div>
+            )}
           </div>
         </section>
 
         <section className="panel projects-panel">
-          <div className="panel-header"><div><h2>常用项目</h2><p>最近访问的运行目标</p></div><button className="icon-button" aria-label="项目列表"><ChevronRight size={17} /></button></div>
+          <div className="panel-header"><div><h2>常用项目</h2><p>最近访问的运行目标</p></div></div>
           <div className="project-list">
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <div className="project-item" key={project.name}>
                 <div className="project-folder"><FolderKanban size={18} /></div>
                 <div className="project-copy"><strong>{project.name}</strong><span>{project.path}</span></div>
                 <div className="project-meta"><span>{project.assets} 项资产</span><small className={project.state === "正常" ? "ok" : "pending"}>{project.state}</small></div>
               </div>
             ))}
+            {visibleProjects.length === 0 && (
+              <div className="asset-empty-state">
+                <FolderKanban size={22} />
+                <strong>未发现本地项目</strong>
+                <span>项目扫描根目录下出现可识别项目后会显示在这里。</span>
+              </div>
+            )}
           </div>
         </section>
 
         <section className="panel health-panel">
-          <div className="panel-header"><div><h2>系统状态</h2><p>当前为安全隔离的预览环境</p></div><span className="healthy-badge"><CircleCheck size={14} />界面正常</span></div>
+          <div className="panel-header"><div><h2>系统状态</h2><p>{demoMode ? "Visual QA 示例环境" : "本机只读运行环境"}</p></div><span className="healthy-badge"><CircleCheck size={14} />{stateLabel}</span></div>
           <div className="check-grid">
             {systemChecks.map((check) => (
               <div className="check-item" key={check.label}>
@@ -78,4 +190,19 @@ export function DashboardPage({ appInfo }: DashboardPageProps) {
       </div>
     </>
   );
+}
+
+function realStats(assets: readonly AssetSummary[], projects: readonly ProjectSummary[]): DashboardStat[] {
+  const count = (assetType: AssetSummary["assetType"]) =>
+    assets.filter((asset) => asset.assetType === assetType).length;
+  return [
+    { label: "Skills", value: count("skill"), change: "本地真实数据", icon: BookOpen, tone: "green" },
+    { label: "Commands", value: count("command"), change: "本地真实数据", icon: TerminalSquare, tone: "blue" },
+    { label: "MCP Servers", value: count("mcp"), change: "本地真实数据", icon: Blocks, tone: "violet" },
+    { label: "项目", value: projects.length, change: "扫描根目录", icon: FolderKanban, tone: "amber" },
+  ];
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法读取本地概览数据。";
 }

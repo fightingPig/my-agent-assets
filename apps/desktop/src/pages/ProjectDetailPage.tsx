@@ -11,11 +11,13 @@ const fallbackProject = staticProjects[0];
 const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral" } as const;
 
 type ProjectDetailPageProps = {
+  demoMode?: boolean;
   detail?: ProjectDetailContext;
 };
 
-export function ProjectDetailPage({ detail: detailProp = fallbackProject }: ProjectDetailPageProps) {
-  const [detail, setDetail] = useState(detailProp);
+export function ProjectDetailPage({ demoMode = false, detail: detailProp }: ProjectDetailPageProps) {
+  const initialDetail = detailProp ?? (demoMode ? fallbackProject : null);
+  const [detail, setDetail] = useState<ProjectDetailContext | null>(initialDetail);
   const [selectedAsset, setSelectedAsset] = useState<AssetSummary | null>(null);
   const [preview, setPreview] = useState<MountPreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
@@ -27,11 +29,15 @@ export function ProjectDetailPage({ detail: detailProp = fallbackProject }: Proj
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    setDetail(detailProp);
-  }, [detailProp]);
+    setDetail(detailProp ?? (demoMode ? fallbackProject : null));
+  }, [demoMode, detailProp]);
 
   useEffect(() => {
     let cancelled = false;
+    if (!detail) {
+      setSelectedAsset(null);
+      return undefined;
+    }
     listAssets()
       .then((assets) => {
         if (cancelled) return;
@@ -47,10 +53,10 @@ export function ProjectDetailPage({ detail: detailProp = fallbackProject }: Proj
     return () => {
       cancelled = true;
     };
-  }, [detail.mounts, refreshKey]);
+  }, [detail, refreshKey]);
 
   const previewInput = useMemo(
-    () => selectedAsset ? projectMountInput(detail, selectedAsset) : null,
+    () => detail && selectedAsset ? projectMountInput(detail, selectedAsset) : null,
     [detail, selectedAsset],
   );
 
@@ -99,7 +105,7 @@ export function ProjectDetailPage({ detail: detailProp = fallbackProject }: Proj
   };
 
   const handleApplyMount = async () => {
-    if (!canApply || !preview?.previewId || !previewInput) return;
+    if (!canApply || !preview?.previewId || !previewInput || !detail) return;
     setIsApplying(true);
     setOperationError(null);
     try {
@@ -128,6 +134,18 @@ export function ProjectDetailPage({ detail: detailProp = fallbackProject }: Proj
     }
   };
 
+  if (!detail) {
+    return (
+      <section className="panel detail-section">
+        <div className="asset-empty-state">
+          <FolderKanban size={22} />
+          <strong>未选择真实项目</strong>
+          <span>请从项目列表检查器打开项目详情。</span>
+        </div>
+      </section>
+    );
+  }
+
   const skillMounts = detail.mounts.filter((mount) => mount.includes("review") || mount.includes("skill"));
   const commandMounts = detail.mounts.filter((mount) => mount.includes("deploy") || mount.includes("build") || mount.includes("test") || mount.includes("format"));
   const mcpMounts = detail.mounts.filter((mount) => mount.includes("PostgreSQL") || mount.includes("Filesystem") || mount.includes("Redis") || mount.includes("SQLite"));
@@ -142,8 +160,8 @@ export function ProjectDetailPage({ detail: detailProp = fallbackProject }: Proj
       <div className="detail-two-column">
         <div className="detail-column">
           <section className="panel detail-section"><div className="section-heading"><div><h3>项目概览</h3><p>{detail.path}</p></div><span>{detail.updated}</span></div><div className="project-metrics"><div><strong>{detail.assets}</strong><span>全部资产</span></div><div><strong>{detail.skills}</strong><span>Skills</span></div><div><strong>{detail.commands}</strong><span>Commands</span></div><div><strong>{detail.mcps}</strong><span>MCP</span></div></div></section>
-          <section className="panel detail-section"><div className="section-heading"><div><h3>本地环境</h3><p>仅展示静态环境预览</p></div></div><div className="environment-list"><div><strong>Claude Runtime</strong><span>项目级 · 预览正常</span></div><div><strong>符号链接</strong><span>3 项已挂载</span></div><div><strong>MCP 配置</strong><span>.mcp.json · 1 项</span></div></div></section>
-          <section className="panel detail-section"><div className="section-heading"><div><h3>最近活动</h3><p>项目资产变更预览</p></div></div><div className="timeline-list"><div><Activity size={14} /><span>挂载 db-review</span><time>今天 11:20</time></div><div><Activity size={14} /><span>更新 deploy-prod</span><time>今天 09:40</time></div><div><Activity size={14} /><span>扫描项目资产</span><time>昨天 18:12</time></div></div></section>
+          <section className="panel detail-section"><div className="section-heading"><div><h3>本地环境</h3><p>{demoMode ? "Visual QA 示例环境" : "项目只读汇总"}</p></div></div><div className="environment-list"><div><strong>Claude Runtime</strong><span>项目级 · {detail.assets} 项资产</span></div><div><strong>挂载引用</strong><span>{detail.mounts.length} 项</span></div><div><strong>MCP 配置</strong><span>{detail.mcps} 项</span></div></div></section>
+          <section className="panel detail-section"><div className="section-heading"><div><h3>最近活动</h3><p>项目资产变更</p></div></div>{demoMode ? <div className="timeline-list"><div><Activity size={14} /><span>挂载 db-review</span><time>今天 11:20</time></div><div><Activity size={14} /><span>更新 deploy-prod</span><time>今天 09:40</time></div><div><Activity size={14} /><span>扫描项目资产</span><time>昨天 18:12</time></div></div> : <div className="asset-empty-state"><Activity size={20} /><strong>暂无真实活动记录</strong><span>项目活动数据源尚未接入。</span></div>}</section>
         </div>
 
         <div className="detail-column">

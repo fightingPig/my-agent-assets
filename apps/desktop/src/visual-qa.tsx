@@ -5,7 +5,6 @@ import type { AppInfo } from "./app/contracts";
 import { getPageById } from "./app/pages";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
-import { getPlatformShortcuts } from "./lib/platform";
 import "./styles.css";
 import { parseVisualQaQuery, VISUAL_QA_PAGES, type VisualQaPage } from "./visual-qa/config";
 import { collectVisualQaReport, type VisualQaPageReport } from "./visual-qa/diagnostics";
@@ -31,9 +30,15 @@ const appInfo: AppInfo = {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppFrame platform={query.platform} activePage={query.pageId} onPageChange={() => undefined}>
-      <PageHeader page={page} shortcuts={getPlatformShortcuts(query.platform)} />
-      <CurrentPage activePage={query.pageId} appInfo={appInfo} />
+    <AppFrame
+      platform={query.platform}
+      activePage={query.pageId}
+      onPageChange={() => undefined}
+      provider="claude"
+      onProviderChange={() => undefined}
+    >
+      <PageHeader page={page} />
+      <CurrentPage activePage={query.pageId} appInfo={appInfo} demoMode />
     </AppFrame>
   </StrictMode>,
 );

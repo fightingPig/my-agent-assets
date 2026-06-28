@@ -1,8 +1,9 @@
 import { Blocks } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listAssets } from "../app/data-api";
-import type { AssetSummary } from "../app/contracts";
+import { listAssets, listCodexMcpServers } from "../app/data-api";
+import type { AssetSummary, CodexMcpServerSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
+import type { AssetProvider } from "../app/provider";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -99,45 +100,63 @@ const staticServers: readonly McpItem[] = [
 ];
 
 type AssetListPageProps = {
+  demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  provider?: AssetProvider;
 };
 
-export function McpServersListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
-  const [items, setItems] = useState<readonly McpItem[]>(staticServers);
+export function McpServersListPage({
+  demoMode = false,
+  onOpenAssetDetail,
+  provider = "claude",
+}: AssetListPageProps = {}) {
+  const [items, setItems] = useState<readonly McpItem[]>(demoMode ? staticServers : []);
   const [stateLabel, setStateLabel] = useState("读取中");
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setItems(staticServers);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+    setItems([]);
     setStateLabel("读取中");
-    listAssets({ assetType: "mcp" })
+    const request = provider === "codex"
+      ? listCodexMcpServers({ projectPath: null }).then((result) => result.servers.map(toCodexMcpItem))
+      : listAssets({ assetType: "mcp" }).then((assets) => assets.map(toMcpItem));
+    request
       .then((assets) => {
         if (cancelled) return;
-        if (Array.isArray(assets) && assets.length > 0) {
-          setItems(assets.map(toMcpItem));
-          setStateLabel("只读真实数据");
-        } else {
-          setItems(staticServers);
-          setStateLabel("静态预览");
-        }
+        setItems(assets);
+        setStateLabel(assets.length > 0 ? "只读真实数据" : "未发现本地数据");
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setItems(staticServers);
-        setStateLabel("读取失败，使用静态预览");
+        setItems([]);
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode, provider]);
 
   return (
     <AssetCenterLayout
-      actionLabel="挂载 MCP"
+      actionLabel={provider === "codex" ? "Codex MCP 只读" : "挂载 MCP"}
+      emptyDescription={provider === "codex"
+        ? "请在 ~/.codex/config.toml 或项目 .codex/config.toml 中配置 mcp_servers。"
+        : "请先扫描或导入 Claude MCP Server。"}
+      emptyTitle={provider === "codex" ? "未发现 Codex MCP Servers" : "未发现 MCP Servers"}
       itemLabel="MCP Servers"
       items={items}
       searchPlaceholder="搜索 MCP 名称、能力或配置路径"
       stateLabel={stateLabel}
-      onOpenDetail={onOpenAssetDetail ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览")) : undefined}
+      usageLabel={provider === "codex" ? "工具与约束" : "挂载与使用"}
+      usageCountLabel={provider === "codex" ? "项工具" : "个挂载"}
+      onOpenDetail={provider === "claude" && onOpenAssetDetail
+        ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览"))
+        : undefined}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[
@@ -150,6 +169,45 @@ export function McpServersListPage({ onOpenAssetDetail }: AssetListPageProps = {
       )}
     />
   );
+}
+
+function toCodexMcpItem(server: CodexMcpServerSummary): McpItem {
+  const tools = [...server.enabledTools, ...server.disabledTools.map((tool) => `禁用: ${tool}`)];
+  const preview = [
+    `[mcp_servers.${server.name}]`,
+    server.command ? `command = ${JSON.stringify(server.command)}` : null,
+    server.args.length > 0 ? `args = ${JSON.stringify(server.args)}` : null,
+    server.url ? `url = ${JSON.stringify(server.url)}` : null,
+    `enabled = ${server.enabled}`,
+    server.approvalMode ? `approval = ${JSON.stringify(server.approvalMode)}` : null,
+    ...server.warnings.map((warning) => `# warning: ${warning}`),
+  ].filter((line): line is string => Boolean(line)).join("\n");
+
+  return {
+    id: `${server.scope}:${server.name}:${server.configPath}`,
+    name: server.name,
+    title: server.name,
+    category: "Codex MCP Server",
+    updated: "本地配置",
+    mounts: tools,
+    summary: server.url || server.command || "Codex MCP 配置",
+    status: server.warnings.length > 0 ? "需要检查" : server.enabled ? "已启用" : "未启用",
+    statusTone: server.warnings.length > 0 ? "warning" : server.enabled ? "success" : "neutral",
+    scope: server.scope === "global" ? "全局" : "项目级",
+    path: server.configPath,
+    icon: Blocks,
+    transport: server.transport === "streamableHttp" ? "streamable HTTP" : server.transport,
+    source: server.scope === "global" ? "全局 Codex 配置" : "项目 Codex 配置",
+    capabilities: tools.length > 0 ? tools : ["未声明工具约束"],
+    preview,
+    searchTerms: [
+      server.transport,
+      server.command ?? "",
+      server.url ?? "",
+      server.approvalMode ?? "",
+      ...server.warnings,
+    ],
+  };
 }
 
 function toAssetDetail(server: McpItem, typeLabel: string, previewLabel: string): AssetDetailContext {
@@ -198,4 +256,8 @@ function scopeLabel(scope: AssetSummary["scope"]) {
   if (scope === "user") return "用户级";
   if (scope === "project") return "项目级";
   return "资产中心";
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法读取本地 MCP 配置。";
 }

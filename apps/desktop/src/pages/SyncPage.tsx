@@ -20,8 +20,22 @@ const fallbackGitStatus: GitStatus = {
   lastSyncedAt: null,
 };
 
-export function SyncPage() {
-  const [status, setStatus] = useState<GitStatus>(fallbackGitStatus);
+const emptyGitStatus: GitStatus = {
+  repositoryPath: "~/.my-agent-assets",
+  isRepository: false,
+  statusMessage: "尚未读取本地 Git 仓库。",
+  branch: "",
+  remote: null,
+  clean: true,
+  ahead: 0,
+  behind: 0,
+  changedFiles: [],
+  conflicts: [],
+  lastSyncedAt: null,
+};
+
+export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
+  const [status, setStatus] = useState<GitStatus>(demoMode ? fallbackGitStatus : emptyGitStatus);
   const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [confirmationValue, setConfirmationValue] = useState("");
@@ -32,6 +46,12 @@ export function SyncPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setStatus(fallbackGitStatus);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+    setStatus(emptyGitStatus);
     setStateLabel("读取中");
     gitStatus()
       .then((loaded) => {
@@ -44,27 +64,27 @@ export function SyncPage() {
           setConfirmationValue("");
           setStateLabel("只读真实数据");
         } else {
-        setStatus(fallbackGitStatus);
+        setStatus(emptyGitStatus);
         setPreview(null);
         setApplyResult(null);
         setOperationError(null);
         setConfirmationValue("");
-        setStateLabel("静态预览");
+        setStateLabel("未返回 Git 状态");
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setStatus(fallbackGitStatus);
+        setStatus(emptyGitStatus);
         setPreview(null);
         setApplyResult(null);
         setOperationError(null);
         setConfirmationValue("");
-        setStateLabel("读取失败，使用静态预览");
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode]);
 
   const cleanLabel = status.clean ? "工作区干净" : `${status.changedFiles.length} 项变更`;
   const conflictLabel = status.conflicts.length > 0 ? `${status.conflicts.length} 项预览` : "0 项";
@@ -131,7 +151,7 @@ export function SyncPage() {
       </section>
 
       <div className="detail-two-column sync-lower-grid">
-        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className="preview-label">{stateLabel}</span></div><div className="timeline-list"><div><CheckCircle2 size={14} /><span>读取本地 Git 状态</span><time>{status.lastSyncedAt ?? "刚刚"}</time></div><div><CheckCircle2 size={14} /><span>Pull / Push 保持禁用预览</span><time>只读阶段</time></div><div><CheckCircle2 size={14} /><span>未执行远程同步命令</span><time>安全策略</time></div></div></section>
+        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className="preview-label">{stateLabel}</span></div><div className="timeline-list">{status.lastSyncedAt ? <div><CheckCircle2 size={14} /><span>最近一次本地同步</span><time>{status.lastSyncedAt}</time></div> : <div className="asset-empty-state"><RefreshCw size={20} /><strong>暂无同步历史</strong><span>后端返回真实同步时间后会显示在这里。</span></div>}</div></section>
         <section className="panel detail-section"><div className="section-heading"><div><h3>同步检查</h3><p>执行前风险预览</p></div></div><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.warnings[0] ?? status.statusMessage}</strong><span>{previewSummary}</span></div></div><div className="environment-list"><div><strong>仓库可用</strong><span>{status.isRepository ? "是" : "否"}</span></div><div><strong>未提交变更</strong><span>{status.changedFiles.length} 项</span></div><div><strong>潜在冲突</strong><span>{conflictLabel}</span></div><div><strong>计划方向</strong><span>{preview?.direction === "pull" ? "Pull" : preview?.direction === "push" ? "Push" : "未选择"}</span></div><div><strong>计划可执行</strong><span>{preview?.canApply ? "是" : "否"}</span></div></div></section>
       </div>
     </div>

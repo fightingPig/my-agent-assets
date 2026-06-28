@@ -59,6 +59,26 @@ pub enum RuntimeScope {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CodexScope {
+    #[serde(rename = "global")]
+    Global,
+    #[serde(rename = "project")]
+    Project,
+    #[serde(rename = "system")]
+    System,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CodexMcpTransport {
+    #[serde(rename = "stdio")]
+    Stdio,
+    #[serde(rename = "streamableHttp")]
+    StreamableHttp,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConflictResolution {
     #[serde(rename = "skip")]
     Skip,
@@ -209,6 +229,62 @@ pub struct ProjectSummary {
     pub updated_at: Option<String>,
     pub asset_counts: AssetCounts,
     pub mounts: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexDiscoveryInput {
+    pub project_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSkillSummary {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub scope: CodexScope,
+    pub path: String,
+    pub status: AssetStatus,
+    pub has_scripts: bool,
+    pub has_references: bool,
+    pub has_assets: bool,
+    pub has_openai_metadata: bool,
+    pub symlink_target: Option<String>,
+    pub updated_at: Option<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexSkillListResult {
+    pub skills: Vec<CodexSkillSummary>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexMcpServerSummary {
+    pub id: String,
+    pub name: String,
+    pub scope: CodexScope,
+    pub config_path: String,
+    pub transport: CodexMcpTransport,
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    pub url: Option<String>,
+    pub enabled: bool,
+    pub enabled_tools: Vec<String>,
+    pub disabled_tools: Vec<String>,
+    pub approval_mode: Option<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexMcpListResult {
+    pub servers: Vec<CodexMcpServerSummary>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -517,6 +593,15 @@ mod tests {
         assert_eq!(wire_value(RuntimeScope::User), json!("user"));
         assert_eq!(wire_value(RuntimeScope::Local), json!("local"));
         assert_eq!(wire_value(RuntimeScope::Project), json!("project"));
+        assert_eq!(wire_value(CodexScope::Global), json!("global"));
+        assert_eq!(wire_value(CodexScope::Project), json!("project"));
+        assert_eq!(wire_value(CodexScope::System), json!("system"));
+        assert_eq!(wire_value(CodexMcpTransport::Stdio), json!("stdio"));
+        assert_eq!(
+            wire_value(CodexMcpTransport::StreamableHttp),
+            json!("streamableHttp")
+        );
+        assert_eq!(wire_value(CodexMcpTransport::Unknown), json!("unknown"));
         assert_eq!(wire_value(ConflictResolution::Skip), json!("skip"));
         assert_eq!(wire_value(ConflictResolution::Rename), json!("rename"));
         assert_eq!(

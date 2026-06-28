@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 describe("Asset Center static UI", () => {
   it("selects the first Skill by default and updates the inspector from a row click", () => {
-    render(<SkillsListPage />);
+    render(<SkillsListPage demoMode />);
     const inspector = screen.getByRole("complementary", { name: "Skills检查器" });
     const review = screen.getByRole("option", { name: "review" });
     const dbReview = screen.getByRole("option", { name: "db-review" });
@@ -22,11 +22,11 @@ describe("Asset Center static UI", () => {
     expect(within(inspector).getByRole("heading", { name: "db-review" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "api-design" })).toBeInTheDocument();
     expect(within(inspector).getByText("最近更新")).toBeInTheDocument();
-    expect(within(inspector).getByText(/挂载 \/ 使用摘要/)).toBeInTheDocument();
+    expect(within(inspector).getByText(/挂载与使用/)).toBeInTheDocument();
   });
 
   it("filters static Commands with search and status controls", () => {
-    render(<CommandsListPage />);
+    render(<CommandsListPage demoMode />);
     const search = screen.getByRole("searchbox", { name: "搜索Commands" });
     const status = screen.getByRole("combobox", { name: "Commands状态筛选" });
 
@@ -45,7 +45,7 @@ describe("Asset Center static UI", () => {
   });
 
   it("includes format-code with complete row metadata", () => {
-    render(<CommandsListPage />);
+    render(<CommandsListPage demoMode />);
     const row = screen.getByRole("option", { name: "format-code" });
     expect(row).toHaveTextContent("格式化项目代码");
     expect(row).toHaveTextContent("代码质量");
@@ -54,7 +54,7 @@ describe("Asset Center static UI", () => {
   });
 
   it("uses only local MCP examples and updates JSON details", () => {
-    const { container } = render(<McpServersListPage />);
+    const { container } = render(<McpServersListPage demoMode />);
     const options = within(screen.getByRole("listbox", { name: "MCP Servers选择" })).getAllByRole("option");
     expect(options.map((option) => option.getAttribute("aria-label"))).toEqual(["PostgreSQL", "Redis", "Filesystem", "SQLite"]);
 
@@ -67,7 +67,7 @@ describe("Asset Center static UI", () => {
 
   it("keeps disabled business actions explicitly no-drag", () => {
     for (const Page of [SkillsListPage, CommandsListPage, McpServersListPage]) {
-      const { unmount } = render(<Page />);
+      const { unmount } = render(<Page demoMode />);
       const actions = screen.getAllByRole("button").filter((button) => button.getAttribute("aria-disabled") === "true");
       expect(actions).toHaveLength(2);
       for (const action of actions) {
@@ -81,7 +81,7 @@ describe("Asset Center static UI", () => {
   });
 
   it("keeps Sync wording repository-local", () => {
-    const { container } = render(<SyncPage />);
+    const { container } = render(<SyncPage demoMode />);
     expect(screen.getByText("本地 Git 仓库")).toBeInTheDocument();
     expect(screen.getAllByText("远程仓库").length).toBeGreaterThan(0);
     for (const phrase of ["GitHub", "登录", "账号", "OAuth", "云"]) {

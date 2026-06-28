@@ -64,9 +64,9 @@ describe("Visual QA harness", () => {
   });
 
   it("renders hidden detail pages directly with mock application information", () => {
-    const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} />);
+    const { rerender } = render(<CurrentPage activePage="asset-detail" appInfo={appInfo} demoMode />);
     expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
-    rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} />);
+    rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} demoMode />);
     expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
   });
 

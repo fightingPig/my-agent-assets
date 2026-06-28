@@ -118,6 +118,37 @@ button {
   display: block;
 }
 
+.provider-switch {
+  margin: 0 7px 16px;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #eef0f5;
+}
+
+.provider-switch button {
+  min-width: 0;
+  height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.provider-switch button[aria-pressed="true"] {
+  color: var(--text);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(31, 35, 42, .08);
+}
+
 .nav-group { margin-bottom: 13px; }
 
 .nav-label {
@@ -213,73 +244,6 @@ h1 {
   color: var(--secondary);
   font-size: 13px;
 }
-
-.page-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.search-button, .preview-button, .primary-button {
-  height: 34px;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  white-space: nowrap;
-  -webkit-app-region: no-drag;
-}
-
-.search-button {
-  min-width: 184px;
-  padding: 0 8px 0 11px;
-  border: 1px solid var(--border);
-  color: var(--secondary);
-  background: #fff;
-}
-
-.search-button span { margin-right: auto; }
-
-.preview-button {
-  min-width: 94px;
-  padding: 0 11px;
-  border: 1px solid #d8d4ff;
-  color: #5d4fd2;
-  background: #f4f2ff;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.preview-button:hover { background: #ebe8ff; }
-
-kbd {
-  min-width: 30px;
-  height: 20px;
-  padding: 0 5px;
-  border: 1px solid #dfe2e8;
-  border-bottom-color: #d3d6dd;
-  border-radius: 5px;
-  display: grid;
-  place-items: center;
-  color: #858b95;
-  background: #f7f8fa;
-  font-size: 10px;
-  font-family: inherit;
-}
-
-.primary-button {
-  min-width: 116px;
-  padding: 0 14px;
-  border: 1px solid var(--accent);
-  color: #fff;
-  background: var(--accent);
-  font-size: 13px;
-  font-weight: 650;
-  box-shadow: 0 4px 10px rgba(98, 83, 232, .16);
-}
-
-.primary-button:hover { background: var(--accent-hover); }
 
 .stats-grid {
   display: grid;

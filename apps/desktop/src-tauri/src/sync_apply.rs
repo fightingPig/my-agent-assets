@@ -62,7 +62,7 @@ pub fn sync_apply_for_home(home: &Path, input: SyncApplyInput) -> ApplyResult {
 
     let preview = preview::preview_sync(
         crate::contracts::PreviewSyncInput {
-            direction: input.direction.clone(),
+            direction: input.direction,
         },
         status,
     );

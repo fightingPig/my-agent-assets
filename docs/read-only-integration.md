@@ -11,6 +11,8 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `list_projects`
 - `list_backups`
 - `scan_assets`
+- `list_codex_skills`
+- `list_codex_mcp_servers`
 
 `settings_save` was implemented after the original read-only milestone. The Settings page now exposes the first controlled write UI action, limited to local settings persistence.
 
@@ -69,6 +71,13 @@ Project summaries count project runtime Skills, Commands, and MCP servers and re
 
 MCP discovery reads the JSON config file and parses the top-level `mcpServers` object. `.mcpServers` is not treated as a path.
 
+Codex discovery is intentionally separate from the Claude asset-center path:
+
+- `list_codex_skills` reads valid `SKILL.md` directories under `~/.agents/skills`, project/repository ancestor `.agents/skills` roots, and `/etc/codex/skills` when readable.
+- `list_codex_mcp_servers` reads `[mcp_servers.<name>]` tables from `~/.codex/config.toml` and the selected/current project `.codex/config.toml`.
+
+Both commands are read-only. They do not create directories, write TOML, import assets, mount assets, or manage authentication tokens.
+
 ## Git Safety
 
 `git_status` only reads `~/.my-agent-assets` repository state. It may run these Git commands using `std::process::Command` argument arrays:
@@ -92,12 +101,13 @@ If the asset center directory is missing, is not a Git repository, has no upstre
 
 ## Frontend Boundary
 
-`apps/desktop/src/app/data-api.ts` provides typed wrappers for the read-only, preview, and controlled write commands. In a non-Tauri runtime, or when an invoke call fails, wrappers return safe fallback data:
+`apps/desktop/src/app/data-api.ts` provides typed wrappers for the read-only, preview, and controlled write commands. Outside Tauri, read wrappers return safe empty/default data for browser previews. Inside Tauri, read-command failures are surfaced to the page so the UI can show a non-blocking error instead of masking the failure with sample data:
 
 - Empty lists for assets and projects
 - Default settings
 - Safe non-repository Git status
 - Empty scan result with a warning
+- Empty Codex Skill/MCP results
 
 These pages now consume read-only data through the wrapper layer:
 
@@ -109,8 +119,12 @@ These pages now consume read-only data through the wrapper layer:
 - Sync: `git_status`
 - Settings: `settings_load`
 - Scan Import: `scan_assets`
+- Codex Skills: `list_codex_skills`
+- Codex MCP Servers: `list_codex_mcp_servers`
 
-Each page keeps its previous static data as an initial placeholder or fallback. If a command returns an empty result, rejects, or runs outside Tauri, the UI stays usable and clearly labels the view as static preview or fallback data.
+Production pages do not fall back to sample rows. Empty commands produce explicit empty states, and rejected Tauri reads produce explicit error states. Static fixtures remain available only through explicit `demoMode` for tests and Visual QA.
+
+The Provider switch selects `Claude Code` or `Codex` within the existing Asset Center. Codex exposes only Skills and MCP Servers; Commands are hidden. Codex data is never passed into Claude import, mount, conflict apply, or adoption workflows.
 
 `StaticActionButton` is still used for visual-only business actions that do not have a safe apply workflow. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan, and Conflict Resolver can call `conflict_apply` in `planOnly` mode; all plan actions avoid file writes.
 

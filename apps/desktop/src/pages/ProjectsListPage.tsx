@@ -11,43 +11,46 @@ import { staticProjects, type StaticProject } from "./project-data";
 const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral" } as const;
 
 type ProjectsListPageProps = {
+  demoMode?: boolean;
   onOpenProjectDetail?: (detail: ProjectDetailContext) => void;
 };
 
-export function ProjectsListPage({ onOpenProjectDetail }: ProjectsListPageProps = {}) {
+export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: ProjectsListPageProps = {}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const [projects, setProjects] = useState<readonly StaticProject[]>(staticProjects);
+  const [projects, setProjects] = useState<readonly StaticProject[]>(demoMode ? staticProjects : []);
   const [stateLabel, setStateLabel] = useState("读取中");
-  const [selectedId, setSelectedId] = useState(staticProjects[0].id);
+  const [selectedId, setSelectedId] = useState(demoMode ? staticProjects[0].id : "");
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setProjects(staticProjects);
+      setSelectedId(staticProjects[0].id);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+    setProjects([]);
+    setSelectedId("");
     setStateLabel("读取中");
     listProjects()
       .then((loaded) => {
         if (cancelled) return;
-        if (Array.isArray(loaded) && loaded.length > 0) {
-          const mapped = loaded.map(toStaticProject);
-          setProjects(mapped);
-          setSelectedId(mapped[0]?.id ?? "");
-          setStateLabel("只读真实数据");
-        } else {
-          setProjects(staticProjects);
-          setSelectedId(staticProjects[0].id);
-          setStateLabel("静态预览");
-        }
+        const mapped = loaded.map(toStaticProject);
+        setProjects(mapped);
+        setSelectedId(mapped[0]?.id ?? "");
+        setStateLabel(mapped.length > 0 ? "只读真实数据" : "未发现本地项目");
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setProjects(staticProjects);
-        setSelectedId(staticProjects[0].id);
-        setStateLabel("读取失败，使用静态预览");
+        setProjects([]);
+        setSelectedId("");
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode]);
 
   const visibleProjects = useMemo(() => projects.filter((project) => {
     const matchesStatus = status === "all" || project.status === status;
@@ -73,7 +76,7 @@ export function ProjectsListPage({ onOpenProjectDetail }: ProjectsListPageProps 
               <span className={`asset-status ${projectTone[project.status]}`}>{project.status}</span>
             </button>
           ))}
-          {visibleProjects.length === 0 && <div className="asset-empty-state"><Search size={22} /><strong>没有匹配的项目</strong><span>调整搜索关键词或状态筛选。</span></div>}
+          {visibleProjects.length === 0 && <div className="asset-empty-state"><Search size={22} /><strong>{projects.length === 0 ? "未发现本地项目" : "没有匹配的项目"}</strong><span>{projects.length === 0 ? "请在设置的扫描根目录下创建或添加项目。" : "调整搜索关键词或状态筛选。"}</span></div>}
         </div>
       </section>
 
@@ -91,6 +94,10 @@ export function ProjectsListPage({ onOpenProjectDetail }: ProjectsListPageProps 
       </aside>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法读取本地项目。";
 }
 
 function toStaticProject(project: ProjectSummary): StaticProject {

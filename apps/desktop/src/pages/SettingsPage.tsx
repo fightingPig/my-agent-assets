@@ -22,14 +22,20 @@ const fallbackSettings: DesktopSettings = {
   cliPath: "maa",
 };
 
-export function SettingsPage() {
-  const [settings, setSettings] = useState<DesktopSettings>(fallbackSettings);
+export function SettingsPage({ demoMode = false }: { demoMode?: boolean }) {
+  const [settings, setSettings] = useState<DesktopSettings | null>(demoMode ? fallbackSettings : null);
   const [stateLabel, setStateLabel] = useState("读取中");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setSettings(fallbackSettings);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+    setSettings(null);
     setStateLabel("读取中");
     settingsLoad()
       .then((loaded) => {
@@ -38,22 +44,22 @@ export function SettingsPage() {
           setSettings(loaded);
           setStateLabel("只读真实数据");
         } else {
-          setSettings(fallbackSettings);
-          setStateLabel("静态预览");
+          setSettings(null);
+          setStateLabel("未返回设置数据");
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setSettings(fallbackSettings);
-        setStateLabel("读取失败，使用静态预览");
+        setSettings(null);
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode]);
 
   const updateSetting = <Key extends keyof DesktopSettings>(key: Key, value: DesktopSettings[Key]) => {
-    setSettings((current) => ({ ...current, [key]: value }));
+    setSettings((current) => current ? { ...current, [key]: value } : current);
   };
 
   const handleScanRootsChange = (value: string) => {
@@ -61,6 +67,7 @@ export function SettingsPage() {
   };
 
   const handleSave = async () => {
+    if (!settings) return;
     setIsSaving(true);
     setStateLabel("保存中");
     setSaveMessage(null);
@@ -77,6 +84,22 @@ export function SettingsPage() {
       setIsSaving(false);
     }
   };
+
+  if (!settings) {
+    return (
+      <section className="panel settings-section">
+        <div className="settings-section-title">
+          <FolderCog size={17} />
+          <div><h3>设置读取状态</h3><p>{stateLabel}</p></div>
+        </div>
+        <div className="asset-empty-state">
+          <ShieldCheck size={22} />
+          <strong>暂无可显示设置</strong>
+          <span>请检查本地后端连接和配置读取权限。</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="settings-workspace">

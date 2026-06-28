@@ -4,11 +4,11 @@ import { CurrentPage } from "./app/CurrentPage";
 import type { AppInfo } from "./app/contracts";
 import type { AssetDetailContext, ProjectDetailContext } from "./app/detail-context";
 import { getPageById, type PageId } from "./app/pages";
+import type { AssetProvider } from "./app/provider";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
 import {
   getDesktopPlatform,
-  getPlatformShortcuts,
   isTauriRuntime,
 } from "./lib/platform";
 
@@ -20,13 +20,17 @@ const fallbackInfo: AppInfo = {
   backendReady: false,
 };
 
-function App() {
+type AppProps = {
+  demoMode?: boolean;
+};
+
+function App({ demoMode = false }: AppProps = {}) {
   const [appInfo, setAppInfo] = useState<AppInfo>(fallbackInfo);
   const [activePage, setActivePage] = useState<PageId>("dashboard");
+  const [provider, setProvider] = useState<AssetProvider>("claude");
   const [assetDetail, setAssetDetail] = useState<AssetDetailContext | null>(null);
   const [projectDetail, setProjectDetail] = useState<ProjectDetailContext | null>(null);
   const platform = getDesktopPlatform();
-  const shortcuts = getPlatformShortcuts(platform);
   const currentPage = getPageById(activePage);
 
   useEffect(() => {
@@ -44,9 +48,22 @@ function App() {
     setActivePage("project-detail");
   };
 
+  const changeProvider = (nextProvider: AssetProvider) => {
+    setProvider(nextProvider);
+    if (nextProvider === "codex" && activePage === "commands") {
+      setActivePage("skills");
+    }
+  };
+
   return (
-    <AppFrame platform={platform} activePage={activePage} onPageChange={setActivePage}>
-      <PageHeader page={currentPage} shortcuts={shortcuts} />
+    <AppFrame
+      activePage={activePage}
+      onPageChange={setActivePage}
+      onProviderChange={changeProvider}
+      platform={platform}
+      provider={provider}
+    >
+      <PageHeader page={currentPage} />
       <CurrentPage
         activePage={activePage}
         appInfo={appInfo}
@@ -54,7 +71,9 @@ function App() {
         onOpenAssetDetail={openAssetDetail}
         onOpenProjectDetail={openProjectDetail}
         onPageChange={setActivePage}
+        provider={provider}
         projectDetail={projectDetail}
+        demoMode={demoMode}
       />
     </AppFrame>
   );

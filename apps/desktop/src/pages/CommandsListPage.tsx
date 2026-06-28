@@ -88,40 +88,45 @@ const staticCommands: readonly CommandItem[] = [
 ];
 
 type AssetListPageProps = {
+  demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
 };
 
-export function CommandsListPage({ onOpenAssetDetail }: AssetListPageProps = {}) {
-  const [items, setItems] = useState<readonly CommandItem[]>(staticCommands);
+export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetListPageProps = {}) {
+  const [items, setItems] = useState<readonly CommandItem[]>(demoMode ? staticCommands : []);
   const [stateLabel, setStateLabel] = useState("读取中");
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setItems(staticCommands);
+      setStateLabel("Visual QA 示例数据");
+      return undefined;
+    }
+    setItems([]);
     setStateLabel("读取中");
     listAssets({ assetType: "command" })
       .then((assets) => {
         if (cancelled) return;
-        if (Array.isArray(assets) && assets.length > 0) {
-          setItems(assets.map(toCommandItem));
-          setStateLabel("只读真实数据");
-        } else {
-          setItems(staticCommands);
-          setStateLabel("静态预览");
-        }
+        const mapped = assets.map(toCommandItem);
+        setItems(mapped);
+        setStateLabel(mapped.length > 0 ? "只读真实数据" : "未发现本地数据");
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setItems(staticCommands);
-        setStateLabel("读取失败，使用静态预览");
+        setItems([]);
+        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode]);
 
   return (
     <AssetCenterLayout
       actionLabel="挂载 Command"
+      emptyDescription="请先扫描或导入 Claude Command。"
+      emptyTitle="未发现 Commands"
       itemLabel="Commands"
       items={items}
       searchPlaceholder="搜索 Command 名称、用途或路径"
@@ -135,6 +140,10 @@ export function CommandsListPage({ onOpenAssetDetail }: AssetListPageProps = {})
       )}
     />
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "无法读取本地 Command。";
 }
 
 function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {

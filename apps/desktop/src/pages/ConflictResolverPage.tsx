@@ -33,9 +33,9 @@ const conflicts = [
   },
 ];
 
-export function ConflictResolverPage() {
-  const [items, setItems] = useState(conflicts);
-  const [selectedId, setSelectedId] = useState(conflicts[0].id);
+export function ConflictResolverPage({ demoMode = false }: { demoMode?: boolean }) {
+  const [items, setItems] = useState(demoMode ? conflicts : []);
+  const [selectedId, setSelectedId] = useState(demoMode ? conflicts[0].id : "");
   const [resolutions, setResolutions] = useState<Record<string, ConflictResolution>>({});
   const [previewState, setPreviewState] = useState("预览中");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -49,6 +49,13 @@ export function ConflictResolverPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!demoMode) {
+      setItems([]);
+      setSelectedId("");
+      setResolutions({});
+      setPreviewState("等待扫描结果");
+      return undefined;
+    }
     setPreviewState("预览中");
     previewConflicts({ scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL", "skill:review"] })
       .then((result) => {
@@ -71,15 +78,15 @@ export function ConflictResolverPage() {
         setItems(conflicts);
         setSelectedId(conflicts[0].id);
         setResolutions(defaultResolutions(conflicts));
-        setPreviewState("读取失败，使用静态预览");
+        setPreviewState("读取失败，保留 Visual QA 示例数据");
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [demoMode, refreshKey]);
 
   const selected = items.find((conflict) => conflict.id === selectedId) ?? items[0];
-  const selectedResolution = resolutions[selected.id] ?? "skip";
+  const selectedResolution = selected ? resolutions[selected.id] ?? "skip" : "skip";
   const resolutionChoices = useMemo<ConflictResolutionChoice[]>(
     () => items.map((item) => ({
       conflictId: item.id,
@@ -88,8 +95,10 @@ export function ConflictResolverPage() {
     })),
     [items, resolutions],
   );
-  const selectedChoice = resolutionChoices.find((choice) => choice.conflictId === selected.id);
-  const selectedPlan = describeResolution(selectedResolution, selected.name);
+  const selectedChoice = selected
+    ? resolutionChoices.find((choice) => choice.conflictId === selected.id)
+    : undefined;
+  const selectedPlan = describeResolution(selectedResolution, selected?.name ?? "当前资产");
   const assetIds = useMemo(() => items.map((item) => item.assetId), [items]);
 
   useEffect(() => {
@@ -122,6 +131,7 @@ export function ConflictResolverPage() {
   const canApply = Boolean(planResult?.ok && importPreview?.previewId);
 
   const updateResolution = (resolution: ConflictResolution) => {
+    if (!selected) return;
     setResolutions((current) => ({ ...current, [selected.id]: resolution }));
     setApplyResult(null);
     setConfirmationValue("");
@@ -186,6 +196,7 @@ export function ConflictResolverPage() {
         <div className="master-select-list" role="listbox" aria-label="冲突选择">{items.map(({ id, name, type, reason, icon: Icon }) => <button aria-label={name} aria-selected={selectedId === id} className={selectedId === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => setSelectedId(id)} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon warning"><Icon size={16} /></span><span><strong>{name}</strong><small>{type} · {reason}</small></span><AlertTriangle size={15} /></button>)}</div>
       </section>
       <section className="panel master-inspector-panel">
+        {!selected ? <div className="asset-inspector-empty"><AlertTriangle size={22} /><strong>暂无待处理冲突</strong><span>先运行扫描；发现真实冲突后会在这里逐项处理。</span></div> : <>
         <div className="section-heading"><div><h3>{selected.name}</h3><p>{selected.reason}</p></div><span className="asset-status warning">需要确认</span></div>
         <dl className="entity-field-list compact"><div><dt>资产类型</dt><dd>{selected.type}</dd></div><div><dt>扫描来源</dt><dd>{selected.source}</dd></div><div><dt>决策预览</dt><dd>{selectedPlan.label}</dd></div></dl>
         <div className="side-by-side-diff"><div><strong>资产中心</strong><pre><code>{selected.existing}</code></pre></div><div><strong>扫描结果</strong><pre><code>{selected.incoming}</code></pre></div></div>
@@ -197,6 +208,7 @@ export function ConflictResolverPage() {
         <div className="operation-warning"><AlertTriangle size={17} /><div><strong>处理计划预览</strong><span>{selectedPlan.planText}{selectedChoice?.renameTo ? `；新名称：${selectedChoice.renameTo}` : ""}。共 {resolutionChoices.length} 个冲突；覆盖或重命名前将创建本地备份。</span></div></div>
         <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出决策</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !importPreview?.previewId} onClick={handlePlanConflictApply} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成处理计划"}</button></div>
         <ApplyConfirmationPanel actionLabel="执行冲突处理" canApply={canApply} confirmationValue={confirmationValue} description="会按逐项决策跳过、重命名或覆盖资产；后端会校验 previewId、路径并在破坏性变更前备份。" isApplying={isApplying} onApply={handleApplyConflicts} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行冲突处理" />
+        </>}
       </section>
     </div>
   );

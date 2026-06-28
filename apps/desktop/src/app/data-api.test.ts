@@ -63,6 +63,18 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("scan_assets", {
       input: { scope: { kind: "custom", path: "~/workspace/project-a" } },
     });
+
+    invoke.mockResolvedValueOnce({ skills: [], warnings: [] });
+    await api.listCodexSkills({ projectPath: "/tmp/project" });
+    expect(invoke).toHaveBeenLastCalledWith("list_codex_skills", {
+      input: { projectPath: "/tmp/project" },
+    });
+
+    invoke.mockResolvedValueOnce({ servers: [], warnings: [] });
+    await api.listCodexMcpServers({ projectPath: null });
+    expect(invoke).toHaveBeenLastCalledWith("list_codex_mcp_servers", {
+      input: { projectPath: null },
+    });
   });
 
   it("calls preview-only command names with the expected input envelope", async () => {
@@ -280,6 +292,8 @@ describe("read-only desktop data api", () => {
       counts: { total: 0, skills: 0, commands: 0, mcps: 0 },
       warnings: ["Tauri runtime is unavailable; scan skipped."],
     });
+    await expect(api.listCodexSkills()).resolves.toEqual({ skills: [], warnings: [] });
+    await expect(api.listCodexMcpServers()).resolves.toEqual({ servers: [], warnings: [] });
     await expect(api.previewConflicts({ scope: { kind: "user" }, assetIds: [] })).resolves.toEqual([]);
     await expect(api.previewMount({
       assetId: "skill:review",
@@ -367,15 +381,14 @@ describe("read-only desktop data api", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("falls back when invoke rejects", async () => {
+  it("surfaces read failures in Tauri instead of masking them with mock data", async () => {
     const api = await import("./data-api");
     invoke.mockRejectedValue(new Error("command unavailable"));
 
-    await expect(api.listAssets()).resolves.toEqual([]);
-    await expect(api.gitStatus()).resolves.toMatchObject({
-      isRepository: false,
-      statusMessage: "Tauri runtime is unavailable.",
-    });
+    await expect(api.listAssets()).rejects.toThrow("command unavailable");
+    await expect(api.gitStatus()).rejects.toThrow("command unavailable");
+    await expect(api.listCodexSkills()).rejects.toThrow("command unavailable");
+    await expect(api.listCodexMcpServers()).rejects.toThrow("command unavailable");
     await expect(api.settingsSave({ settings: savedSettings })).rejects.toThrow("command unavailable");
   });
 });

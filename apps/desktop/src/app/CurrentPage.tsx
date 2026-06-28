@@ -1,6 +1,7 @@
 import type { AppInfo } from "./contracts";
 import type { AssetDetailContext, ProjectDetailContext } from "./detail-context";
 import type { PageId } from "./pages";
+import type { AssetProvider } from "./provider";
 import { AssetDetailPage } from "../pages/AssetDetailPage";
 import { BackupRestorePage } from "../pages/BackupRestorePage";
 import { CommandsListPage } from "../pages/CommandsListPage";
@@ -23,6 +24,8 @@ type CurrentPageProps = {
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
   onOpenProjectDetail?: (detail: ProjectDetailContext) => void;
   onPageChange?: (page: PageId) => void;
+  provider?: AssetProvider;
+  demoMode?: boolean;
 };
 
 function assertNever(value: never): never {
@@ -37,21 +40,23 @@ export function CurrentPage({
   onOpenAssetDetail,
   onOpenProjectDetail,
   onPageChange,
+  provider = "claude",
+  demoMode = false,
 }: CurrentPageProps) {
   switch (activePage) {
-    case "dashboard": return <DashboardPage appInfo={appInfo} />;
-    case "skills": return <SkillsListPage onOpenAssetDetail={onOpenAssetDetail} />;
-    case "commands": return <CommandsListPage onOpenAssetDetail={onOpenAssetDetail} />;
-    case "mcp": return <McpServersListPage onOpenAssetDetail={onOpenAssetDetail} />;
-    case "asset-detail": return <AssetDetailPage detail={assetDetail ?? undefined} />;
-    case "projects": return <ProjectsListPage onOpenProjectDetail={onOpenProjectDetail} />;
-    case "project-detail": return <ProjectDetailPage detail={projectDetail ?? undefined} />;
-    case "scan": return <ScanImportPage />;
-    case "mounts": return <MountManagerPage />;
-    case "conflicts": return <ConflictResolverPage />;
-    case "backups": return <BackupRestorePage />;
-    case "sync": return <SyncPage />;
-    case "settings": return <SettingsPage />;
+    case "dashboard": return <DashboardPage appInfo={appInfo} demoMode={demoMode} />;
+    case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;
+    case "commands": return <CommandsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
+    case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;
+    case "asset-detail": return <AssetDetailPage demoMode={demoMode} detail={assetDetail ?? undefined} />;
+    case "projects": return <ProjectsListPage demoMode={demoMode} onOpenProjectDetail={onOpenProjectDetail} />;
+    case "project-detail": return <ProjectDetailPage demoMode={demoMode} detail={projectDetail ?? undefined} />;
+    case "scan": return <ScanImportPage demoMode={demoMode} />;
+    case "mounts": return <MountManagerPage demoMode={demoMode} />;
+    case "conflicts": return <ConflictResolverPage demoMode={demoMode} />;
+    case "backups": return <BackupRestorePage demoMode={demoMode} />;
+    case "sync": return <SyncPage demoMode={demoMode} />;
+    case "settings": return <SettingsPage demoMode={demoMode} />;
   }
 
   return assertNever(activePage);

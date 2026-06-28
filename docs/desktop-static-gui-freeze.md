@@ -86,13 +86,9 @@ Validated on 2026-06-23:
 
 ## What Remains Static Or Mocked
 
-- Dashboard statistics, recent activity, projects, and environment status.
-- Skill, Command, MCP, project, conflict, backup, and sync data.
-- Scan results, mount plans, diffs, restore impact, and Git history.
-- Settings values and all business-action outcomes.
-- Asset and project detail content.
+Production pages now use Tauri data, empty states, or error states. Static fixtures remain only in tests, Visual QA, and explicit demo mode.
 
-Later integration milestones added read-only runtime and asset-center data access through Tauri wrappers. React still does not directly manipulate local files.
+Recent activity has no backend event source yet and therefore displays an empty state in production. Visual QA continues to use deterministic fixtures so frozen layouts remain screenshot-testable. React still does not directly manipulate local files.
 
 ## Ready For Tauri And Rust Integration
 
@@ -100,14 +96,14 @@ Later integration milestones added read-only runtime and asset-center data acces
 - `app/CurrentPage.tsx` provides the page composition boundary for future data and command wiring.
 - List, inspector, detail, plan, warning, diff, and status surfaces define the static presentation targets for structured DTOs.
 - `StaticActionButton` locations mark destructive apply command entry points without currently exposing executable behavior; Settings save, Scan Import plan generation, Mount Manager plan generation, Sync plan generation, and Backup Restore plan generation are handled by separate controlled actions.
-- The existing `app_info` bridge proves basic Tauri-to-React communication while page business data remains mocked.
+- Typed Tauri wrappers now provide Claude read/apply flows and read-only Codex Skills/MCP discovery. Page components receive structured DTOs and keep filesystem/config parsing in Rust.
 
 Future integration should place filesystem, Git, scan, mount, MCP compile, backup, restore, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.
 
 ## Known Limitations
 
 - Asset Detail and Project Detail are reached from list inspector actions rather than primary sidebar navigation.
-- No real Claude runtime, asset-center, project filesystem, or Git data is loaded.
+- Codex support is read-only and does not include AGENTS.md, custom commands, import, mount, config writes, or OAuth token management.
 - Destructive apply-style business actions remain intentionally disabled; Settings save, Scan Import plan generation, Mount Manager plan generation, Sync plan generation, and Backup Restore plan generation were added as controlled actions after the static freeze.
 - Visual QA currently batch-generates macOS-layout screenshots only.
 - Headless Chrome does not validate native Tauri window chrome, macOS traffic lights, or Windows native titlebar behavior.

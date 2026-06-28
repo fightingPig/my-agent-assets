@@ -41,6 +41,8 @@ const {
   previewMount,
   previewConflicts,
   previewRestore,
+  listCodexSkills,
+  listCodexMcpServers,
   mountApply,
   restoreApply,
 } = vi.hoisted(() => ({
@@ -59,6 +61,8 @@ const {
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
   previewRestore: vi.fn(),
+  listCodexSkills: vi.fn(),
+  listCodexMcpServers: vi.fn(),
   mountApply: vi.fn(),
   restoreApply: vi.fn(),
 }));
@@ -79,6 +83,8 @@ vi.mock("../app/data-api", () => ({
   previewMount,
   previewConflicts,
   previewRestore,
+  listCodexSkills,
+  listCodexMcpServers,
   mountApply,
   restoreApply,
 }));
@@ -89,9 +95,25 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  listAssets.mockResolvedValue([]);
-  listProjects.mockResolvedValue([]);
-  listBackups.mockResolvedValue([]);
+  listAssets.mockResolvedValue([assetFixture("skill:review", "review", "skill")]);
+  listProjects.mockResolvedValue([{
+    id: "/tmp/project-a",
+    name: "project-a",
+    title: "Project A",
+    path: "~/workspace/project-a",
+    status: "ready",
+    description: "Local project fixture",
+    updatedAt: "2026-06-28T08:00:00Z",
+    assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
+    mounts: ["review"],
+  } satisfies ProjectSummary]);
+  listBackups.mockResolvedValue([{
+    id: "backup-20260621-1842",
+    label: "扫描导入前",
+    createdAt: "2026-06-21T18:42:00Z",
+    sizeBytes: 24 * 1024,
+    entryCount: 2,
+  }]);
   gitStatus.mockResolvedValue(gitStatusFixture());
   settingsLoad.mockResolvedValue(settingsFixture());
   settingsSave.mockImplementation(async ({ settings }) => settings);
@@ -167,6 +189,8 @@ beforeEach(() => {
   previewMount.mockResolvedValue(mountPreviewFixture());
   previewConflicts.mockResolvedValue([]);
   previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842"));
+  listCodexSkills.mockResolvedValue({ skills: [], warnings: [] });
+  listCodexMcpServers.mockResolvedValue({ servers: [], warnings: [] });
   mountApply.mockResolvedValue({
     mode: "planOnly",
     ok: true,
@@ -226,12 +250,76 @@ describe("read-only UI integration", () => {
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
   });
 
-  it("falls back to static Asset Center data when read-only assets are empty", async () => {
+  it("renders real Codex Skills and MCP fields without Claude demo rows", async () => {
+    listCodexSkills.mockResolvedValue({
+      skills: [{
+        id: "global:review",
+        name: "codex-review",
+        description: "Review code with local Codex instructions.",
+        scope: "global",
+        path: "/tmp/home/.agents/skills/codex-review",
+        status: "ready",
+        hasScripts: true,
+        hasReferences: true,
+        hasAssets: false,
+        hasOpenaiMetadata: true,
+        symlinkTarget: null,
+        updatedAt: "2026-06-28T08:00:00Z",
+        warnings: [],
+      }],
+      warnings: [],
+    });
+    listCodexMcpServers.mockResolvedValue({
+      servers: [{
+        id: "global:local-files",
+        name: "local-files",
+        scope: "global",
+        configPath: "/tmp/home/.codex/config.toml",
+        transport: "stdio",
+        command: "local-files-mcp",
+        args: ["--readonly"],
+        url: null,
+        enabled: true,
+        enabledTools: ["read_file"],
+        disabledTools: ["write_file"],
+        approvalMode: "on-request",
+        warnings: [],
+      }],
+      warnings: [],
+    });
+
+    const { rerender } = render(<SkillsListPage provider="codex" />);
+    expect(await screen.findByRole("option", { name: "codex-review" })).toBeInTheDocument();
+    expect(screen.getByText("scripts/")).toBeInTheDocument();
+    expect(screen.getByText("agents/openai.yaml")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
+    expect(listCodexSkills).toHaveBeenCalledWith({ projectPath: null });
+
+    rerender(<McpServersListPage provider="codex" />);
+    expect(await screen.findByRole("option", { name: "local-files" })).toBeInTheDocument();
+    expect(screen.getAllByText(/local-files-mcp/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("read_file").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("禁用: write_file").length).toBeGreaterThan(0);
+    expect(listCodexMcpServers).toHaveBeenCalledWith({ projectPath: null });
+  });
+
+  it("shows provider-specific empty states for empty Codex discovery", async () => {
+    const { rerender } = render(<SkillsListPage provider="codex" />);
+    expect(await screen.findByText("未发现 Codex Skills")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
+
+    rerender(<McpServersListPage provider="codex" />);
+    expect(await screen.findByText("未发现 Codex MCP Servers")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
+  });
+
+  it("shows an empty state instead of static assets when read-only assets are empty", async () => {
     listAssets.mockResolvedValue([]);
 
     const { container } = render(<SkillsListPage />);
-    expect(await screen.findByRole("option", { name: "review" })).toBeInTheDocument();
-    expect(container.textContent).toContain("静态预览");
+    expect(await screen.findByText("未发现 Skills")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
+    expect(container.textContent).toContain("未发现本地数据");
   });
 
   it("feeds read-only projects while preserving selection and disabled actions", async () => {
@@ -259,13 +347,14 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "管理挂载" })).toBeDisabled();
   });
 
-  it("falls back to static projects when listProjects is empty", async () => {
+  it("shows an empty state instead of static projects when listProjects is empty", async () => {
     listProjects.mockResolvedValue([]);
 
     const { container } = render(<ProjectsListPage />);
 
-    expect(await screen.findByRole("option", { name: "project-a" })).toBeInTheDocument();
-    expect(container.textContent).toContain("静态预览");
+    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
+    expect(container.textContent).toContain("未发现本地项目");
   });
 
   it("feeds read-only backup manifests while preserving restore planning", async () => {
@@ -523,8 +612,9 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "生成挂载计划" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
 
-    rerender(<ConflictResolverPage />);
-    await waitFor(() => expect(screen.getByText("Incoming preview content for review")).toBeInTheDocument());
+    rerender(<ConflictResolverPage demoMode />);
+    fireEvent.click(screen.getByRole("option", { name: "review" }));
+    await waitFor(() => expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "执行冲突处理" })).toBeDisabled();
 
     rerender(<BackupRestorePage />);
@@ -539,7 +629,9 @@ describe("read-only UI integration", () => {
     render(<BackupRestorePage />);
 
     await screen.findByText("backup-20260621-1842");
-    fireEvent.click(screen.getByRole("button", { name: "生成恢复计划" }));
+    const planButton = screen.getByRole("button", { name: "生成恢复计划" });
+    await waitFor(() => expect(planButton).toBeEnabled());
+    fireEvent.click(planButton);
 
     await waitFor(() => expect(restoreApply).toHaveBeenCalledWith({
       previewId: "preview:restore:backup-20260621-1842",
@@ -555,7 +647,9 @@ describe("read-only UI integration", () => {
     render(<BackupRestorePage />);
 
     await screen.findByText("backup-20260621-1842");
-    fireEvent.click(screen.getByRole("button", { name: "生成恢复计划" }));
+    const planButton = screen.getByRole("button", { name: "生成恢复计划" });
+    await waitFor(() => expect(planButton).toBeEnabled());
+    fireEvent.click(planButton);
     await waitFor(() => expect(restoreApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
 
     const restoreButton = screen.getByRole("button", { name: "恢复此备份" });
@@ -578,6 +672,10 @@ describe("read-only UI integration", () => {
     render(<MountManagerPage />);
 
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /project-a/ }));
+    await waitFor(() => expect(previewMount).toHaveBeenLastCalledWith(expect.objectContaining({
+      target: expect.objectContaining({ scope: "project" }),
+    })));
     fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
 
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith({
@@ -599,6 +697,10 @@ describe("read-only UI integration", () => {
     render(<MountManagerPage />);
 
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /project-a/ }));
+    await waitFor(() => expect(previewMount).toHaveBeenLastCalledWith(expect.objectContaining({
+      target: expect.objectContaining({ scope: "project" }),
+    })));
     fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
 
@@ -620,7 +722,7 @@ describe("read-only UI integration", () => {
       backupBeforeApply: true,
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    await waitFor(() => expect(previewMount).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(previewMount.mock.calls.length).toBeGreaterThanOrEqual(3));
   });
 
   it("updates Conflict Resolver decisions and requires a plan plus typed confirmation", async () => {
@@ -628,9 +730,10 @@ describe("read-only UI integration", () => {
       conflictPreviewFixture("conflict:skill:review", "review", "skill"),
     ]);
 
-    render(<ConflictResolverPage />);
+    render(<ConflictResolverPage demoMode />);
 
-    await waitFor(() => expect(screen.getByText("Incoming preview content for review")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("option", { name: "review" }));
+    await waitFor(() => expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument());
     expect(screen.getByText(/review 将被跳过/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /覆盖.*使用扫描结果替换现有内容/ }));

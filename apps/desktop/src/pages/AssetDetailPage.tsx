@@ -34,11 +34,13 @@ const fallbackDetail: AssetDetailContext = {
 };
 
 type AssetDetailPageProps = {
+  demoMode?: boolean;
   detail?: AssetDetailContext;
 };
 
-export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDetailPageProps) {
-  const [detail, setDetail] = useState(detailProp);
+export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetDetailPageProps) {
+  const initialDetail = detailProp ?? (demoMode ? fallbackDetail : null);
+  const [detail, setDetail] = useState<AssetDetailContext | null>(initialDetail);
   const [preview, setPreview] = useState<MountPreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
@@ -47,16 +49,20 @@ export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDe
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const previewInput = useMemo(() => assetMountInput(detail), [detail]);
+  const previewInput = useMemo(() => detail ? assetMountInput(detail) : null, [detail]);
 
   useEffect(() => {
-    setDetail(detailProp);
-  }, [detailProp]);
+    setDetail(detailProp ?? (demoMode ? fallbackDetail : null));
+  }, [demoMode, detailProp]);
 
   useEffect(() => {
     let cancelled = false;
     setPlanResult(null);
     setOperationError(null);
+    if (!previewInput) {
+      setPreview(null);
+      return undefined;
+    }
     previewMount(previewInput)
       .then((result) => {
         if (!cancelled) setPreview(result);
@@ -74,7 +80,7 @@ export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDe
   const canApply = Boolean(planResult?.ok && preview?.previewId);
 
   const handlePlanMount = async () => {
-    if (!preview?.previewId) return;
+    if (!preview?.previewId || !previewInput) return;
     setIsPlanning(true);
     setOperationError(null);
     try {
@@ -94,7 +100,7 @@ export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDe
   };
 
   const handleApplyMount = async () => {
-    if (!canApply || !preview?.previewId) return;
+    if (!canApply || !preview?.previewId || !previewInput || !detail) return;
     setIsApplying(true);
     setOperationError(null);
     try {
@@ -109,7 +115,7 @@ export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDe
       if (result.ok) {
         const refreshed = await listAssets({ assetType: detail.assetType });
         const asset = refreshed.find((item) => item.id === detail.assetId);
-        if (asset) setDetail((current) => mergeAssetSummary(current, asset));
+        if (asset) setDetail((current) => current ? mergeAssetSummary(current, asset) : current);
         setConfirmationValue("");
         setRefreshKey((current) => current + 1);
       }
@@ -120,6 +126,18 @@ export function AssetDetailPage({ detail: detailProp = fallbackDetail }: AssetDe
       setIsApplying(false);
     }
   };
+
+  if (!detail || !previewInput) {
+    return (
+      <section className="panel detail-section">
+        <div className="asset-empty-state">
+          <BookOpen size={22} />
+          <strong>未选择真实资产</strong>
+          <span>请从 Skills、Commands 或 MCP Servers 检查器打开资产详情。</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="detail-workspace">

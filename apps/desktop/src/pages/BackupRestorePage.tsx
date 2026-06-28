@@ -21,9 +21,9 @@ const staticBackups: readonly BackupItem[] = [
   { id: "backup-20260618-1630", title: "资产移除前", created: "3 天前", size: "8 KB", paths: ["~/.claude/commands/format-code.md"], impact: "恢复 1 项 Command 路径" },
 ];
 
-export function BackupRestorePage() {
-  const [backups, setBackups] = useState<readonly BackupItem[]>(staticBackups);
-  const [selectedId, setSelectedId] = useState(staticBackups[0].id);
+export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) {
+  const [backups, setBackups] = useState<readonly BackupItem[]>(demoMode ? staticBackups : []);
+  const [selectedId, setSelectedId] = useState(demoMode ? staticBackups[0].id : "");
   const [preview, setPreview] = useState<RestorePreview | null>(null);
   const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
@@ -34,10 +34,18 @@ export function BackupRestorePage() {
   const [isApplying, setIsApplying] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0] ?? staticBackups[0];
+  const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0];
 
   useEffect(() => {
     let cancelled = false;
+    if (demoMode) {
+      setBackups(staticBackups);
+      setSelectedId(staticBackups[0].id);
+      setListState("Visual QA 示例数据");
+      return undefined;
+    }
+    setBackups([]);
+    setSelectedId("");
     setListState("读取中");
     listBackups()
       .then((loaded) => {
@@ -45,27 +53,32 @@ export function BackupRestorePage() {
         if (Array.isArray(loaded) && loaded.length > 0) {
           const mapped = loaded.map(toBackupItem);
           setBackups(mapped);
-          setSelectedId(mapped[0]?.id ?? staticBackups[0].id);
+          setSelectedId(mapped[0]?.id ?? "");
           setListState("只读真实数据");
         } else {
-          setBackups(staticBackups);
-          setSelectedId(staticBackups[0].id);
-          setListState("静态预览");
+          setBackups([]);
+          setSelectedId("");
+          setListState("未发现本地备份");
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
-        setBackups(staticBackups);
-        setSelectedId(staticBackups[0].id);
-        setListState("读取失败，使用静态预览");
+        setBackups([]);
+        setSelectedId("");
+        setListState(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [demoMode, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
+    if (!selectedId) {
+      setPreview(null);
+      setPreviewState("等待备份记录");
+      return undefined;
+    }
     setPreviewState("预览中");
     setPlanResult(null);
     setOperationError(null);
@@ -77,23 +90,24 @@ export function BackupRestorePage() {
           setPreviewState("预览数据");
         } else {
           setPreview(null);
-          setPreviewState("静态预览");
+          setPreviewState("未返回恢复预览");
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return;
         setPreview(null);
-        setPreviewState("读取失败，使用静态预览");
+        setOperationError(errorMessage(error));
+        setPreviewState("恢复预览读取失败");
       });
     return () => {
       cancelled = true;
     };
   }, [selectedId]);
 
-  const affectedPaths = preview?.affectedPaths.length ? preview.affectedPaths : selected.paths;
+  const affectedPaths = preview?.affectedPaths.length ? preview.affectedPaths : selected?.paths ?? [];
   const impact = preview?.steps.length
     ? preview.steps.map((step) => step.label).join(" / ")
-    : selected.impact;
+    : selected?.impact ?? "暂无恢复影响";
   const planSummary = planResult?.steps.length
     ? planResult.steps.map((step) => step.message).join(" / ")
     : null;
@@ -155,15 +169,17 @@ export function BackupRestorePage() {
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
         <div className="section-heading"><div><h3>备份记录</h3><p>本地 backup manifest 预览 · {listState}</p></div><span>{backups.length} 份</span></div>
-        <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => { setSelectedId(backup.id); setApplyResult(null); setConfirmationValue(""); }} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}</div>
+        <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => { setSelectedId(backup.id); setApplyResult(null); setConfirmationValue(""); }} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}{backups.length === 0 && <div className="asset-empty-state"><ArchiveRestore size={22} /><strong>暂无本地备份</strong><span>执行需要备份的真实操作后，backup manifest 会显示在这里。</span></div>}</div>
       </section>
       <section className="panel master-inspector-panel">
+        {selected ? <>
         <div className="section-heading"><div><h3>{selected.title}</h3><p>{selected.id}</p></div><span className="healthy-badge">{previewState}</span></div>
         <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{impact}</span></div></div>
         <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
         <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{planSummary ?? preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
         <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button></div>
         <ApplyConfirmationPanel actionLabel="恢复此备份" canApply={canApply} confirmationValue={confirmationValue} description="会从 backup manifest 恢复受影响路径；后端会校验 previewId 并先备份当前状态。" isApplying={isApplying} onApply={handleApplyRestore} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行恢复" />
+        </> : <div className="asset-inspector-empty"><ArchiveRestore size={22} /><strong>暂无恢复预览</strong><span>选择真实备份记录后，这里会显示受影响路径。</span></div>}
       </section>
     </div>
   );
