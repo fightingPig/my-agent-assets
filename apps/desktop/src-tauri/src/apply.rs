@@ -161,6 +161,24 @@ impl<'a> ImportApplyRunner<'a> {
 
         for asset_id in self.input.asset_ids.clone() {
             let resolution = self.resolution_for(&asset_id).cloned();
+            if resolution.is_none() {
+                match preview::real_conflict_from_id(self.home, &self.input.scope, &asset_id) {
+                    Ok(Some(_)) => {
+                        self.push_failed_step(
+                            &asset_id,
+                            "检测未解决冲突",
+                            "Import apply requires an explicit conflict resolution. Use Conflict Resolver to skip, rename, or overwrite.",
+                            vec![],
+                        );
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.push_failed_step(&asset_id, "检测资产冲突", error, vec![]);
+                        continue;
+                    }
+                }
+            }
             if matches!(
                 resolution.as_ref().map(|choice| &choice.resolution),
                 Some(ConflictResolution::Skip)

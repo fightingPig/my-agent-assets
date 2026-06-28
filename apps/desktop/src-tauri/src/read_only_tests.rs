@@ -206,6 +206,10 @@ fn list_assets_derives_symlink_and_mcp_mount_targets() {
 fn scan_assets_reads_user_runtime_and_top_level_mcp_servers() {
     let home = TempHome::new("scan-user");
     home.write(".claude/skills/review.md", "# Review");
+    home.write(
+        ".claude/skills/api-design/SKILL.md",
+        "# API Design\n\nDirectory skill",
+    );
     home.write(".claude/commands/commit.md", "# Commit");
     home.write(
         ".claude.json",
@@ -219,11 +223,15 @@ fn scan_assets_reads_user_runtime_and_top_level_mcp_servers() {
         },
     );
 
-    assert_eq!(result.counts.total, 4);
+    assert_eq!(result.counts.total, 5);
+    assert_eq!(result.counts.skills, 2);
     assert!(result
         .assets
         .iter()
         .any(|asset| asset.id == "skill:review" && asset.scope == Some(RuntimeScope::User)));
+    assert!(result.assets.iter().any(|asset| {
+        asset.id == "skill:api-design" && asset.source_path.ends_with(".claude/skills/api-design")
+    }));
     assert!(result
         .assets
         .iter()
@@ -241,6 +249,10 @@ fn scan_assets_reads_project_and_custom_runtime_roots() {
     home.write(
         "workspace/project-a/.claude/skills/db-review.md",
         "# DB Review",
+    );
+    home.write(
+        "workspace/project-a/.claude/skills/react-review/SKILL.md",
+        "# React Review",
     );
     home.write("workspace/project-a/.claude/commands/deploy.md", "# Deploy");
     home.write(
@@ -265,9 +277,39 @@ fn scan_assets_reads_project_and_custom_runtime_roots() {
         },
     );
 
-    assert_eq!(project.counts.total, 3);
-    assert_eq!(custom.counts.total, 3);
+    assert_eq!(project.counts.total, 4);
+    assert_eq!(custom.counts.total, 4);
+    assert_eq!(project.counts.skills, 2);
+    assert_eq!(custom.counts.skills, 2);
+    assert!(project
+        .assets
+        .iter()
+        .any(|asset| asset.id == "skill:react-review"));
+    assert!(custom
+        .assets
+        .iter()
+        .any(|asset| asset.id == "skill:react-review"));
     assert!(project.assets.iter().any(|asset| asset.id == "mcp:SQLite"));
+}
+
+#[test]
+fn scan_assets_marks_different_existing_asset_content_as_conflict() {
+    let home = TempHome::new("scan-conflict");
+    home.write(".claude/skills/review.md", "# Incoming Review");
+    home.write(
+        ".my-agent-assets/assets/skills/review.md",
+        "# Existing Review",
+    );
+
+    let result = scan_assets_for_home(
+        home.path(),
+        ScanAssetsInput {
+            scope: ScanScope::User,
+        },
+    );
+
+    assert_eq!(result.conflict_count, 1);
+    assert_eq!(result.assets[0].status, AssetStatus::Conflict);
 }
 
 #[test]

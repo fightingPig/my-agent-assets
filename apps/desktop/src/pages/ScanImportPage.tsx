@@ -44,8 +44,8 @@ export function ScanImportPage() {
         if (cancelled) return;
         if (result && typeof result === "object" && "counts" in result) {
           setScanResult(result);
-          setStateLabel(result.assets.length > 0 ? "只读真实数据" : "静态预览");
-          if (result.assets.length > 0) {
+          setStateLabel(result.conflictCount > 0 ? "发现冲突" : result.assets.length > 0 ? "只读真实数据" : "静态预览");
+          if (result.assets.length > 0 && result.conflictCount === 0) {
             previewImport({
               scope: input,
               assetIds: result.assets.map((asset) => asset.id),
@@ -85,11 +85,12 @@ export function ScanImportPage() {
   const previewWarning = importPreview?.warnings[0];
   const previewStepText = importPreview?.steps.map((step) => step.label).join(" / ");
   const scannedAssetIds = scanResult?.assets.map((asset) => asset.id) ?? [];
+  const hasConflicts = (scanResult?.conflictCount ?? 0) > 0;
   const planSummary = planResult?.steps.length
     ? planResult.steps.map((step) => step.message).join(" / ")
     : previewStepText;
-  const canGeneratePlan = Boolean(importPreview?.previewId) && scannedAssetIds.length > 0 && !isPlanning;
-  const canApply = Boolean(planResult?.ok && importPreview?.previewId && scannedAssetIds.length > 0);
+  const canGeneratePlan = Boolean(importPreview?.previewId) && scannedAssetIds.length > 0 && !hasConflicts && !isPlanning;
+  const canApply = Boolean(planResult?.ok && importPreview?.previewId && scannedAssetIds.length > 0 && !hasConflicts);
 
   const handlePlanImport = async () => {
     if (scannedAssetIds.length === 0 || !importPreview?.previewId) return;
@@ -167,7 +168,7 @@ export function ScanImportPage() {
       <section className="panel operation-section">
         <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}</p></div><span>{rows.length} 项待确认</span></div>
         <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={`${result.type}:${result.name}`}><strong>{result.name}</strong><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}</div>
-        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{previewWarning ?? warning ?? "只读扫描预览"}</strong><span>{planSummary ?? (scanResult?.assets.length ? "当前仅展示发现结果，不执行预览导入或导入。" : "未读取到真实资产时保留静态预览，确认导入仍然禁用。")}</span></div></div>
+        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${scanResult?.conflictCount} 项内容冲突` : previewWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请先在冲突处理页面逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary ?? (scanResult?.assets.length ? "当前仅展示发现结果，不执行预览导入或导入。" : "未读取到真实资产时保留静态预览，确认导入仍然禁用。")}</span></div></div>
         <div className="operation-actions"><StaticActionButton className="asset-secondary-action">保存扫描预览</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button></div>
         <ApplyConfirmationPanel
           actionLabel="确认导入"
@@ -201,6 +202,6 @@ function toScanRow(asset: AssetSummary) {
     name: asset.name,
     type: asset.assetType === "skill" ? "Skill" : asset.assetType === "command" ? "Command" : "MCP",
     source: asset.scope === "user" ? "用户级" : asset.scope === "project" ? "项目级" : "资产中心",
-    result: asset.status === "invalid" ? "无效" : "发现",
+    result: asset.status === "invalid" ? "无效" : asset.status === "conflict" ? "冲突" : "发现",
   };
 }

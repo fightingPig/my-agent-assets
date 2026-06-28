@@ -35,7 +35,7 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 
 ## Data Sources
 
-`settings_load` returns default settings when no config exists. After `settings_save`, it reads `~/.my-agent-assets/config.json`.
+`settings_load` returns default settings when no config exists. After `settings_save`, it reads `~/.my-agent-assets/config.json`. In V1, `assetCenterPath` is informational and normalized to the fixed `~/.my-agent-assets` location; the Settings UI exposes it as read-only until relocation is implemented consistently across all commands.
 
 `list_assets` reads:
 
@@ -44,6 +44,8 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 - `~/.my-agent-assets/assets/mcps/`
 
 Skills support both `<name>/` directories and root `.md` files. Commands read `.md` files. MCP assets read `.json` files, with invalid JSON marked as `invalid`.
+
+Runtime scans use the same Skill forms: `.claude/skills/<name>/SKILL.md` and `.claude/skills/<name>.md`. Scan results compare discovered assets with asset-center content, mark differing same-ID assets as `conflict`, and report `conflictCount`.
 
 Asset summaries also derive current local usage:
 

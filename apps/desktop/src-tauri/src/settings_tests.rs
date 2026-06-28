@@ -89,8 +89,14 @@ fn settings_save_writes_config_and_settings_load_reads_it_back() {
     .expect("settings should save");
     let loaded = settings_load_for_home(home.path());
 
-    assert_eq!(saved, input);
-    assert_eq!(loaded, input);
+    let expected_asset_center = home
+        .path()
+        .join(".my-agent-assets")
+        .to_string_lossy()
+        .into_owned();
+    assert_eq!(saved.asset_center_path, expected_asset_center);
+    assert_eq!(loaded, saved);
+    assert_eq!(saved.scan_roots, input.scan_roots);
     assert!(home.config_path().exists());
     let raw = fs::read_to_string(home.config_path()).expect("config should be readable");
     assert!(raw.contains("\"assetCenterPath\""));
@@ -159,6 +165,22 @@ fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
         .to_string()
         .contains("Symlink traversal"));
     assert!(!outside.config_path().exists());
+}
+
+#[test]
+fn settings_save_ignores_inactive_asset_center_path_setting() {
+    let home = TempHome::new("fixed-asset-center");
+    let mut settings = custom_settings(home.path());
+    settings.asset_center_path = home.path().join("ignored").to_string_lossy().into_owned();
+
+    let saved = settings_save_for_home(home.path(), SettingsSaveInput { settings })
+        .expect("settings should save");
+
+    assert_eq!(
+        saved.asset_center_path,
+        home.path().join(".my-agent-assets").to_string_lossy()
+    );
+    assert!(!home.path().join("ignored").exists());
 }
 
 #[cfg(unix)]

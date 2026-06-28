@@ -364,18 +364,47 @@ describe("read-only UI integration", () => {
     expect(screen.getByDisplayValue("upstream")).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/maa")).toBeInTheDocument();
 
-    fireEvent.change(assetCenter, { target: { value: "/tmp/edited-assets" } });
+    expect(assetCenter).toHaveAttribute("readonly");
     fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
 
     await waitFor(() => expect(settingsSave).toHaveBeenCalledWith({
       settings: expect.objectContaining({
-        assetCenterPath: "/tmp/edited-assets",
+        assetCenterPath: "/tmp/assets",
         gitDefaultBranch: "trunk",
         gitRemote: "upstream",
       }),
     }));
     await waitFor(() => expect(settingsLoad).toHaveBeenCalledTimes(2));
     expect(screen.getByText("设置已写入本地配置，并已从后端重新读取确认。")).toBeInTheDocument();
+  });
+
+  it("shows settings save failures and never reports a successful save", async () => {
+    settingsSave.mockRejectedValue(new Error("permission denied"));
+
+    render(<SettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "保存设置" }));
+
+    expect(await screen.findByText(/保存失败：permission denied/)).toBeInTheDocument();
+    expect(screen.queryByText("设置已写入本地配置，并已从后端重新读取确认。")).not.toBeInTheDocument();
+    expect(settingsLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks Scan Import when the backend reports unresolved conflicts", async () => {
+    scanAssets.mockResolvedValue({
+      ...scanResultFixture([
+        { ...assetFixture("skill:review", "review", "skill"), status: "conflict" },
+      ]),
+      conflictCount: 1,
+    });
+
+    render(<ScanImportPage />);
+
+    expect(await screen.findByText("发现 1 项内容冲突")).toBeInTheDocument();
+    expect(screen.getByText(/请先在冲突处理页面逐项选择/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成导入计划" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
+    expect(previewImport).not.toHaveBeenCalled();
+    expect(importApply).not.toHaveBeenCalled();
   });
 
   it("calls scanAssets for the selected scope and keeps import disabled", async () => {

@@ -48,16 +48,31 @@ pub fn preview_sync_command(input: PreviewSyncInput) -> SyncPreview {
 
 pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
     let preview_id = import_preview_id(&input.scope, &input.asset_ids, &input.conflict_resolutions);
+    let mut warnings = vec!["Preview only: no files will be written.".into()];
+    let mut invalid_ids = Vec::new();
     let assets = input
         .asset_ids
         .iter()
-        .map(|asset_id| asset_from_id(asset_id))
+        .filter_map(|asset_id| match asset_from_id(asset_id) {
+            Ok(asset) => Some(asset),
+            Err(error) => {
+                invalid_ids.push(error);
+                None
+            }
+        })
         .collect::<Vec<_>>();
     let conflicts = input
         .conflict_resolutions
         .iter()
-        .map(|choice| conflict_from_id(&choice.conflict_id))
+        .filter_map(|choice| match conflict_from_id(&choice.conflict_id) {
+            Ok(conflict) => Some(conflict),
+            Err(error) => {
+                invalid_ids.push(error);
+                None
+            }
+        })
         .collect::<Vec<_>>();
+    warnings.extend(invalid_ids.iter().cloned());
     let mut steps = vec![step(
         "check-selection",
         PlanStepKind::Check,
@@ -89,17 +104,22 @@ pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
         assets,
         conflicts,
         steps,
-        warnings: vec!["Preview only: no files will be written.".into()],
-        can_apply: !input.asset_ids.is_empty(),
+        warnings,
+        can_apply: !input.asset_ids.is_empty() && invalid_ids.is_empty(),
     }
 }
 
 pub fn preview_mount(input: PreviewMountInput) -> MountPreview {
     let preview_id = mount_preview_id(&input.asset_id, &input.target);
-    let asset = asset_from_id(&input.asset_id);
+    let parsed_asset = asset_from_id(&input.asset_id);
+    let asset_is_valid = parsed_asset.is_ok();
+    let asset = parsed_asset.unwrap_or_else(|error| invalid_asset_from_id(&input.asset_id, &error));
     let target_path = input.target.runtime_path.clone();
     let is_mcp = asset.asset_type == AssetType::Mcp;
     let mut warnings = vec!["Preview only: no symlink or config file will be changed.".into()];
+    if !asset_is_valid {
+        warnings.push(format!("Invalid asset ID: {}.", input.asset_id));
+    }
     if target_path.trim().is_empty() {
         warnings.push("Target runtime path is empty.".into());
     }
@@ -141,7 +161,7 @@ pub fn preview_mount(input: PreviewMountInput) -> MountPreview {
         ],
         warnings,
         backup_required: true,
-        can_apply: !target_path.trim().is_empty(),
+        can_apply: asset_is_valid && !target_path.trim().is_empty(),
     }
 }
 
@@ -149,7 +169,7 @@ pub fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
     input
         .asset_ids
         .iter()
-        .map(|asset_id| conflict_from_id(asset_id))
+        .filter_map(|asset_id| conflict_from_id(asset_id).ok())
         .collect()
 }
 
@@ -489,10 +509,10 @@ fn wire_json<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "null".into())
 }
 
-fn asset_from_id(asset_id: &str) -> AssetSummary {
-    let (asset_type, name) = parse_asset_id(asset_id);
+fn asset_from_id(asset_id: &str) -> Result<AssetSummary, String> {
+    let (asset_type, name) = parse_asset_id(asset_id)?;
     let prefix = asset_type_prefix(&asset_type);
-    AssetSummary {
+    Ok(AssetSummary {
         id: format!("{}:{}", prefix, name),
         name: name.clone(),
         title: name.clone(),
@@ -502,6 +522,22 @@ fn asset_from_id(asset_id: &str) -> AssetSummary {
         description: format!("Preview summary for {}", name),
         source_path: format!("~/.my-agent-assets/assets/{}/{}", prefix, name),
         scope: Some(RuntimeScope::Local),
+        updated_at: None,
+        mount_targets: vec![],
+    })
+}
+
+fn invalid_asset_from_id(asset_id: &str, error: &str) -> AssetSummary {
+    AssetSummary {
+        id: asset_id.into(),
+        name: asset_id.into(),
+        title: "Invalid asset ID".into(),
+        asset_type: AssetType::Skill,
+        status: AssetStatus::Invalid,
+        category: "invalid".into(),
+        description: error.into(),
+        source_path: String::new(),
+        scope: None,
         updated_at: None,
         mount_targets: vec![],
     }
@@ -523,9 +559,10 @@ struct RestoreEntryPreview {
     size_bytes: u64,
 }
 
-fn conflict_from_id(asset_id: &str) -> ConflictPreview {
-    let asset = asset_from_id(asset_id);
-    ConflictPreview {
+fn conflict_from_id(asset_id: &str) -> Result<ConflictPreview, String> {
+    let normalized_id = asset_id.strip_prefix("conflict:").unwrap_or(asset_id);
+    let asset = asset_from_id(normalized_id)?;
+    Ok(ConflictPreview {
         id: format!("conflict:{}", asset.id),
         asset_id: asset.id.clone(),
         asset_type: asset.asset_type,
@@ -538,16 +575,15 @@ fn conflict_from_id(asset_id: &str) -> ConflictPreview {
             ConflictResolution::Rename,
             ConflictResolution::Overwrite,
         ],
-    }
+    })
 }
 
-fn real_conflict_from_id(
+pub(crate) fn real_conflict_from_id(
     home: &Path,
     scope: &ScanScope,
     asset_id: &str,
 ) -> Result<Option<ConflictPreview>, String> {
-    let (asset_type, name) = parse_asset_id(asset_id);
-    validate_single_path_component(&name, "Conflict asset name")?;
+    let (asset_type, name) = parse_asset_id(asset_id)?;
     let asset_root = home.join(".my-agent-assets").join("assets");
     let runtime_root = match scope {
         ScanScope::User => home.to_path_buf(),
@@ -577,6 +613,10 @@ fn real_conflict_from_id(
             },
         ),
     };
+
+    if !existing_path.exists() || !incoming_path.exists() {
+        return Ok(None);
+    }
 
     let existing_content = read_conflict_content(home, &existing_path, &asset_type, &name, false)?;
     let incoming_content = read_conflict_content(home, &incoming_path, &asset_type, &name, true)?;
@@ -635,17 +675,21 @@ fn read_conflict_content(
     serde_json::to_string_pretty(server).map_err(|error| error.to_string())
 }
 
-fn parse_asset_id(asset_id: &str) -> (AssetType, String) {
+fn parse_asset_id(asset_id: &str) -> Result<(AssetType, String), String> {
     let mut parts = asset_id.splitn(2, ':');
     let prefix = parts.next().unwrap_or_default();
-    let name = parts.next().unwrap_or(prefix).trim();
+    let name = parts.next().unwrap_or_default().trim();
+    if name.is_empty() {
+        return Err(format!("Invalid asset ID '{}': missing name.", asset_id));
+    }
+    validate_single_path_component(name, "asset name")?;
     let asset_type = match prefix {
+        "skill" => AssetType::Skill,
         "command" => AssetType::Command,
         "mcp" => AssetType::Mcp,
-        _ => AssetType::Skill,
+        _ => return Err(format!("Invalid asset ID '{}': unknown type.", asset_id)),
     };
-    let fallback_name = if name.is_empty() { "unknown" } else { name };
-    (asset_type, fallback_name.into())
+    Ok((asset_type, name.into()))
 }
 
 fn asset_type_prefix(asset_type: &AssetType) -> &'static str {

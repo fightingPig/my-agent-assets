@@ -83,8 +83,12 @@ export async function settingsLoad(): Promise<DesktopSettings> {
 }
 
 export async function settingsSave(input: SettingsSaveInput): Promise<DesktopSettings> {
-  const settings = await invokeOrFallback<unknown>("settings_save", { input }, input.settings);
-  return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : input.settings;
+  if (!isTauriRuntime()) return input.settings;
+  const settings = await invoke<unknown>("settings_save", { input });
+  if (!isRecord(settings) || typeof settings.assetCenterPath !== "string") {
+    throw new Error("settings_save returned an invalid response.");
+  }
+  return settings as DesktopSettings;
 }
 
 export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {

@@ -147,6 +147,47 @@ fn preview_mount_returns_target_plan_without_writes() {
 }
 
 #[test]
+fn previews_reject_invalid_asset_ids_without_misclassifying_them_as_skills() {
+    let import = preview_import(PreviewImportInput {
+        scope: ScanScope::User,
+        asset_ids: vec![
+            "unknown:review".into(),
+            "skill:../escape".into(),
+            "skill:".into(),
+        ],
+        conflict_resolutions: vec![],
+    });
+    assert!(!import.can_apply);
+    assert!(import.assets.is_empty());
+    assert!(import
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("unknown type")));
+
+    let mount = preview_mount(PreviewMountInput {
+        asset_id: "other:review".into(),
+        target: MountTarget {
+            scope: RuntimeScope::User,
+            runtime_path: "~/.claude/skills/review".into(),
+            project_path: None,
+        },
+    });
+    assert!(!mount.can_apply);
+    assert_eq!(mount.asset.status, super::contracts::AssetStatus::Invalid);
+
+    let conflicts = preview_conflicts(PreviewConflictsInput {
+        scope: ScanScope::User,
+        asset_ids: vec![
+            "skill:review".into(),
+            "broken".into(),
+            "mcp:../escape".into(),
+        ],
+    });
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].asset_id, "skill:review");
+}
+
+#[test]
 fn preview_conflicts_synthesizes_allowed_resolutions_without_writes() {
     let probe = TempProbe::new("conflicts");
     let before = probe.snapshot();

@@ -121,12 +121,10 @@ pub fn scan_assets_for_home(home: &Path, input: ScanAssetsInput) -> ScanResult {
     match &input.scope {
         ScanScope::User => {
             let claude_root = home.join(".claude");
-            assets.extend(read_runtime_markdown_assets(
+            assets.extend(read_runtime_skill_assets(
                 &claude_root.join("skills"),
-                AssetType::Skill,
                 RuntimeScope::User,
                 "user runtime",
-                "Skill",
             ));
             assets.extend(read_runtime_markdown_assets(
                 &claude_root.join("commands"),
@@ -159,12 +157,27 @@ pub fn scan_assets_for_home(home: &Path, input: ScanAssetsInput) -> ScanResult {
         }
     }
 
+    let mut conflict_count = 0;
+    for asset in &mut assets {
+        match crate::preview::real_conflict_from_id(home, &input.scope, &asset.id) {
+            Ok(Some(_)) => {
+                asset.status = AssetStatus::Conflict;
+                conflict_count += 1;
+            }
+            Ok(None) => {}
+            Err(error) => warnings.push(format!(
+                "Could not compare {} with the asset center: {}",
+                asset.id, error
+            )),
+        }
+    }
+
     ScanResult {
         scope: input.scope,
         scanned_at: now_iso(),
         counts: count_assets(&assets),
         assets,
-        conflict_count: 0,
+        conflict_count,
         warnings,
     }
 }
@@ -304,12 +317,10 @@ fn scan_runtime_root(
 
     let mut assets = Vec::new();
     let claude_root = root.join(".claude");
-    assets.extend(read_runtime_markdown_assets(
+    assets.extend(read_runtime_skill_assets(
         &claude_root.join("skills"),
-        AssetType::Skill,
         scope.clone(),
         "project runtime",
-        "Skill",
     ));
     assets.extend(read_runtime_markdown_assets(
         &claude_root.join("commands"),
@@ -409,6 +420,53 @@ fn read_runtime_markdown_assets(
     label: &str,
 ) -> Vec<AssetSummary> {
     read_file_assets(dir, asset_type, scope, category, label)
+}
+
+fn read_runtime_skill_assets(dir: &Path, scope: RuntimeScope, category: &str) -> Vec<AssetSummary> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return vec![];
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.is_dir() {
+                let skill_file = path.join("SKILL.md");
+                if !skill_file.is_file() {
+                    return None;
+                }
+                let name = file_stem_or_name(&path)?;
+                let description =
+                    first_paragraph(&skill_file).unwrap_or_else(|| format!("Skill asset {}", name));
+                return Some(asset_summary(
+                    AssetType::Skill,
+                    scope.clone(),
+                    &name,
+                    &path,
+                    AssetStatus::Ready,
+                    category,
+                    description,
+                ));
+            }
+
+            if !path.is_file() || !has_extension(&path, "md") {
+                return None;
+            }
+            let name = file_stem_or_name(&path)?;
+            let description =
+                first_paragraph(&path).unwrap_or_else(|| format!("Skill asset {}", name));
+            Some(asset_summary(
+                AssetType::Skill,
+                scope.clone(),
+                &name,
+                &path,
+                AssetStatus::Ready,
+                category,
+                description,
+            ))
+        })
+        .collect()
 }
 
 fn read_mcp_assets(dir: &Path, scope: RuntimeScope) -> Vec<AssetSummary> {

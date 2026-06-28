@@ -1,7 +1,7 @@
 use super::apply::{import_apply_for_home, mount_apply_for_home, restore_apply_for_home};
 use super::contracts::{
-    ApplyMode, ApplyStepStatus, ImportApplyInput, MountApplyInput, MountTarget, RestoreApplyInput,
-    RuntimeScope, ScanScope,
+    ApplyMode, ApplyStepStatus, ConflictResolution, ConflictResolutionChoice, ImportApplyInput,
+    MountApplyInput, MountTarget, RestoreApplyInput, RuntimeScope, ScanScope,
 };
 use super::preview::{import_preview_id, mount_preview_id, restore_preview_id};
 use std::fs;
@@ -66,6 +66,48 @@ fn import_input(mode: ApplyMode, scope: ScanScope, asset_ids: Vec<&str>) -> Impo
         conflict_resolutions: vec![],
         backup_before_apply: true,
     }
+}
+
+fn overwrite_import_input(mode: ApplyMode, scope: ScanScope, asset_id: &str) -> ImportApplyInput {
+    let asset_ids = vec![asset_id.to_string()];
+    let conflict_resolutions = vec![ConflictResolutionChoice {
+        conflict_id: asset_id.into(),
+        resolution: ConflictResolution::Overwrite,
+        rename_to: None,
+    }];
+    ImportApplyInput {
+        preview_id: import_preview_id(&scope, &asset_ids, &conflict_resolutions),
+        mode,
+        scope,
+        asset_ids,
+        conflict_resolutions,
+        backup_before_apply: true,
+    }
+}
+
+#[test]
+fn import_apply_rejects_unresolved_content_conflict_without_writing() {
+    let home = TempHome::new("unresolved-conflict");
+    home.write(".claude/skills/review.md", "# Incoming Review");
+    home.write(
+        ".my-agent-assets/assets/skills/review.md",
+        "# Existing Review",
+    );
+
+    let result = import_apply_for_home(
+        home.path(),
+        import_input(ApplyMode::Apply, ScanScope::User, vec!["skill:review"]),
+    );
+
+    assert!(!result.ok);
+    assert!(result
+        .errors
+        .iter()
+        .any(|error| error.contains("explicit conflict resolution")));
+    assert_eq!(
+        home.read(".my-agent-assets/assets/skills/review.md"),
+        "# Existing Review"
+    );
 }
 
 fn mount_input(
@@ -212,7 +254,7 @@ fn import_apply_backs_up_existing_destination_before_replacement() {
 
     let result = import_apply_for_home(
         home.path(),
-        import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]),
+        overwrite_import_input(ApplyMode::Apply, ScanScope::User, "command:deploy"),
     );
 
     assert!(result.ok, "{:?}", result.errors);
@@ -655,7 +697,7 @@ fn restore_apply_plan_only_reads_manifest_without_changing_files() {
     home.write(".my-agent-assets/assets/commands/deploy.md", "# Old Deploy");
     let import_result = import_apply_for_home(
         home.path(),
-        import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]),
+        overwrite_import_input(ApplyMode::Apply, ScanScope::User, "command:deploy"),
     );
     let backup_id = import_result.backup.expect("backup should exist").id;
     home.write(".my-agent-assets/assets/commands/deploy.md", "# Mutated");
@@ -683,7 +725,7 @@ fn restore_apply_restores_file_from_import_backup_and_backs_up_current() {
     home.write(".my-agent-assets/assets/commands/deploy.md", "# Old Deploy");
     let import_result = import_apply_for_home(
         home.path(),
-        import_input(ApplyMode::Apply, ScanScope::User, vec!["command:deploy"]),
+        overwrite_import_input(ApplyMode::Apply, ScanScope::User, "command:deploy"),
     );
     let backup_id = import_result.backup.expect("backup should exist").id;
     assert_eq!(
@@ -724,7 +766,7 @@ fn restore_apply_restores_directory_from_import_backup() {
     );
     let import_result = import_apply_for_home(
         home.path(),
-        import_input(ApplyMode::Apply, ScanScope::User, vec!["skill:review"]),
+        overwrite_import_input(ApplyMode::Apply, ScanScope::User, "skill:review"),
     );
     let backup_id = import_result.backup.expect("backup should exist").id;
     home.write(

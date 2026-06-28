@@ -191,7 +191,9 @@ Current behavior:
 
 - Settings are stored as JSON at `~/.my-agent-assets/config.json`.
 - Missing config files are not created by `settings_load`.
-- Empty path fields fall back to safe defaults.
+- `assetCenterPath` is normalized to the fixed `~/.my-agent-assets` V1 location and is read-only in the GUI.
+- Save failures reject the Tauri invocation instead of returning successful-looking defaults.
+- Other empty path fields fall back to safe defaults.
 - Numeric settings are clamped to supported ranges.
 - The GUI Settings page can call `settings_save`; this writes only local desktop configuration and does not touch Claude runtime files.
 

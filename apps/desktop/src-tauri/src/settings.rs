@@ -13,12 +13,10 @@ pub fn settings_load_command() -> DesktopSettings {
 }
 
 #[tauri::command]
-pub fn settings_save_command(input: SettingsSaveInput) -> DesktopSettings {
+pub fn settings_save_command(input: SettingsSaveInput) -> Result<DesktopSettings, String> {
     match home_dir() {
-        Some(home) => {
-            settings_save_for_home(&home, input).unwrap_or_else(|_| settings_for_home(Some(&home)))
-        }
-        None => settings_for_home(None),
+        Some(home) => settings_save_for_home(&home, input).map_err(|error| error.to_string()),
+        None => Err("Could not resolve HOME for settings save.".into()),
     }
 }
 
@@ -54,9 +52,7 @@ fn settings_path(home: &Path) -> PathBuf {
 fn normalize_settings(home: &Path, mut settings: DesktopSettings) -> DesktopSettings {
     let defaults = settings_for_home(Some(home));
 
-    if settings.asset_center_path.trim().is_empty() {
-        settings.asset_center_path = defaults.asset_center_path;
-    }
+    settings.asset_center_path = defaults.asset_center_path;
     settings.scan_roots = settings
         .scan_roots
         .into_iter()

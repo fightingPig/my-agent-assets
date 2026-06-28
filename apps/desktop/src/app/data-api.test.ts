@@ -376,5 +376,6 @@ describe("read-only desktop data api", () => {
       isRepository: false,
       statusMessage: "Tauri runtime is unavailable.",
     });
+    await expect(api.settingsSave({ settings: savedSettings })).rejects.toThrow("command unavailable");
   });
 });

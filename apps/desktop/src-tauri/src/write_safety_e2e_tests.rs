@@ -1,7 +1,8 @@
 use super::apply::{import_apply_for_home, mount_apply_for_home, restore_apply_for_home};
 use super::contracts::{
-    ApplyMode, ImportApplyInput, MountApplyInput, MountTarget, RestoreApplyInput, RuntimeScope,
-    ScanScope, SettingsSaveInput, SyncApplyInput, SyncDirection,
+    ApplyMode, ConflictResolution, ConflictResolutionChoice, ImportApplyInput, MountApplyInput,
+    MountTarget, RestoreApplyInput, RuntimeScope, ScanScope, SettingsSaveInput, SyncApplyInput,
+    SyncDirection,
 };
 use super::preview::{import_preview_id, mount_preview_id, restore_preview_id, sync_preview_id};
 use super::read_only::{git_status_for_home, settings_for_home};
@@ -28,14 +29,19 @@ fn fake_home_write_workflow_stays_isolated_and_sync_plan_only_does_not_mutate_re
 
     let scope = ScanScope::User;
     let asset_ids = vec!["command:deploy".to_string(), "skill:review".to_string()];
+    let conflict_resolutions = vec![ConflictResolutionChoice {
+        conflict_id: "command:deploy".into(),
+        resolution: ConflictResolution::Overwrite,
+        rename_to: None,
+    }];
     let import = import_apply_for_home(
         home.path(),
         ImportApplyInput {
-            preview_id: import_preview_id(&scope, &asset_ids, &[]),
+            preview_id: import_preview_id(&scope, &asset_ids, &conflict_resolutions),
             mode: ApplyMode::Apply,
             scope,
             asset_ids,
-            conflict_resolutions: vec![],
+            conflict_resolutions,
             backup_before_apply: true,
         },
     );

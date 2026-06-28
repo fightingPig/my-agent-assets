@@ -31,7 +31,7 @@ fn settings_load() -> DesktopSettings {
 }
 
 #[tauri::command]
-fn settings_save(input: SettingsSaveInput) -> DesktopSettings {
+fn settings_save(input: SettingsSaveInput) -> Result<DesktopSettings, String> {
     settings::settings_save_command(input)
 }
 

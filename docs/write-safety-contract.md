@@ -194,6 +194,8 @@ If any step fails, later write steps must not continue unless explicitly marked 
 
 - Settings are written to `~/.my-agent-assets/config.json`
 - `settings_load` returns defaults when no config exists and reads the saved config when present
+- Write failures are returned through Tauri as command errors; the frontend must not display success unless save and reload both complete
+- `assetCenterPath` is fixed to `~/.my-agent-assets` in V1 and is not an editable relocation setting
 - Settings writes do not touch Claude runtime files
 - The fixed settings destination is guarded against symlinked parent directories
 - Empty path fields are normalized to defaults
@@ -213,6 +215,7 @@ If any step fails, later write steps must not continue unless explicitly marked 
 `conflict_apply` currently supports fake-HOME-tested per-asset conflict decisions:
 
 - Uses the deterministic import preview ID for the same scope, asset IDs, and decisions
+- Direct `import_apply` rejects differing existing content unless an explicit conflict resolution is supplied
 - Requires exactly one unambiguous `skip`, `rename`, or `overwrite` decision per asset
 - `skip` writes nothing
 - `rename` validates one safe new name and rejects an already-existing target
