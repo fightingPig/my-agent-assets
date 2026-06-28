@@ -107,12 +107,15 @@ button {
 .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: 8px;
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--accent);
-  box-shadow: 0 4px 10px rgba(98, 83, 232, .22);
+  flex: 0 0 30px;
+}
+
+.brand-mark img {
+  width: 30px;
+  height: 30px;
+  display: block;
 }
 
 .nav-group { margin-bottom: 13px; }

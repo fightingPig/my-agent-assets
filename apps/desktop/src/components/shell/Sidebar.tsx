@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Blocks,
   BookOpen,
-  Command,
   FolderKanban,
   GitBranch,
   Home,
@@ -14,6 +13,7 @@ import {
   TerminalSquare,
   type LucideIcon,
 } from "lucide-react";
+import brandMark from "../../assets/my-agent-assets-mark.svg";
 import { getSidebarPageGroups, type PageId } from "../../app/pages";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 
@@ -43,7 +43,7 @@ export function Sidebar({ activePage, onPageChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
-        <div className="brand-mark"><Command size={17} /></div>
+        <div className="brand-mark"><img alt="" aria-hidden="true" src={brandMark} /></div>
         <span>My Agent Assets</span>
       </div>
       <nav aria-label="主导航">
