@@ -211,6 +211,7 @@ This section must be updated with actual command output and evidence after each 
 - Disposable runtime root: `/tmp/my-agent-assets-installed-gui-test`
 - Minimum-size native screenshot: `/tmp/my-agent-assets-installed-1180x760.png`
 - Native scan screenshot: `/tmp/maa-native-scan.png`
+- Latest signed-build Accessibility screenshot: `/tmp/maa-b7208e9-accessibility.png`
 - First drag moved the window from `(240, 76)` to `(390, 146)`.
 - Second consecutive drag moved it from `(390, 146)` to `(290, 206)`.
 - The window exposed enabled native close, full-screen and minimize buttons.
@@ -225,7 +226,8 @@ This section must be updated with actual command output and evidence after each 
 - Preview asset IDs use strict type and safe-component validation.
 - Settings save failures reject the Tauri invocation; `assetCenterPath` is read-only and fixed in V1.
 - The regression suite covers directory/direct Skills, conflict detection and blocking, explicit overwrite/skip/rename, invalid preview IDs, settings write failures, and fixed asset-center behavior.
-- After the latest ad-hoc re-sign, macOS did not expose the newly installed process window through `System Events`. Deterministic backend/frontend coverage passed, but current-package business-control clicking needs one manual Accessibility regrant/check.
+- The latest ad-hoc-signed installed build passed direct macOS AX API validation. `System Events` did not enumerate its window, but `AXUIElement` exposed one window and all native controls without requiring a permission change.
+- Current-package AX validation covered enabled close/minimize/zoom controls, two consecutive real pointer drags, minimize/restore, full-screen enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901` window.
 
 ## Human Handoff Rule
 
@@ -234,6 +236,6 @@ Only cases left as `MANUAL` or `BLOCKED` after the automated run should be hande
 ## Remaining Manual Run
 
 1. Review all 26 PNG files in `apps/desktop/artifacts/visual-qa/`, especially code, diff, inspector, and settings panels at 1180×760. The automated report found no overflow, collapse, or clipping, but semantic visual quality still needs human judgment.
-2. Regrant Accessibility access for the newly ad-hoc-signed installed build if macOS requests it, open Scan Import with `/tmp/my-agent-assets-beta-regression`, and confirm `dir-skill`, `direct-skill`, and the conflict warning are visible.
+2. Open Scan Import with `/tmp/my-agent-assets-beta-regression` and visually confirm `dir-skill`, `direct-skill`, and the conflict warning are visible.
 3. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the ad-hoc signed, non-notarized build.
 4. Run L-01 through L-06 on Windows 10/11, including 100%, 125%, 150%, and 200% DPI.
