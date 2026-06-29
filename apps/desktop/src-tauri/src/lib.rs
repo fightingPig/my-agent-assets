@@ -166,6 +166,48 @@ fn canonical_unmount_apply(
     shared_core::canonical_unmount_apply_command(input)
 }
 
+#[tauri::command]
+fn canonical_delete_preview(
+    input: my_agent_assets_core::delete::DeletePreviewRequest,
+) -> Result<my_agent_assets_core::delete::DeletePreview, String> {
+    shared_core::canonical_delete_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_delete_apply(
+    input: my_agent_assets_core::delete::DeleteApplyRequest,
+) -> Result<my_agent_assets_core::delete::DeleteApplyResult, String> {
+    shared_core::canonical_delete_apply_command(input)
+}
+
+#[tauri::command]
+fn preview_adopt(
+    input: my_agent_assets_core::adopt::AdoptPreviewRequest,
+) -> Result<my_agent_assets_core::adopt::AdoptPreview, String> {
+    shared_core::preview_adopt_command(input)
+}
+
+#[tauri::command]
+fn adopt_apply(
+    input: my_agent_assets_core::adopt::AdoptApplyRequest,
+) -> Result<my_agent_assets_core::adopt::AdoptApplyResult, String> {
+    shared_core::adopt_apply_command(input)
+}
+
+#[tauri::command]
+fn canonical_batch_import_preview(
+    input: my_agent_assets_core::batch_import::BatchImportPreviewRequest,
+) -> Result<my_agent_assets_core::batch_import::BatchImportPreview, String> {
+    shared_core::canonical_batch_import_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_batch_import_apply(
+    input: my_agent_assets_core::batch_import::BatchImportApplyRequest,
+) -> Result<my_agent_assets_core::batch_import::BatchImportApplyResult, String> {
+    shared_core::canonical_batch_import_apply_command(input)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -195,7 +237,13 @@ pub fn run() {
             canonical_mount_preview,
             canonical_mount_apply,
             canonical_unmount_preview,
-            canonical_unmount_apply
+            canonical_unmount_apply,
+            canonical_delete_preview,
+            canonical_delete_apply,
+            preview_adopt,
+            adopt_apply,
+            canonical_batch_import_preview,
+            canonical_batch_import_apply
         ])
         .run(tauri::generate_context!())
         .expect("error while running My Agent Assets");

@@ -9,6 +9,7 @@ use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts, BindingStatus,
     MountBinding,
 };
+use crate::operation::OperationLock;
 use crate::path_safety::guard_write_path;
 use crate::targets::{load as load_targets, MountAdapter, MountTarget, MountTargetKind};
 use crate::{MaaError, Result};
@@ -132,7 +133,7 @@ pub fn preview_mount(home: &Path, request: &MountPreviewRequest) -> Result<Mount
     preview_mount_at(home, request, epoch_seconds())
 }
 
-fn preview_mount_at(
+pub(crate) fn preview_mount_at(
     home: &Path,
     request: &MountPreviewRequest,
     generated_at_epoch_seconds: u64,
@@ -223,6 +224,14 @@ fn planned_effects(
 }
 
 pub fn apply_mount(home: &Path, request: &MountApplyRequest) -> Result<MountApplyResult> {
+    let _operation_lock = OperationLock::acquire(home)?;
+    apply_mount_locked(home, request)
+}
+
+pub(crate) fn apply_mount_locked(
+    home: &Path,
+    request: &MountApplyRequest,
+) -> Result<MountApplyResult> {
     if epoch_seconds()
         > request
             .preview_generated_at_epoch_seconds
@@ -397,6 +406,7 @@ fn preview_unmount_at(
 }
 
 pub fn apply_unmount(home: &Path, request: &UnmountApplyRequest) -> Result<UnmountApplyResult> {
+    let _operation_lock = OperationLock::acquire(home)?;
     if epoch_seconds()
         > request
             .preview_generated_at_epoch_seconds
@@ -605,7 +615,7 @@ fn preview_mcp_removal(path: &Path, target: &MountTarget, name: &str) -> Result<
     Ok(())
 }
 
-fn remove_runtime_mount(
+pub(crate) fn remove_runtime_mount(
     path: &Path,
     target: &MountTarget,
     kind: crate::targets::AssetKind,
@@ -664,7 +674,11 @@ fn codex_scope(target: &MountTarget) -> CodexScope {
     }
 }
 
-fn target_asset_path(target: &MountTarget, kind: crate::targets::AssetKind, name: &str) -> PathBuf {
+pub(crate) fn target_asset_path(
+    target: &MountTarget,
+    kind: crate::targets::AssetKind,
+    name: &str,
+) -> PathBuf {
     match kind {
         crate::targets::AssetKind::Skill => target.path.join(name),
         crate::targets::AssetKind::Command => target.path.join(format!("{name}.md")),
@@ -672,7 +686,7 @@ fn target_asset_path(target: &MountTarget, kind: crate::targets::AssetKind, name
     }
 }
 
-fn guard_target_path(target: &MountTarget, affected_path: &Path) -> Result<()> {
+pub(crate) fn guard_target_path(target: &MountTarget, affected_path: &Path) -> Result<()> {
     let authorized_root = match target.adapter {
         MountAdapter::SymlinkDirectory
         | MountAdapter::WindowsDirectoryJunction
@@ -795,14 +809,14 @@ fn link_points_to(path: &Path, canonical: &Path) -> Result<bool> {
 }
 
 #[derive(Debug)]
-enum RuntimeSnapshot {
+pub(crate) enum RuntimeSnapshot {
     Missing,
     File(Vec<u8>),
     Directory(PathBuf),
     Symlink(PathBuf),
 }
 
-fn snapshot_runtime_path(path: &Path) -> Result<RuntimeSnapshot> {
+pub(crate) fn snapshot_runtime_path(path: &Path) -> Result<RuntimeSnapshot> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -821,7 +835,7 @@ fn snapshot_runtime_path(path: &Path) -> Result<RuntimeSnapshot> {
     }
 }
 
-fn restore_runtime_snapshot(path: &Path, snapshot: RuntimeSnapshot) -> Result<()> {
+pub(crate) fn restore_runtime_snapshot(path: &Path, snapshot: RuntimeSnapshot) -> Result<()> {
     remove_path_if_present(path)?;
     match snapshot {
         RuntimeSnapshot::Missing => Ok(()),
@@ -849,7 +863,7 @@ fn restore_runtime_snapshot(path: &Path, snapshot: RuntimeSnapshot) -> Result<()
     }
 }
 
-fn discard_runtime_snapshot(snapshot: RuntimeSnapshot) -> Result<()> {
+pub(crate) fn discard_runtime_snapshot(snapshot: RuntimeSnapshot) -> Result<()> {
     if let RuntimeSnapshot::Directory(temporary) = snapshot {
         remove_path_if_present(&temporary)?;
     }
@@ -978,7 +992,7 @@ fn fingerprint_path(path: &Path, hash: &mut Fnv64) -> Result<()> {
     Ok(())
 }
 
-fn copy_any(source: &Path, destination: &Path) -> Result<()> {
+pub(crate) fn copy_any(source: &Path, destination: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(source)?;
     if metadata.file_type().is_symlink() {
         let link = fs::read_link(source)?;
@@ -1007,7 +1021,7 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn remove_path_if_present(path: &Path) -> Result<()> {
+pub(crate) fn remove_path_if_present(path: &Path) -> Result<()> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),

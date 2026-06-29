@@ -54,8 +54,8 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 64 tests and desktop 89 tests passed
-- frontend: 81 tests passed
+- Rust workspace: core 70 tests and desktop 89 tests passed
+- frontend: 82 tests passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
 
@@ -80,6 +80,16 @@ Implemented:
 - implemented targetId-only Unmount preview/apply with precise MCP entry removal and protection against deleting user-replaced runtime content
 - added Tauri and TypeScript adapters for shared discovery, canonical Import, target listing, Mount, and Unmount
 - retained disabled/failing browser fallbacks for apply commands; browser mode cannot report a write as successful
+- added an exclusive cross-command operation lock and structured local operation journals
+- implemented Delete Asset preview/apply with direct-delete blocking, unmount-all impact enumeration, portable/local backups, and full multi-target rollback
+- implemented backend-composed batch Import-and-Adopt for Claude/Codex Skills, Claude Commands, Claude MCP, and Codex MCP
+- Adopt refreshes internal Import/Mount previews inside one lock while preserving one outer stale-preview contract
+- injected mid-operation failures prove Delete and Adopt restore runtime sources, canonical content, `assets.yaml`, and `mounts.yaml`
+- added Tauri and TypeScript contracts for Delete and explicit `preview_adopt` / `adopt_apply`
+- added atomic Batch Import preview/apply so production UI never sequences single-asset writes in React
+- migrated Scan/Import production UI to unified Claude/Codex discovery, atomic Batch Import, and backend-composed Adopt
+- migrated Mount production UI to Target Registry listing and targetId-only preview/apply
+- removed frontend runtime-path construction from the primary Mount workflow
 - initialization now creates portable/local backup roots, schema-versioned state files, standard targets, local-state Git exclusions, and a `main` Git branch
 - initialization idempotency and fake-HOME isolation are covered by regression tests
 
@@ -87,14 +97,15 @@ Not implemented:
 - shared Git service
 - Desktop/CLI adapters for the new unified source-discovery DTO
 - migrate production pages from legacy Scan/Import/Mount commands to the shared adapters
-- delete-asset multi-target transaction
-- Import and Adopt composition
-- operation journal and stale fingerprint cache
+- remaining detail/conflict/backup/sync UI migration to shared workflows
+- CLI migration to shared workflows
+- automatic startup recovery for incomplete operation journals
+- shared Git service and stale fingerprint cache
 
 Next:
 - add project/custom target authorization workflows
-- implement delete-asset and Import-and-Adopt transactions
-- migrate Desktop pages and CLI commands to shared-core APIs, then remove legacy runtimePath commands
+- migrate Desktop pages and CLI commands to shared-core APIs
+- remove legacy runtimePath, duplicate provider discovery, and historical Restore implementations
 
 ## Progress Update Template
 

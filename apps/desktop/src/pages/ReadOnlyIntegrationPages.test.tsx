@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AssetSummary,
+  BatchImportPreview,
+  CanonicalMountPreview,
   ConflictPreview,
   DesktopSettings,
   GitStatus,
@@ -42,6 +44,14 @@ const {
   listCodexSkills,
   listCodexMcpServers,
   mountApply,
+  listMountTargets,
+  canonicalMountPreview,
+  canonicalMountApply,
+  discoverRuntimeSources,
+  canonicalBatchImportPreview,
+  canonicalBatchImportApply,
+  previewAdopt,
+  adoptApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
@@ -60,6 +70,14 @@ const {
   listCodexSkills: vi.fn(),
   listCodexMcpServers: vi.fn(),
   mountApply: vi.fn(),
+  listMountTargets: vi.fn(),
+  canonicalMountPreview: vi.fn(),
+  canonicalMountApply: vi.fn(),
+  discoverRuntimeSources: vi.fn(),
+  canonicalBatchImportPreview: vi.fn(),
+  canonicalBatchImportApply: vi.fn(),
+  previewAdopt: vi.fn(),
+  adoptApply: vi.fn(),
 }));
 
 vi.mock("../app/data-api", () => ({
@@ -80,6 +98,14 @@ vi.mock("../app/data-api", () => ({
   listCodexSkills,
   listCodexMcpServers,
   mountApply,
+  listMountTargets,
+  canonicalMountPreview,
+  canonicalMountApply,
+  discoverRuntimeSources,
+  canonicalBatchImportPreview,
+  canonicalBatchImportApply,
+  previewAdopt,
+  adoptApply,
 }));
 
 afterEach(() => {
@@ -100,6 +126,66 @@ beforeEach(() => {
     assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
     mounts: ["review"],
   } satisfies ProjectSummary]);
+  listMountTargets.mockResolvedValue([
+    {
+      id: "claude-user-skills",
+      kind: "claude_user_skills",
+      provider: "claude_code",
+      accepts: ["skill"],
+      adapter: "symlink_directory",
+      scope: "user",
+      path: "/tmp/home/.claude/skills",
+      providerState: "initialized",
+      status: "ready",
+    },
+    {
+      id: "project-a-skills",
+      kind: "claude_project_skills",
+      provider: "claude_code",
+      accepts: ["skill"],
+      adapter: "symlink_directory",
+      scope: "project",
+      path: "/tmp/project-a/.claude/skills",
+      projectPath: "/tmp/project-a",
+      providerState: "initialized",
+      status: "ready",
+    },
+  ]);
+  canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture());
+  canonicalMountApply.mockResolvedValue({
+    previewId: "mount:skill-review",
+    assetId: "skill:review",
+    targetId: "claude-user-skills",
+    mounted: true,
+    backupId: "mount-backup-1",
+    affectedPaths: ["/tmp/home/.claude/skills/review"],
+    warnings: [],
+  });
+  discoverRuntimeSources.mockResolvedValue({ sources: [], warnings: [] });
+  canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture());
+  canonicalBatchImportApply.mockResolvedValue({
+    previewId: "batch-import:test",
+    items: [],
+    affectedPaths: [],
+    journalPath: "/tmp/batch-import-journal",
+  });
+  previewAdopt.mockResolvedValue({
+    previewId: "adopt:test",
+    items: [],
+    importPlan: [],
+    mountPlan: [],
+    backupPlan: [],
+    warnings: [],
+    canApply: false,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  });
+  adoptApply.mockResolvedValue({
+    previewId: "adopt:test",
+    items: [],
+    affectedPaths: [],
+    journalPath: "/tmp/adopt-journal",
+  });
   listBackups.mockResolvedValue([{
     id: "backup-20260621-1842",
     label: "扫描导入前",
@@ -453,129 +539,191 @@ describe("read-only UI integration", () => {
   });
 
   it("blocks Scan Import when the backend reports unresolved conflicts", async () => {
-    scanAssets.mockResolvedValue({
-      ...scanResultFixture([
-        { ...assetFixture("skill:review", "review", "skill"), status: "conflict" },
-      ]),
-      conflictCount: 1,
-    });
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:review", "review"));
+    canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
+      items: [{
+        ...canonicalImportItemFixture("source:review", "skill:review"),
+        disposition: "conflict",
+        canApply: false,
+        conflict: {
+          assetId: "skill:review",
+          reason: "same name",
+          existingContent: "# Existing",
+          incomingContent: "# Incoming",
+          rawSource: "# Incoming",
+        },
+      }],
+      canApply: false,
+    }));
 
     render(<ScanImportPage />);
 
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
     expect(await screen.findByText("发现 1 项内容冲突")).toBeInTheDocument();
-    expect(screen.getByText(/请先在冲突处理页面逐项选择/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成导入计划" })).toBeDisabled();
+    expect(screen.getByText(/请逐项选择跳过、重命名或覆盖/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
-    expect(previewImport).not.toHaveBeenCalled();
-    expect(importApply).not.toHaveBeenCalled();
+    expect(canonicalBatchImportApply).not.toHaveBeenCalled();
   });
 
-  it("calls scanAssets for the selected scope and keeps import disabled", async () => {
-    scanAssets.mockResolvedValue(scanResultFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
-    previewImport.mockResolvedValue(importPreviewFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
+  it("calls unified discovery for explicit scopes and keeps import disabled before preview", async () => {
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:live-scan", "live-scan"));
 
     render(<ScanImportPage />);
 
-    await waitFor(() => expect(scanAssets).toHaveBeenCalledWith({ scope: { kind: "user" } }));
-    await waitFor(() => expect(previewImport).toHaveBeenCalledWith({
-      scope: { kind: "user" },
-      assetIds: ["skill:live-scan"],
-      conflictResolutions: [],
-    }));
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" }));
     expect(await screen.findByText("live-scan")).toBeInTheDocument();
-    expect(await screen.findByText(/预览导入选择/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /项目级/ }));
-    await waitFor(() => expect(scanAssets).toHaveBeenLastCalledWith({
-      scope: { kind: "project", projectPath: "~/workspace/project-a" },
-    }));
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith(
+      { kind: "project", projectPath: "~/workspace/project-a" },
+    ));
 
     fireEvent.click(screen.getByRole("button", { name: /自定义路径/ }));
-    await waitFor(() => expect(scanAssets).toHaveBeenLastCalledWith({
-      scope: { kind: "custom", path: "~/code/design-system" },
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith({
+      kind: "custom",
+      path: "~/code/design-system/.agents/skills",
+      assetKind: "skill",
+      sourceFormat: "skill_directory",
     }));
 
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存扫描预览" })).toBeDisabled();
   });
 
-  it("generates a plan-only import apply preview before enabling import confirmation", async () => {
-    scanAssets.mockResolvedValue(scanResultFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
-    previewImport.mockResolvedValue(importPreviewFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
+  it("generates an atomic batch import preview before enabling confirmation", async () => {
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:live-scan", "live-scan"));
+    canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
+      items: [canonicalImportItemFixture("source:live-scan", "skill:live-scan")],
+    }));
 
     render(<ScanImportPage />);
 
-    await waitFor(() => expect(previewImport).toHaveBeenCalled());
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
 
-    await waitFor(() => expect(importApply).toHaveBeenCalledWith({
-      previewId: "preview:import:test",
-      mode: "planOnly",
+    await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalledWith({
       scope: { kind: "user" },
-      assetIds: ["skill:live-scan"],
-      conflictResolutions: [],
-      backupBeforeApply: true,
+      selections: [{
+        sourceId: "source:live-scan",
+        resolution: { kind: "unresolved" },
+      }],
     }));
-    expect(await screen.findByText(/Plan-only mode: 1 asset would be imported/)).toBeInTheDocument();
+    expect(await screen.findByText(/skill:live-scan：新增/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled();
   });
 
-  it("executes import apply after preview and plan confirmation without typed input", async () => {
-    scanAssets.mockResolvedValue(scanResultFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
-    previewImport.mockResolvedValue(importPreviewFixture([
-      assetFixture("skill:live-scan", "live-scan", "skill"),
-    ]));
+  it("executes atomic batch import after preview without typed input", async () => {
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:live-scan", "live-scan"));
+    canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
+      items: [canonicalImportItemFixture("source:live-scan", "skill:live-scan")],
+    }));
+    canonicalBatchImportApply.mockResolvedValue({
+      previewId: "batch-import:test",
+      items: [{
+        previewId: "import:live-scan",
+        assetId: "skill:live-scan",
+        status: "imported",
+        affectedPaths: ["/tmp/assets/skills/live-scan"],
+      }],
+      affectedPaths: ["/tmp/assets/skills/live-scan"],
+      journalPath: "/tmp/batch-import-journal",
+    });
 
     render(<ScanImportPage />);
 
-    await waitFor(() => expect(previewImport).toHaveBeenCalled());
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
-    await waitFor(() => expect(importApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+    await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalled());
 
     const applyButton = screen.getByRole("button", { name: "确认导入" });
     expect(applyButton).toBeEnabled();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(applyButton);
 
-    await waitFor(() => expect(importApply).toHaveBeenLastCalledWith({
-      previewId: "preview:import:test",
-      mode: "apply",
-      scope: { kind: "user" },
-      assetIds: ["skill:live-scan"],
-      conflictResolutions: [],
-      backupBeforeApply: true,
+    await waitFor(() => expect(canonicalBatchImportApply).toHaveBeenLastCalledWith({
+      previewId: "batch-import:test",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        scope: { kind: "user" },
+        selections: [{
+          sourceId: "source:live-scan",
+          resolution: { kind: "unresolved" },
+        }],
+      },
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    await waitFor(() => expect(scanAssets).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalledTimes(2));
   });
 
-  it("renders preview-only mount and conflict data while keeping apply actions gated by a plan", async () => {
-    previewMount.mockResolvedValue(mountPreviewFixture({
-      steps: [
-        { id: "check", kind: "check", label: "预览资产来源", description: "check", risk: "none" },
-        { id: "mount", kind: "mount", label: "预览目标挂载", description: "mount", risk: "medium" },
-      ],
+  it("uses the backend-composed adopt workflow instead of chaining import and mount", async () => {
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:live-scan", "live-scan"));
+    previewAdopt.mockResolvedValue({
+      previewId: "adopt:test",
+      items: [],
+      importPlan: ["import skill:live-scan"],
+      mountPlan: ["mount through claude-user-skills"],
+      backupPlan: ["backup runtime source"],
+      warnings: [],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+    adoptApply.mockResolvedValue({
+      previewId: "adopt:test",
+      items: [{
+        sourceId: "source:live-scan",
+        assetId: "skill:live-scan",
+        targetId: "claude-user-skills",
+        imported: true,
+        mounted: true,
+      }],
+      affectedPaths: ["/tmp/home/.claude/skills/live-scan"],
+      journalPath: "/tmp/adopt-journal",
+    });
+
+    render(<ScanImportPage />);
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成接管计划" }));
+    await waitFor(() => expect(previewAdopt).toHaveBeenCalledWith({
+      scope: { kind: "user" },
+      selections: [{
+        sourceId: "source:live-scan",
+        resolution: { kind: "unresolved" },
+      }],
+    }));
+    const applyButton = screen.getByRole("button", { name: "导入并接管" });
+    expect(applyButton).toBeEnabled();
+    fireEvent.click(applyButton);
+    await waitFor(() => expect(adoptApply).toHaveBeenCalledWith({
+      previewId: "adopt:test",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        scope: { kind: "user" },
+        selections: [{
+          sourceId: "source:live-scan",
+          resolution: { kind: "unresolved" },
+        }],
+      },
+    }));
+    expect(canonicalBatchImportApply).not.toHaveBeenCalled();
+    expect(canonicalMountApply).not.toHaveBeenCalled();
+  });
+
+  it("renders target-registry mount preview and conflict data", async () => {
+    canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture({
+      plannedEffects: ["预览资产来源", "预览目标挂载"],
       warnings: ["Preview mount warning"],
     }));
     previewConflicts.mockResolvedValue([
       conflictPreviewFixture("conflict:skill:review", "review", "skill"),
     ]);
     const { rerender } = render(<MountManagerPage />);
-    await waitFor(() => expect(previewMount).toHaveBeenCalled());
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
     expect(screen.getByText("Preview mount warning")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成挂载计划" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新挂载计划" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
 
     rerender(<ConflictResolverPage demoMode />);
     fireEvent.click(screen.getByRole("option", { name: "review" }));
@@ -583,60 +731,41 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "执行冲突处理" })).toBeDisabled();
   });
 
-  it("generates a plan-only mount apply preview before enabling mount confirmation", async () => {
+  it("refreshes the targetId-only mount preview without calling apply", async () => {
     render(<MountManagerPage />);
 
-    await waitFor(() => expect(previewMount).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /project-a/ }));
-    await waitFor(() => expect(previewMount).toHaveBeenLastCalledWith(expect.objectContaining({
-      target: expect.objectContaining({ scope: "project" }),
-    })));
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-
-    await waitFor(() => expect(mountApply).toHaveBeenCalledWith({
-      previewId: "preview:mount:skill-review-project-a",
-      mode: "planOnly",
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /project-a-skills/ }));
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenLastCalledWith({
       assetId: "skill:review",
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
-      },
-      backupBeforeApply: true,
+      targetId: "project-a-skills",
     }));
-    expect(await screen.findByText(/Plan-only mode: no symlink was created/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "刷新挂载计划" }));
+    await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(canonicalMountApply).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
   });
 
-  it("executes mount apply after preview and plan confirmation without typed input", async () => {
+  it("executes targetId-only mount apply without typed input", async () => {
     render(<MountManagerPage />);
 
-    await waitFor(() => expect(previewMount).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /project-a/ }));
-    await waitFor(() => expect(previewMount).toHaveBeenLastCalledWith(expect.objectContaining({
-      target: expect.objectContaining({ scope: "project" }),
-    })));
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
 
     const mountButton = screen.getByRole("button", { name: "确认挂载" });
     expect(mountButton).toBeEnabled();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(mountButton);
 
-    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith({
-      previewId: "preview:mount:skill-review-project-a",
-      mode: "apply",
-      assetId: "skill:review",
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
+    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
+      previewId: "mount:skill-review",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        assetId: "skill:review",
+        targetId: "claude-user-skills",
       },
-      backupBeforeApply: true,
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    await waitFor(() => expect(previewMount.mock.calls.length).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
   it("updates Conflict Resolver decisions and requires a plan plus button confirmation", async () => {
@@ -774,9 +903,9 @@ describe("read-only UI integration", () => {
 
   it("does not call apply command wrappers from Scan Import preview", async () => {
     render(<ScanImportPage />);
-    await waitFor(() => expect(scanAssets).toHaveBeenCalled());
-    expect(previewImport).not.toHaveBeenCalled();
-    expect(importApply).not.toHaveBeenCalled();
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
+    expect(canonicalBatchImportPreview).not.toHaveBeenCalled();
+    expect(canonicalBatchImportApply).not.toHaveBeenCalled();
     expect(mountApply).not.toHaveBeenCalled();
   });
 });
@@ -877,6 +1006,59 @@ function importPreviewFixture(assets: AssetSummary[]): ImportPreview {
   };
 }
 
+function discoveryFixture(sourceId: string, name: string) {
+  return {
+    sources: [{
+      sourceId,
+      provider: "claude_code" as const,
+      sourcePath: `/tmp/home/.claude/skills/${name}`,
+      assetKind: "skill" as const,
+      assetName: name,
+      sourceFormat: "skill_directory" as const,
+      scope: "user" as const,
+      isManaged: false,
+      isSymlink: false,
+      warnings: [],
+      eligibleImport: true,
+      eligibleAdopt: true,
+    }],
+    warnings: [],
+  };
+}
+
+function canonicalImportItemFixture(sourceId: string, assetId: string) {
+  const name = assetId.split(":")[1];
+  return {
+    previewId: `import:${name}`,
+    sourceId,
+    assetId,
+    assetType: "skill" as const,
+    sourceName: name,
+    destinationName: name,
+    sourcePath: `/tmp/home/.claude/skills/${name}`,
+    destinationPath: `/tmp/assets/skills/${name}`,
+    disposition: "create" as const,
+    warnings: [],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  };
+}
+
+function batchImportPreviewFixture(
+  overrides: Partial<BatchImportPreview> = {},
+): BatchImportPreview {
+  return {
+    previewId: "batch-import:test",
+    items: [],
+    warnings: [],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+    ...overrides,
+  };
+}
+
 function mountPreviewFixture(overrides: Partial<MountPreview> = {}): MountPreview {
   return {
     previewId: "preview:mount:skill-review-project-a",
@@ -888,6 +1070,28 @@ function mountPreviewFixture(overrides: Partial<MountPreview> = {}): MountPrevie
     warnings: ["Preview only: no runtime path will be changed."],
     backupRequired: true,
     canApply: true,
+    ...overrides,
+  };
+}
+
+function canonicalMountPreviewFixture(
+  overrides: Partial<CanonicalMountPreview> = {},
+): CanonicalMountPreview {
+  return {
+    previewId: "mount:skill-review",
+    assetId: "skill:review",
+    targetId: "claude-user-skills",
+    canonicalPath: "/tmp/home/.my-agent-assets/assets/skills/review",
+    affectedTargetPath: "/tmp/home/.claude/skills/review",
+    compatible: true,
+    adapter: "symlink_directory",
+    disposition: "create_link",
+    plannedEffects: ["预览挂载计划"],
+    warnings: [],
+    backupRequired: true,
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
     ...overrides,
   };
 }

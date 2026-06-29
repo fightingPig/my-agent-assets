@@ -41,6 +41,18 @@ import type {
   CanonicalUnmountPreview,
   CanonicalUnmountApplyRequest,
   CanonicalUnmountApplyResult,
+  CanonicalDeletePreviewRequest,
+  CanonicalDeletePreview,
+  CanonicalDeleteApplyRequest,
+  CanonicalDeleteApplyResult,
+  AdoptPreviewRequest,
+  AdoptPreview,
+  AdoptApplyRequest,
+  AdoptApplyResult,
+  BatchImportPreviewRequest,
+  BatchImportPreview,
+  BatchImportApplyRequest,
+  BatchImportApplyResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -279,6 +291,136 @@ export async function canonicalUnmountApply(
     throw new Error("canonical_unmount_apply returned an invalid response.");
   }
   return result as CanonicalUnmountApplyResult;
+}
+
+export async function canonicalDeletePreview(
+  input: CanonicalDeletePreviewRequest,
+): Promise<CanonicalDeletePreview> {
+  const fallback: CanonicalDeletePreview = {
+    previewId: "canonical-delete-unavailable",
+    assetId: input.assetId,
+    canonicalPath: "",
+    bindings: [],
+    plannedEffects: [],
+    warnings: ["Tauri runtime is unavailable; canonical delete preview skipped."],
+    backupRequired: true,
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "canonical_delete_preview",
+    { input },
+    fallback,
+  );
+  return isRecord(result) && typeof result.previewId === "string"
+    ? (result as CanonicalDeletePreview)
+    : fallback;
+}
+
+export async function canonicalDeleteApply(
+  input: CanonicalDeleteApplyRequest,
+): Promise<CanonicalDeleteApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_delete_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_delete_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_delete_apply returned an invalid response.");
+  }
+  return result as CanonicalDeleteApplyResult;
+}
+
+export async function previewAdopt(
+  input: AdoptPreviewRequest,
+): Promise<AdoptPreview> {
+  const fallback: AdoptPreview = {
+    previewId: "adopt-unavailable",
+    items: [],
+    importPlan: [],
+    mountPlan: [],
+    backupPlan: [],
+    warnings: ["Tauri runtime is unavailable; adopt preview skipped."],
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "preview_adopt",
+    { input },
+    fallback,
+  );
+  return isRecord(result) &&
+    typeof result.previewId === "string" &&
+    Array.isArray(result.items)
+    ? (result as AdoptPreview)
+    : fallback;
+}
+
+export async function adoptApply(
+  input: AdoptApplyRequest,
+): Promise<AdoptApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("adopt_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("adopt_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.items) ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("adopt_apply returned an invalid response.");
+  }
+  return result as AdoptApplyResult;
+}
+
+export async function canonicalBatchImportPreview(
+  input: BatchImportPreviewRequest,
+): Promise<BatchImportPreview> {
+  const fallback: BatchImportPreview = {
+    previewId: "batch-import-unavailable",
+    items: [],
+    warnings: ["Tauri runtime is unavailable; batch import preview skipped."],
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "canonical_batch_import_preview",
+    { input },
+    fallback,
+  );
+  return isRecord(result) &&
+    typeof result.previewId === "string" &&
+    Array.isArray(result.items)
+    ? (result as BatchImportPreview)
+    : fallback;
+}
+
+export async function canonicalBatchImportApply(
+  input: BatchImportApplyRequest,
+): Promise<BatchImportApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_batch_import_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>(
+    "canonical_batch_import_apply",
+    { input },
+  );
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.items) ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_batch_import_apply returned an invalid response.");
+  }
+  return result as BatchImportApplyResult;
 }
 
 export async function listCodexSkills(

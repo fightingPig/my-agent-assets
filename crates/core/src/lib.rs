@@ -1,9 +1,13 @@
+pub mod adopt;
 pub mod asset_registry;
+pub mod batch_import;
+pub mod delete;
 pub mod discovery;
 pub mod import;
 pub mod mcp;
 pub mod mount;
 pub mod mount_registry;
+pub mod operation;
 pub mod path_safety;
 pub mod settings;
 pub mod targets;

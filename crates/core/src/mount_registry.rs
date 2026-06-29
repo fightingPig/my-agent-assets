@@ -112,6 +112,18 @@ impl MountRegistry {
         self.bindings.remove(&binding_id(asset_id, target_id))
     }
 
+    pub fn remove_asset(&mut self, asset_id: &str) -> Vec<MountBinding> {
+        let ids = self
+            .bindings
+            .values()
+            .filter(|binding| binding.asset_id == asset_id)
+            .map(|binding| binding.id.clone())
+            .collect::<Vec<_>>();
+        ids.into_iter()
+            .filter_map(|id| self.bindings.remove(&id))
+            .collect()
+    }
+
     pub fn for_asset(&self, asset_id: &str) -> Vec<&MountBinding> {
         self.bindings
             .values()

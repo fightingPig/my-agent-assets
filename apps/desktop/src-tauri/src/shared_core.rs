@@ -1,4 +1,16 @@
 use crate::path_utils::home_dir;
+use my_agent_assets_core::adopt::{
+    apply_adopt, preview_adopt, AdoptApplyRequest, AdoptApplyResult, AdoptPreview,
+    AdoptPreviewRequest,
+};
+use my_agent_assets_core::batch_import::{
+    apply_batch_import, preview_batch_import, BatchImportApplyRequest, BatchImportApplyResult,
+    BatchImportPreview, BatchImportPreviewRequest,
+};
+use my_agent_assets_core::delete::{
+    apply_delete, preview_delete, DeleteApplyRequest, DeleteApplyResult, DeletePreview,
+    DeletePreviewRequest,
+};
 use my_agent_assets_core::discovery::{discover, DiscoveryResult, DiscoveryScope};
 use my_agent_assets_core::import::{
     apply_import, preview_import, ImportApplyRequest, ImportApplyResult, ImportPreview,
@@ -65,6 +77,49 @@ pub fn canonical_unmount_apply_command(
     let home =
         home_dir().ok_or_else(|| "HOME is unavailable; unmount apply blocked.".to_string())?;
     apply_unmount(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_delete_preview_command(
+    input: DeletePreviewRequest,
+) -> Result<DeletePreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; delete preview skipped.".to_string())?;
+    preview_delete(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_delete_apply_command(
+    input: DeleteApplyRequest,
+) -> Result<DeleteApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; delete apply blocked.".to_string())?;
+    apply_delete(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn preview_adopt_command(input: AdoptPreviewRequest) -> Result<AdoptPreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; adopt preview skipped.".to_string())?;
+    preview_adopt(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn adopt_apply_command(input: AdoptApplyRequest) -> Result<AdoptApplyResult, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; adopt apply blocked.".to_string())?;
+    apply_adopt(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_batch_import_preview_command(
+    input: BatchImportPreviewRequest,
+) -> Result<BatchImportPreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; batch import preview skipped.".to_string())?;
+    preview_batch_import(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_batch_import_apply_command(
+    input: BatchImportApplyRequest,
+) -> Result<BatchImportApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; batch import apply blocked.".to_string())?;
+    apply_batch_import(&home, &input).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

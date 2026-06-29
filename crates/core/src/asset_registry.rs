@@ -105,6 +105,10 @@ impl AssetRegistry {
         self.assets.insert(record.id.clone(), record);
         Ok(())
     }
+
+    pub fn remove(&mut self, asset_type: AssetKind, name: &str) -> Option<AssetRecord> {
+        self.assets.remove(&asset_id(asset_type, name))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

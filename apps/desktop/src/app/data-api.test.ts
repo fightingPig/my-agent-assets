@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DesktopSettings, GitStatus } from "./contracts";
+import type {
+  AdoptPreviewRequest,
+  DesktopSettings,
+  GitStatus,
+} from "./contracts";
 
 const { invoke, isTauriRuntime } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -245,6 +249,66 @@ describe("read-only desktop data api", () => {
     await api.canonicalUnmountApply(unmountApplyRequest);
     expect(invoke).toHaveBeenLastCalledWith("canonical_unmount_apply", {
       input: unmountApplyRequest,
+    });
+
+    const deletePreviewRequest = {
+      assetId: "skill:review",
+      mode: "unmount_all",
+    } as const;
+    invoke.mockResolvedValueOnce({ previewId: "delete-1" });
+    await api.canonicalDeletePreview(deletePreviewRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_delete_preview", {
+      input: deletePreviewRequest,
+    });
+
+    const deleteApplyRequest = {
+      previewId: "delete-1",
+      previewGeneratedAtEpochSeconds: 125,
+      request: deletePreviewRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "delete-1",
+      assetId: "skill:review",
+      deleted: true,
+      portableBackupId: "portable-1",
+      localBackupId: "local-1",
+      affectedPaths: [],
+      journalPath: "/tmp/journal",
+    });
+    await api.canonicalDeleteApply(deleteApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_delete_apply", {
+      input: deleteApplyRequest,
+    });
+
+    const adoptPreviewRequest = {
+      scope: { kind: "user" },
+      selections: [
+        {
+          sourceId: "claude:user:skill:abc:review",
+          resolution: { kind: "unresolved" },
+        },
+      ],
+    } satisfies AdoptPreviewRequest;
+    invoke.mockResolvedValueOnce({ previewId: "adopt-1", items: [] });
+    await api.previewAdopt(adoptPreviewRequest);
+    expect(invoke).toHaveBeenLastCalledWith("preview_adopt", {
+      input: adoptPreviewRequest,
+    });
+
+    const adoptApplyRequest = {
+      previewId: "adopt-1",
+      previewGeneratedAtEpochSeconds: 126,
+      request: adoptPreviewRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "adopt-1",
+      items: [],
+      affectedPaths: [],
+      journalPath: "/tmp/adopt-journal",
+    });
+    await api.adoptApply(adoptApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("adopt_apply", {
+      input: adoptApplyRequest,
     });
   });
 

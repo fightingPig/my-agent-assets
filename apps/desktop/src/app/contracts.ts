@@ -533,3 +533,127 @@ export type CanonicalUnmountApplyResult = {
   backupId?: string;
   affectedPaths: string[];
 };
+
+export type CanonicalDeletePreviewRequest = {
+  assetId: string;
+  mode: "require_unmounted" | "unmount_all";
+};
+
+export type CanonicalDeleteBindingImpact = {
+  targetId: string;
+  targetPath: string;
+  canUnmount: boolean;
+  warnings: string[];
+};
+
+export type CanonicalDeletePreview = {
+  previewId: string;
+  assetId: string;
+  canonicalPath: string;
+  bindings: CanonicalDeleteBindingImpact[];
+  plannedEffects: string[];
+  warnings: string[];
+  backupRequired: boolean;
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type CanonicalDeleteApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: CanonicalDeletePreviewRequest;
+};
+
+export type CanonicalDeleteApplyResult = {
+  previewId: string;
+  assetId: string;
+  deleted: boolean;
+  portableBackupId: string;
+  localBackupId: string;
+  affectedPaths: string[];
+  journalPath: string;
+};
+
+export type AdoptSelection = {
+  sourceId: string;
+  resolution: CanonicalImportResolution;
+};
+
+export type AdoptPreviewRequest = {
+  scope: RuntimeDiscoveryScope;
+  selections: AdoptSelection[];
+};
+
+export type AdoptItemPreview = {
+  sourceId: string;
+  importPlan: CanonicalImportPreview;
+  targetId?: string;
+  targetPath?: string;
+  backupRequired: boolean;
+  warnings: string[];
+  canApply: boolean;
+};
+
+export type AdoptPreview = {
+  previewId: string;
+  items: AdoptItemPreview[];
+  importPlan: string[];
+  mountPlan: string[];
+  backupPlan: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type AdoptApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: AdoptPreviewRequest;
+};
+
+export type AdoptApplyResult = {
+  previewId: string;
+  items: Array<{
+    sourceId: string;
+    assetId: string;
+    targetId?: string;
+    imported: boolean;
+    mounted: boolean;
+  }>;
+  affectedPaths: string[];
+  journalPath: string;
+};
+
+export type BatchImportSelection = {
+  sourceId: string;
+  resolution: CanonicalImportResolution;
+};
+
+export type BatchImportPreviewRequest = {
+  scope: RuntimeDiscoveryScope;
+  selections: BatchImportSelection[];
+};
+
+export type BatchImportPreview = {
+  previewId: string;
+  items: CanonicalImportPreview[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type BatchImportApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: BatchImportPreviewRequest;
+};
+
+export type BatchImportApplyResult = {
+  previewId: string;
+  items: CanonicalImportApplyResult[];
+  affectedPaths: string[];
+  journalPath: string;
+};

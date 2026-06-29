@@ -8,6 +8,7 @@ use crate::discovery::{
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
+use crate::operation::OperationLock;
 use crate::path_safety::{guard_write_path, validate_single_path_component};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -120,7 +121,7 @@ pub fn preview_import(home: &Path, request: &ImportPreviewRequest) -> Result<Imp
     preview_import_at(home, request, epoch_seconds())
 }
 
-fn preview_import_at(
+pub(crate) fn preview_import_at(
     home: &Path,
     request: &ImportPreviewRequest,
     generated_at_epoch_seconds: u64,
@@ -193,6 +194,14 @@ fn preview_import_at(
 }
 
 pub fn apply_import(home: &Path, request: &ImportApplyRequest) -> Result<ImportApplyResult> {
+    let _operation_lock = OperationLock::acquire(home)?;
+    apply_import_locked(home, request)
+}
+
+pub(crate) fn apply_import_locked(
+    home: &Path,
+    request: &ImportApplyRequest,
+) -> Result<ImportApplyResult> {
     if epoch_seconds()
         > request
             .preview_generated_at_epoch_seconds
@@ -321,7 +330,11 @@ pub fn apply_import(home: &Path, request: &ImportApplyRequest) -> Result<ImportA
     })
 }
 
-fn find_source(home: &Path, scope: &DiscoveryScope, source_id: &str) -> Result<DiscoveredSource> {
+pub(crate) fn find_source(
+    home: &Path,
+    scope: &DiscoveryScope,
+    source_id: &str,
+) -> Result<DiscoveredSource> {
     discover(home, scope.clone())
         .sources
         .into_iter()
