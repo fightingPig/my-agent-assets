@@ -8,7 +8,6 @@ import type {
   ImportPreview,
   MountPreview,
   ProjectSummary,
-  RestorePreview,
   ScanResult,
 } from "../app/contracts";
 import { BackupRestorePage } from "./BackupRestorePage";
@@ -40,11 +39,9 @@ const {
   conflictApply,
   previewMount,
   previewConflicts,
-  previewRestore,
   listCodexSkills,
   listCodexMcpServers,
   mountApply,
-  restoreApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
@@ -60,11 +57,9 @@ const {
   conflictApply: vi.fn(),
   previewMount: vi.fn(),
   previewConflicts: vi.fn(),
-  previewRestore: vi.fn(),
   listCodexSkills: vi.fn(),
   listCodexMcpServers: vi.fn(),
   mountApply: vi.fn(),
-  restoreApply: vi.fn(),
 }));
 
 vi.mock("../app/data-api", () => ({
@@ -82,11 +77,9 @@ vi.mock("../app/data-api", () => ({
   conflictApply,
   previewMount,
   previewConflicts,
-  previewRestore,
   listCodexSkills,
   listCodexMcpServers,
   mountApply,
-  restoreApply,
 }));
 
 afterEach(() => {
@@ -188,7 +181,6 @@ beforeEach(() => {
   });
   previewMount.mockResolvedValue(mountPreviewFixture());
   previewConflicts.mockResolvedValue([]);
-  previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842"));
   listCodexSkills.mockResolvedValue({ skills: [], warnings: [] });
   listCodexMcpServers.mockResolvedValue({ servers: [], warnings: [] });
   mountApply.mockResolvedValue({
@@ -204,24 +196,6 @@ beforeEach(() => {
         status: "skipped",
         message: "Plan-only mode: no symlink was created.",
         affectedPaths: ["~/workspace/project-a/.claude/skills/review"],
-      },
-    ],
-    warnings: [],
-    errors: [],
-  });
-  restoreApply.mockResolvedValue({
-    mode: "planOnly",
-    ok: true,
-    previewId: "preview:restore:backup-20260621-1842",
-    backup: null,
-    steps: [
-      {
-        stepId: "plan-restore-backup-20260621-1842",
-        kind: "restore",
-        label: "预览恢复",
-        status: "skipped",
-        message: "Plan-only mode: 2 backup entries would be restored.",
-        affectedPaths: ["/tmp/restore/one", "/tmp/restore/two"],
       },
     ],
     warnings: [],
@@ -357,7 +331,7 @@ describe("read-only UI integration", () => {
     expect(container.textContent).toContain("未发现本地项目");
   });
 
-  it("feeds read-only backup manifests while preserving restore planning", async () => {
+  it("feeds read-only backup history with manifest metadata and manual restore guidance", async () => {
     listBackups.mockResolvedValue([
       {
         id: "restore-20260627",
@@ -365,11 +339,11 @@ describe("read-only UI integration", () => {
         createdAt: "2026-06-27T10:00:00Z",
         sizeBytes: 2048,
         entryCount: 2,
+        manifestPath: "/tmp/backups/restore-20260627/manifest.json",
+        runtimeRoot: "/tmp/home",
+        affectedPaths: ["/tmp/restore/a", "/tmp/restore/b"],
       },
     ]);
-    previewRestore.mockResolvedValue(restorePreviewFixture("restore-20260627", {
-      affectedPaths: ["/tmp/restore/a", "/tmp/restore/b"],
-    }));
 
     render(<BackupRestorePage />);
 
@@ -377,9 +351,10 @@ describe("read-only UI integration", () => {
     expect(backupRow).toBeInTheDocument();
     expect(screen.getAllByText("Restore fixture backup").length).toBeGreaterThan(0);
     expect(backupRow).toHaveTextContent("2.0 KB");
-    await waitFor(() => expect(previewRestore).toHaveBeenCalledWith({ backupId: "restore-20260627" }));
+    expect(screen.getByText("/tmp/backups/restore-20260627/manifest.json")).toBeInTheDocument();
     expect(await screen.findByText("/tmp/restore/a")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
+    expect(screen.getByText("手动恢复说明")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
   });
 
   it("displays read-only GitStatus fields and keeps Pull and Push disabled", async () => {
@@ -410,7 +385,7 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "执行 Push" })).toBeDisabled();
   });
 
-  it("generates a Sync plan and requires typed confirmation before executing Push", async () => {
+  it("generates a Sync plan and confirms Push without typed input", async () => {
     render(<SyncPage />);
 
     await waitFor(() => expect(gitStatus).toHaveBeenCalled());
@@ -421,9 +396,8 @@ describe("read-only UI integration", () => {
     expect(screen.getByText("计划方向")).toBeInTheDocument();
     expect(screen.getByText("计划可执行")).toBeInTheDocument();
     const pushButton = screen.getByRole("button", { name: "执行 Push" });
-    expect(pushButton).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
     expect(pushButton).toBeEnabled();
+    expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(pushButton);
 
     await waitFor(() => expect(syncApply).toHaveBeenCalledWith({
@@ -529,7 +503,7 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "保存扫描预览" })).toBeDisabled();
   });
 
-  it("generates a plan-only import apply preview without enabling import execution", async () => {
+  it("generates a plan-only import apply preview before enabling import confirmation", async () => {
     scanAssets.mockResolvedValue(scanResultFixture([
       assetFixture("skill:live-scan", "live-scan", "skill"),
     ]));
@@ -551,10 +525,10 @@ describe("read-only UI integration", () => {
       backupBeforeApply: true,
     }));
     expect(await screen.findByText(/Plan-only mode: 1 asset would be imported/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled();
   });
 
-  it("requires typed confirmation before executing import apply", async () => {
+  it("executes import apply after preview and plan confirmation without typed input", async () => {
     scanAssets.mockResolvedValue(scanResultFixture([
       assetFixture("skill:live-scan", "live-scan", "skill"),
     ]));
@@ -569,9 +543,8 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(importApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
 
     const applyButton = screen.getByRole("button", { name: "确认导入" });
-    expect(applyButton).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
     expect(applyButton).toBeEnabled();
+    expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(applyButton);
 
     await waitFor(() => expect(importApply).toHaveBeenLastCalledWith({
@@ -586,7 +559,7 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(scanAssets).toHaveBeenCalledTimes(2));
   });
 
-  it("renders preview-only mount, conflict, and restore data while keeping actions disabled", async () => {
+  it("renders preview-only mount and conflict data while keeping apply actions gated by a plan", async () => {
     previewMount.mockResolvedValue(mountPreviewFixture({
       steps: [
         { id: "check", kind: "check", label: "预览资产来源", description: "check", risk: "none" },
@@ -597,14 +570,6 @@ describe("read-only UI integration", () => {
     previewConflicts.mockResolvedValue([
       conflictPreviewFixture("conflict:skill:review", "review", "skill"),
     ]);
-    previewRestore.mockResolvedValue(restorePreviewFixture("backup-20260621-1842", {
-      affectedPaths: ["/tmp/restore/one", "/tmp/restore/two"],
-      steps: [
-        { id: "restore", kind: "restore", label: "预览恢复影响", description: "restore", risk: "high" },
-      ],
-      warnings: ["Preview restore warning"],
-    }));
-
     const { rerender } = render(<MountManagerPage />);
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
@@ -616,59 +581,9 @@ describe("read-only UI integration", () => {
     fireEvent.click(screen.getByRole("option", { name: "review" }));
     await waitFor(() => expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "执行冲突处理" })).toBeDisabled();
-
-    rerender(<BackupRestorePage />);
-    expect(await screen.findByText("/tmp/restore/one")).toBeInTheDocument();
-    expect(screen.getByText("预览恢复影响")).toBeInTheDocument();
-    expect(screen.getByText("Preview restore warning")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成恢复计划" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
   });
 
-  it("generates a plan-only restore apply preview without enabling restore execution", async () => {
-    render(<BackupRestorePage />);
-
-    await screen.findByText("backup-20260621-1842");
-    const planButton = screen.getByRole("button", { name: "生成恢复计划" });
-    await waitFor(() => expect(planButton).toBeEnabled());
-    fireEvent.click(planButton);
-
-    await waitFor(() => expect(restoreApply).toHaveBeenCalledWith({
-      previewId: "preview:restore:backup-20260621-1842",
-      mode: "planOnly",
-      backupId: "backup-20260621-1842",
-      backupBeforeRestore: true,
-    }));
-    expect(await screen.findByText(/Plan-only mode/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "恢复此备份" })).toBeDisabled();
-  });
-
-  it("requires typed confirmation before executing restore apply", async () => {
-    render(<BackupRestorePage />);
-
-    await screen.findByText("backup-20260621-1842");
-    const planButton = screen.getByRole("button", { name: "生成恢复计划" });
-    await waitFor(() => expect(planButton).toBeEnabled());
-    fireEvent.click(planButton);
-    await waitFor(() => expect(restoreApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
-
-    const restoreButton = screen.getByRole("button", { name: "恢复此备份" });
-    expect(restoreButton).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
-    expect(restoreButton).toBeEnabled();
-    fireEvent.click(restoreButton);
-
-    await waitFor(() => expect(restoreApply).toHaveBeenLastCalledWith({
-      previewId: "preview:restore:backup-20260621-1842",
-      mode: "apply",
-      backupId: "backup-20260621-1842",
-      backupBeforeRestore: true,
-    }));
-    expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    await waitFor(() => expect(listBackups).toHaveBeenCalledTimes(2));
-  });
-
-  it("generates a plan-only mount apply preview without enabling mount execution", async () => {
+  it("generates a plan-only mount apply preview before enabling mount confirmation", async () => {
     render(<MountManagerPage />);
 
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
@@ -690,10 +605,10 @@ describe("read-only UI integration", () => {
       backupBeforeApply: true,
     }));
     expect(await screen.findByText(/Plan-only mode: no symlink was created/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认挂载" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
   });
 
-  it("requires typed confirmation before executing mount apply", async () => {
+  it("executes mount apply after preview and plan confirmation without typed input", async () => {
     render(<MountManagerPage />);
 
     await waitFor(() => expect(previewMount).toHaveBeenCalled());
@@ -705,9 +620,8 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
 
     const mountButton = screen.getByRole("button", { name: "确认挂载" });
-    expect(mountButton).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
     expect(mountButton).toBeEnabled();
+    expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(mountButton);
 
     await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith({
@@ -725,7 +639,7 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(previewMount.mock.calls.length).toBeGreaterThanOrEqual(3));
   });
 
-  it("updates Conflict Resolver decisions and requires a plan plus typed confirmation", async () => {
+  it("updates Conflict Resolver decisions and requires a plan plus button confirmation", async () => {
     previewConflicts.mockResolvedValue([
       conflictPreviewFixture("conflict:skill:review", "review", "skill"),
     ]);
@@ -759,9 +673,8 @@ describe("read-only UI integration", () => {
       assetIds: ["skill:review"],
     })));
     const applyButton = screen.getByRole("button", { name: "执行冲突处理" });
-    expect(applyButton).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
     expect(applyButton).toBeEnabled();
+    expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(applyButton);
     await waitFor(() => expect(conflictApply).toHaveBeenLastCalledWith(expect.objectContaining({
       mode: "apply",
@@ -769,7 +682,6 @@ describe("read-only UI integration", () => {
     })));
     expect(importApply).not.toHaveBeenCalled();
     expect(mountApply).not.toHaveBeenCalled();
-    expect(restoreApply).not.toHaveBeenCalled();
   });
 
   it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {
@@ -814,7 +726,7 @@ describe("read-only UI integration", () => {
     }));
     fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "确认挂载" }));
     await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
     await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
@@ -854,7 +766,7 @@ describe("read-only UI integration", () => {
     }));
     fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
-    fireEvent.change(screen.getByPlaceholderText("APPLY"), { target: { value: "APPLY" } });
+    expect(screen.getByRole("button", { name: "确认项目挂载" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
     await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
     await waitFor(() => expect(listProjects).toHaveBeenCalled());
@@ -866,7 +778,6 @@ describe("read-only UI integration", () => {
     expect(previewImport).not.toHaveBeenCalled();
     expect(importApply).not.toHaveBeenCalled();
     expect(mountApply).not.toHaveBeenCalled();
-    expect(restoreApply).not.toHaveBeenCalled();
   });
 });
 
@@ -991,20 +902,5 @@ function conflictPreviewFixture(id: string, name: string, assetType: ConflictPre
     existingContent: `Existing preview content for ${name}`,
     incomingContent: `Incoming preview content for ${name}`,
     allowedResolutions: ["skip", "rename", "overwrite"],
-  };
-}
-
-function restorePreviewFixture(backupId: string, overrides: Partial<RestorePreview> = {}): RestorePreview {
-  return {
-    previewId: `preview:restore:${backupId}`,
-    backup: { id: backupId, label: `Restore preview for ${backupId}`, createdAt: "preview-only", sizeBytes: 0, entryCount: 3 },
-    affectedPaths: [`backups/${backupId}/manifest.json`, "~/.claude/skills/review"],
-    steps: [
-      { id: "preview-restore", kind: "restore", label: "预览恢复影响", description: "No write", risk: "high" },
-    ],
-    warnings: ["Preview only: restore is not executed."],
-    backupBeforeRestore: true,
-    canApply: true,
-    ...overrides,
   };
 }

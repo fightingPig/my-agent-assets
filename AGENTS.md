@@ -17,16 +17,19 @@ Current V1 scope:
 - Sync
 - Settings
 
-Current V2 read-only provider scope:
+Current final product provider scope:
 
-- Codex Skills
-- Codex MCP Servers
+- Claude Code and Codex runtime source discovery
+- Canonical Skill import from Claude Code, Codex, and approved custom sources
+- Canonical Command import from Claude-compatible sources
+- Canonical MCP import from Claude JSON and Codex TOML
+- Compatible target mount through Claude/Codex/custom adapters
 
-Out of scope for V1/V2:
+Out of scope:
 
 - Codex AGENTS.md assets
 - Codex custom commands
-- Codex asset import, mount, adoption, or config writes
+- Codex Command assets or Command targets
 - Codex OAuth token management
 - Cursor rules
 - Hooks bundle
@@ -74,7 +77,8 @@ Use a single codebase:
 - Vite
 - Rust backend
 
-The desktop app should eventually call the Rust core directly through Tauri commands.
+The desktop app and CLI must call the same Rust core directly. Tauri commands
+and CLI handlers are transport adapters, not separate business implementations.
 
 Do not implement business logic in React.
 
@@ -204,7 +208,21 @@ Production pages must use Tauri data or explicit empty/error states.
 
 Mock data is allowed only in tests, Visual QA, or an explicitly enabled demo mode. It must never be the default production fallback.
 
-Provider-specific business logic belongs in Rust. Codex support is read-only for Skills and MCP Servers; do not route Codex assets into Claude import, mount, or apply workflows.
+Provider-specific discovery and renderer logic belongs in the shared Rust core.
+Provider is a runtime source or mount-target adapter, not a separate asset
+center. Claude Code and Codex assets import into one canonical asset center.
+
+Codex supports compatible Skill and MCP import/mount workflows. Do not
+implement Codex Commands, Codex AGENTS.md assets, or Codex OAuth token
+management.
+
+All writes require a preview and explicit confirmation. High-risk operations
+must show highlighted impact information, but must not require typed `APPLY`.
+
+The application does not provide automatic historical Restore. It provides
+portable/local backup history, file reveal, and a manual restore guide.
+Internal operation-journal rollback is allowed only for recovering an
+interrupted application transaction.
 
 Do not modify window config or AppShell window strategy while adding provider support.
 
@@ -283,7 +301,9 @@ Shell components own the frozen window layout and navigation frame.
 
 Page components use real Tauri data in production and may use local static fixtures only in tests, Visual QA, or explicit demo mode.
 
-`ApplyConfirmationPanel.tsx` provides the typed confirmation gate used before real import, mount, or restore apply commands are executed.
+`ApplyConfirmationPanel.tsx` is legacy UI that must be replaced or simplified
+as write workflows move to preview plus button confirmation. It must not
+require typed confirmation and must not expose historical Restore actions.
 
 `visual-qa/` contains reusable static GUI screenshot and layout diagnostics tooling.
 

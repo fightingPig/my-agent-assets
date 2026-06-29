@@ -1,11 +1,15 @@
+#[cfg(test)]
+use crate::contracts::RestoreApplyInput;
 use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, AssetType, BackupManifestSummary,
     ConflictApplyInput, ConflictResolution, ConflictResolutionChoice, ImportApplyInput,
-    MountApplyInput, PlanStepKind, RestoreApplyInput, ScanScope,
+    MountApplyInput, PlanStepKind, ScanScope,
 };
+#[cfg(test)]
+use crate::path_utils::path_is_within;
 use crate::path_utils::{
     display_path, expand_tilde, guard_existing_path, guard_write_path, home_dir, modified_time_iso,
-    path_is_within, validate_single_path_component,
+    validate_single_path_component,
 };
 use crate::preview;
 use serde::{Deserialize, Serialize};
@@ -99,22 +103,7 @@ pub fn mount_apply_for_home(home: &Path, input: MountApplyInput) -> ApplyResult 
     runner.run()
 }
 
-#[tauri::command]
-pub fn restore_apply_command(input: RestoreApplyInput) -> ApplyResult {
-    match home_dir() {
-        Some(home) => restore_apply_for_home(&home, input),
-        None => ApplyResult {
-            mode: input.mode,
-            ok: false,
-            preview_id: input.preview_id,
-            backup: None,
-            steps: vec![],
-            warnings: vec![],
-            errors: vec!["Could not resolve HOME for restore apply.".into()],
-        },
-    }
-}
-
+#[cfg(test)]
 pub fn restore_apply_for_home(home: &Path, input: RestoreApplyInput) -> ApplyResult {
     let mut runner = RestoreApplyRunner::new(home, input);
     runner.run()
@@ -458,6 +447,7 @@ struct MountApplyRunner<'a> {
     backup: Option<BackupBuilder>,
 }
 
+#[cfg(test)]
 struct RestoreApplyRunner<'a> {
     home: &'a Path,
     input: RestoreApplyInput,
@@ -467,6 +457,7 @@ struct RestoreApplyRunner<'a> {
     backup: Option<BackupBuilder>,
 }
 
+#[cfg(test)]
 impl<'a> RestoreApplyRunner<'a> {
     fn new(home: &'a Path, input: RestoreApplyInput) -> Self {
         Self {
@@ -1356,6 +1347,7 @@ fn read_json_file(path: &Path) -> io::Result<Value> {
     })
 }
 
+#[cfg(test)]
 fn read_backup_manifest(path: &Path) -> io::Result<BackupManifest> {
     let text = fs::read_to_string(path)?;
     serde_json::from_str(&text).map_err(|error| {

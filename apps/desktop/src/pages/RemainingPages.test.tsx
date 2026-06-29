@@ -79,8 +79,9 @@ describe("remaining V1 static pages", () => {
     rerender(<BackupRestorePage demoMode />);
     fireEvent.click(screen.getByRole("option", { name: "backup-20260620-0915" }));
     expect(screen.getAllByText("挂载变更前").length).toBeGreaterThan(1);
-    expect(screen.getByText("恢复 2 项路径，移除 1 个新软链接")).toBeInTheDocument();
-    expect(screen.getByText("恢复前将再次创建备份")).toBeInTheDocument();
+    expect(screen.getByText("~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json")).toBeInTheDocument();
+    expect(screen.getByText("手动恢复说明")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
   });
 
   it("renders local Git sync status and history", () => {

@@ -15,6 +15,10 @@ import {
   RISK_LEVELS,
   RUNTIME_SCOPES,
   SYNC_DIRECTIONS,
+  RUNTIME_PROVIDERS,
+  RUNTIME_SOURCE_FORMATS,
+  RUNTIME_SOURCE_SCOPES,
+  CANONICAL_IMPORT_DISPOSITIONS,
   type PreviewImportInput,
   type ScanScope,
   type GitStatus,
@@ -24,6 +28,7 @@ import {
   type PreviewSyncInput,
   type SyncApplyInput,
   type SyncPreview,
+  type BackupSummary,
 } from "./contracts";
 
 describe("Tauri command contracts", () => {
@@ -43,6 +48,22 @@ describe("Tauri command contracts", () => {
     expect(APPLY_MODES).toEqual(["planOnly", "apply"]);
     expect(APPLY_STEP_STATUSES).toEqual(["pending", "skipped", "success", "failed"]);
     expect(SYNC_DIRECTIONS).toEqual(["pull", "push"]);
+    expect(RUNTIME_PROVIDERS).toEqual(["claude_code", "codex", "custom"]);
+    expect(RUNTIME_SOURCE_FORMATS).toEqual([
+      "skill_directory",
+      "markdown",
+      "claude_mcp_json",
+      "codex_mcp_toml",
+    ]);
+    expect(RUNTIME_SOURCE_SCOPES).toEqual(["user", "project", "custom"]);
+    expect(CANONICAL_IMPORT_DISPOSITIONS).toEqual([
+      "create",
+      "conflict",
+      "skip",
+      "overwrite",
+      "rename",
+      "unchanged",
+    ]);
   });
 
   it("keeps Sync preview contracts direction-bound and preview-only", () => {
@@ -192,5 +213,22 @@ describe("Tauri command contracts", () => {
     expect(result.steps[0].status).toBe("skipped");
     expect(result.backup).toBeNull();
     expectTypeOf(result).toMatchTypeOf<ApplyResult>();
+  });
+
+  it("keeps backup history read-only and free of restore command contracts", () => {
+    const backup = {
+      id: "backup-1",
+      label: "Import apply backup",
+      createdAt: "2026-06-29T10:00:00Z",
+      sizeBytes: 120,
+      entryCount: 1,
+      manifestPath: "~/.my-agent-assets/backups/backup-1/manifest.json",
+      runtimeRoot: "~",
+      affectedPaths: ["~/.claude/skills/review"],
+    } satisfies BackupSummary;
+
+    expect(backup.manifestPath).toContain("manifest.json");
+    expect(backup.affectedPaths).toHaveLength(1);
+    expectTypeOf(backup).toMatchTypeOf<BackupSummary>();
   });
 });

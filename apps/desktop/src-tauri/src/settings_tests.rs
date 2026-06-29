@@ -31,7 +31,7 @@ impl TempHome {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.path.join(".my-agent-assets/config.json")
+        self.path.join(".my-agent-assets/config.yaml")
     }
 }
 
@@ -65,7 +65,7 @@ fn custom_settings(home: &Path) -> DesktopSettings {
 fn settings_load_missing_config_returns_defaults_without_creating_files() {
     let home = TempHome::new("load-defaults");
 
-    let settings = settings_load_for_home(home.path());
+    let settings = settings_load_for_home(home.path()).expect("defaults should load");
 
     assert_eq!(
         settings.asset_center_path,
@@ -87,7 +87,7 @@ fn settings_save_writes_config_and_settings_load_reads_it_back() {
         },
     )
     .expect("settings should save");
-    let loaded = settings_load_for_home(home.path());
+    let loaded = settings_load_for_home(home.path()).expect("saved settings should load");
 
     let expected_asset_center = home
         .path()
@@ -99,8 +99,8 @@ fn settings_save_writes_config_and_settings_load_reads_it_back() {
     assert_eq!(saved.scan_roots, input.scan_roots);
     assert!(home.config_path().exists());
     let raw = fs::read_to_string(home.config_path()).expect("config should be readable");
-    assert!(raw.contains("\"assetCenterPath\""));
-    assert!(raw.contains("\"appearanceTheme\": \"dark\""));
+    assert!(!raw.contains("assetCenterPath"));
+    assert!(raw.contains("appearanceTheme: dark"));
 }
 
 #[test]
@@ -131,14 +131,14 @@ fn settings_save_normalizes_empty_and_out_of_range_values() {
 }
 
 #[test]
-fn settings_load_invalid_config_falls_back_without_overwriting() {
+fn settings_load_invalid_config_returns_error_without_overwriting() {
     let home = TempHome::new("invalid");
     fs::create_dir_all(home.config_path().parent().unwrap()).expect("config parent should exist");
     fs::write(home.config_path(), "{").expect("invalid config should be written");
 
-    let loaded = settings_load_for_home(home.path());
+    let error = settings_load_for_home(home.path()).expect_err("invalid YAML should fail");
 
-    assert_eq!(loaded.max_depth, 5);
+    assert!(error.contains("invalid settings YAML"));
     assert_eq!(
         fs::read_to_string(home.config_path()).expect("invalid config should remain"),
         "{"
@@ -162,8 +162,7 @@ fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
     assert!(result.is_err());
     assert!(result
         .expect_err("symlink path must fail")
-        .to_string()
-        .contains("Symlink traversal"));
+        .contains("Allowed root must not be a symlink"));
     assert!(!outside.config_path().exists());
 }
 

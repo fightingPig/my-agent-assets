@@ -1,3 +1,13 @@
+pub mod asset_registry;
+pub mod discovery;
+pub mod import;
+pub mod mcp;
+pub mod mount;
+pub mod mount_registry;
+pub mod path_safety;
+pub mod settings;
+pub mod targets;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
@@ -338,7 +348,8 @@ pub fn init_plan(ctx: &Context) -> Plan {
         ctx.asset_center.join("assets/skills"),
         ctx.asset_center.join("assets/commands"),
         ctx.asset_center.join("assets/mcps"),
-        ctx.asset_center.join("backups"),
+        ctx.asset_center.join("backups/portable"),
+        ctx.asset_center.join("backups/local"),
     ] {
         if !path.exists() {
             plan.push(PlanItem {
@@ -352,7 +363,13 @@ pub fn init_plan(ctx: &Context) -> Plan {
             });
         }
     }
-    for file in ["config.yaml", "assets.yaml", "mounts.yaml"] {
+    for file in [
+        "config.yaml",
+        "assets.yaml",
+        "targets.yaml",
+        "mounts.yaml",
+        ".gitignore",
+    ] {
         let path = ctx.asset_center.join(file);
         if !path.exists() {
             plan.push(PlanItem {
@@ -374,19 +391,57 @@ pub fn init_apply(ctx: &Context) -> Result<Plan> {
     fs::create_dir_all(ctx.asset_center.join("assets/skills"))?;
     fs::create_dir_all(ctx.asset_center.join("assets/commands"))?;
     fs::create_dir_all(ctx.asset_center.join("assets/mcps"))?;
-    fs::create_dir_all(ctx.asset_center.join("backups"))?;
+    fs::create_dir_all(ctx.asset_center.join("backups/portable"))?;
+    fs::create_dir_all(ctx.asset_center.join("backups/local"))?;
 
+    if !ctx.asset_center.join("config.yaml").exists() {
+        settings::save(&ctx.home, &settings::Settings::defaults_for_home(&ctx.home))
+            .map_err(|error| MaaError::new(error.to_string()))?;
+    }
     write_if_missing(
-        &ctx.asset_center.join("config.yaml"),
-        &format!(
-            "asset_center: {}\ngit_repo:\nscan_roots: []\nmax_depth: 5\nruntime:\n  provider: claude\n",
-            ctx.asset_center.display()
-        ),
+        &ctx.asset_center.join("assets.yaml"),
+        "schemaVersion: 1\nassets: {}\n",
     )?;
-    write_if_missing(&ctx.asset_center.join("assets.yaml"), "assets: {}\n")?;
-    write_if_missing(&ctx.asset_center.join("mounts.yaml"), "mounts: {}\n")?;
+    if !ctx.asset_center.join("targets.yaml").exists() {
+        let targets = targets::TargetRegistry::standard_user_targets(
+            &ctx.home,
+            provider_state(
+                ctx.home.join(".claude").exists() || ctx.home.join(".claude.json").exists(),
+            ),
+            provider_state(ctx.home.join(".codex").exists()),
+            directory_mount_adapter(),
+        )?;
+        write_if_missing(&ctx.asset_center.join("targets.yaml"), &targets.to_yaml()?)?;
+    }
+    write_if_missing(
+        &ctx.asset_center.join("mounts.yaml"),
+        "schemaVersion: 1\nbindings: {}\n",
+    )?;
+    write_if_missing(
+        &ctx.asset_center.join(".gitignore"),
+        "config.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\ncache/\nlogs/\nsecrets/\n",
+    )?;
     init_asset_center_git(ctx)?;
     Ok(plan)
+}
+
+fn provider_state(initialized: bool) -> targets::ProviderState {
+    if initialized {
+        targets::ProviderState::Initialized
+    } else {
+        targets::ProviderState::NotInstalled
+    }
+}
+
+fn directory_mount_adapter() -> targets::MountAdapter {
+    #[cfg(windows)]
+    {
+        targets::MountAdapter::WindowsDirectoryJunction
+    }
+    #[cfg(not(windows))]
+    {
+        targets::MountAdapter::SymlinkDirectory
+    }
 }
 
 pub fn scan_plan(ctx: &Context) -> Result<Plan> {
@@ -1100,7 +1155,7 @@ fn init_asset_center_git(ctx: &Context) -> Result<()> {
         return Ok(());
     }
     let output = Command::new("git")
-        .arg("init")
+        .args(["init", "-b", "main"])
         .current_dir(&ctx.asset_center)
         .output()
         .map_err(git_command_error)?;
@@ -1849,6 +1904,62 @@ mod tests {
             scan_roots(&ctx).unwrap(),
             vec![root.join("workspace with spaces")]
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn init_creates_versioned_asset_center_and_is_idempotent() {
+        let root = test_dir("init-versioned");
+        let ctx = Context::new(root.clone());
+        fs::create_dir_all(root.join(".claude")).unwrap();
+        fs::create_dir_all(root.join(".codex")).unwrap();
+
+        init_apply(&ctx).unwrap();
+
+        for relative in [
+            "assets/skills",
+            "assets/commands",
+            "assets/mcps",
+            "backups/portable",
+            "backups/local",
+        ] {
+            assert!(ctx.asset_center.join(relative).is_dir(), "{relative}");
+        }
+
+        let config = fs::read_to_string(ctx.asset_center.join("config.yaml")).unwrap();
+        assert!(config.contains("schemaVersion: 1"));
+        assert!(!config.contains("assetCenterPath"));
+
+        let targets = fs::read_to_string(ctx.asset_center.join("targets.yaml")).unwrap();
+        assert!(targets.contains("schemaVersion: 1"));
+        assert!(targets.contains("claude-user"));
+        assert!(targets.contains("codex-user"));
+
+        let gitignore = fs::read_to_string(ctx.asset_center.join(".gitignore")).unwrap();
+        assert!(gitignore.contains("backups/local/"));
+        assert!(gitignore.contains("operations/"));
+
+        if ctx.asset_center.join(".git").is_dir() {
+            let branch = Command::new("git")
+                .args(["branch", "--show-current"])
+                .current_dir(&ctx.asset_center)
+                .output()
+                .unwrap();
+            assert!(branch.status.success());
+            assert_eq!(String::from_utf8_lossy(&branch.stdout).trim(), "main");
+        }
+
+        fs::write(
+            ctx.asset_center.join("assets.yaml"),
+            "schemaVersion: 1\nassets:\n  preserved: true\n",
+        )
+        .unwrap();
+        init_apply(&ctx).unwrap();
+        assert_eq!(
+            fs::read_to_string(ctx.asset_center.join("assets.yaml")).unwrap(),
+            "schemaVersion: 1\nassets:\n  preserved: true\n"
+        );
+
         let _ = fs::remove_dir_all(root);
     }
 

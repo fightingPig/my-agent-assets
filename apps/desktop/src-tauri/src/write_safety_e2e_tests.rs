@@ -89,7 +89,10 @@ fn fake_home_write_workflow_stays_isolated_and_sync_plan_only_does_not_mutate_re
         },
     )
     .expect("settings should save inside fake HOME");
-    assert_eq!(settings_load_for_home(home.path()), settings);
+    assert_eq!(
+        settings_load_for_home(home.path()).expect("saved settings should load"),
+        settings
+    );
 
     setup_git_with_ahead_commit(home.path());
     let status = git_status_for_home(home.path());

@@ -1,9 +1,7 @@
-import { ArchiveRestore, FileClock, FolderKanban } from "lucide-react";
+import { Archive, BookOpenCheck, FileJson, FolderKanban, History } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listBackups, previewRestore, restoreApply } from "../app/data-api";
-import type { ApplyResult, BackupSummary, RestorePreview } from "../app/contracts";
-import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
-import { StaticActionButton } from "../components/ui/StaticActionButton";
+import { listBackups } from "../app/data-api";
+import type { BackupSummary } from "../app/contracts";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type BackupItem = {
@@ -11,30 +9,51 @@ type BackupItem = {
   title: string;
   created: string;
   size: string;
+  entryCount: number;
+  manifestPath: string;
+  runtimeRoot: string;
   paths: string[];
-  impact: string;
 };
 
 const staticBackups: readonly BackupItem[] = [
-  { id: "backup-20260621-1842", title: "扫描导入前", created: "今天 18:42", size: "24 KB", paths: ["~/.claude/skills/review", "~/workspace/project-a/.mcp.json", "~/.claude/commands/deploy-prod.md"], impact: "恢复 3 项路径，覆盖 2 项当前内容" },
-  { id: "backup-20260620-0915", title: "挂载变更前", created: "昨天 09:15", size: "18 KB", paths: ["~/workspace/my-app/.claude/skills/react-review", "~/workspace/my-app/.mcp.json"], impact: "恢复 2 项路径，移除 1 个新软链接" },
-  { id: "backup-20260618-1630", title: "资产移除前", created: "3 天前", size: "8 KB", paths: ["~/.claude/commands/format-code.md"], impact: "恢复 1 项 Command 路径" },
+  {
+    id: "backup-20260621-1842",
+    title: "扫描导入前",
+    created: "今天 18:42",
+    size: "24 KB",
+    entryCount: 3,
+    manifestPath: "~/.my-agent-assets/backups/local/backup-20260621-1842/manifest.json",
+    runtimeRoot: "~",
+    paths: ["~/.claude/skills/review", "~/workspace/project-a/.mcp.json", "~/.claude/commands/deploy-prod.md"],
+  },
+  {
+    id: "backup-20260620-0915",
+    title: "挂载变更前",
+    created: "昨天 09:15",
+    size: "18 KB",
+    entryCount: 2,
+    manifestPath: "~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json",
+    runtimeRoot: "~",
+    paths: ["~/workspace/my-app/.claude/skills/react-review", "~/workspace/my-app/.mcp.json"],
+  },
+  {
+    id: "backup-20260618-1630",
+    title: "资产移除前",
+    created: "3 天前",
+    size: "8 KB",
+    entryCount: 1,
+    manifestPath: "~/.my-agent-assets/backups/local/backup-20260618-1630/manifest.json",
+    runtimeRoot: "~",
+    paths: ["~/.claude/commands/format-code.md"],
+  },
 ];
 
 export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) {
   const [backups, setBackups] = useState<readonly BackupItem[]>(demoMode ? staticBackups : []);
   const [selectedId, setSelectedId] = useState(demoMode ? staticBackups[0].id : "");
-  const [preview, setPreview] = useState<RestorePreview | null>(null);
-  const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
-  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
-  const [confirmationValue, setConfirmationValue] = useState("");
-  const [previewState, setPreviewState] = useState("预览中");
   const [listState, setListState] = useState("读取中");
-  const [isPlanning, setIsPlanning] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0];
+  const totalSize = backups.reduce((sum, backup) => sum + parseDisplayBytes(backup.size), 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +63,7 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
       setListState("Visual QA 示例数据");
       return undefined;
     }
+
     setBackups([]);
     setSelectedId("");
     setListState("读取中");
@@ -56,137 +76,115 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
           setSelectedId(mapped[0]?.id ?? "");
           setListState("只读真实数据");
         } else {
-          setBackups([]);
-          setSelectedId("");
           setListState("未发现本地备份");
         }
       })
       .catch((error) => {
         if (cancelled) return;
-        setBackups([]);
-        setSelectedId("");
         setListState(`读取失败：${errorMessage(error)}`);
       });
+
     return () => {
       cancelled = true;
     };
-  }, [demoMode, refreshKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!selectedId) {
-      setPreview(null);
-      setPreviewState("等待备份记录");
-      return undefined;
-    }
-    setPreviewState("预览中");
-    setPlanResult(null);
-    setOperationError(null);
-    previewRestore({ backupId: selectedId })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.affectedPaths.length > 0 || result.steps.length > 0) {
-          setPreview(result);
-          setPreviewState("预览数据");
-        } else {
-          setPreview(null);
-          setPreviewState("未返回恢复预览");
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setPreview(null);
-        setOperationError(errorMessage(error));
-        setPreviewState("恢复预览读取失败");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId]);
-
-  const affectedPaths = preview?.affectedPaths.length ? preview.affectedPaths : selected?.paths ?? [];
-  const impact = preview?.steps.length
-    ? preview.steps.map((step) => step.label).join(" / ")
-    : selected?.impact ?? "暂无恢复影响";
-  const planSummary = planResult?.steps.length
-    ? planResult.steps.map((step) => step.message).join(" / ")
-    : null;
-  const canApply = Boolean(planResult?.ok && preview?.previewId);
-
-  const handlePlanRestore = async () => {
-    if (!preview?.previewId) return;
-
-    setIsPlanning(true);
-    setOperationError(null);
-    setPreviewState("生成恢复计划中");
-    try {
-      const result = await restoreApply({
-        previewId: preview?.previewId ?? "",
-        mode: "planOnly",
-        backupId: selectedId,
-        backupBeforeRestore: preview?.backupBeforeRestore ?? true,
-      });
-      setPlanResult(result);
-      setPreviewState(result.ok ? "恢复计划已生成" : "恢复计划失败");
-    } catch (error) {
-      setPlanResult(null);
-      setOperationError(errorMessage(error));
-      setPreviewState("恢复计划失败");
-    } finally {
-      setIsPlanning(false);
-    }
-  };
-
-  const handleApplyRestore = async () => {
-    if (!canApply || !preview?.previewId) return;
-
-    setIsApplying(true);
-    setOperationError(null);
-    setPreviewState("执行恢复中");
-    try {
-      const result = await restoreApply({
-        previewId: preview.previewId,
-        mode: "apply",
-        backupId: selectedId,
-        backupBeforeRestore: preview.backupBeforeRestore,
-      });
-      setApplyResult(result);
-      setPreviewState(result.ok ? "恢复已执行" : "恢复失败");
-      if (result.ok) {
-        setConfirmationValue("");
-        setRefreshKey((current) => current + 1);
-      }
-    } catch (error) {
-      setApplyResult(null);
-      setOperationError(errorMessage(error));
-      setPreviewState("恢复失败");
-    } finally {
-      setIsApplying(false);
-    }
-  };
+  }, [demoMode]);
 
   return (
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
-        <div className="section-heading"><div><h3>备份记录</h3><p>本地 backup manifest 预览 · {listState}</p></div><span>{backups.length} 份</span></div>
-        <div className="master-select-list" role="listbox" aria-label="备份选择">{backups.map((backup) => <button aria-label={backup.id} aria-selected={selectedId === backup.id} className={selectedId === backup.id ? "selected" : ""} data-no-drag="true" key={backup.id} onClick={() => { setSelectedId(backup.id); setApplyResult(null); setConfirmationValue(""); }} role="option" style={NO_DRAG_REGION_STYLE} type="button"><span className="skeleton-icon"><ArchiveRestore size={16} /></span><span><strong>{backup.title}</strong><small>{backup.created} · {backup.size}</small></span></button>)}{backups.length === 0 && <div className="asset-empty-state"><ArchiveRestore size={22} /><strong>暂无本地备份</strong><span>执行需要备份的真实操作后，backup manifest 会显示在这里。</span></div>}</div>
+        <div className="section-heading">
+          <div>
+            <h3>备份历史</h3>
+            <p>Portable / Local backup manifest · {listState}</p>
+          </div>
+          <span>{backups.length} 份 · {formatBytes(totalSize)}</span>
+        </div>
+        <div className="master-select-list" role="listbox" aria-label="备份选择">
+          {backups.map((backup) => (
+            <button
+              aria-label={backup.id}
+              aria-selected={selectedId === backup.id}
+              className={selectedId === backup.id ? "selected" : ""}
+              data-no-drag="true"
+              key={backup.id}
+              onClick={() => setSelectedId(backup.id)}
+              role="option"
+              style={NO_DRAG_REGION_STYLE}
+              type="button"
+            >
+              <span className="skeleton-icon"><Archive size={16} /></span>
+              <span>
+                <strong>{backup.title}</strong>
+                <small>{backup.created} · {backup.size} · {backup.entryCount} 项</small>
+              </span>
+            </button>
+          ))}
+          {backups.length === 0 && (
+            <div className="asset-empty-state">
+              <History size={22} />
+              <strong>暂无备份历史</strong>
+              <span>执行需要安全备份的操作后，manifest 会显示在这里。</span>
+            </div>
+          )}
+        </div>
       </section>
+
       <section className="panel master-inspector-panel">
-        {selected ? <>
-        <div className="section-heading"><div><h3>{selected.title}</h3><p>{selected.id}</p></div><span className="healthy-badge">{previewState}</span></div>
-        <div className="restore-summary"><FileClock size={18} /><div><strong>恢复影响预览</strong><span>{impact}</span></div></div>
-        <section className="affected-paths"><h4>受影响路径</h4>{affectedPaths.map((path) => <div key={path}><FolderKanban size={14} /><code>{path}</code></div>)}</section>
-        <div className="operation-warning neutral"><ArchiveRestore size={17} /><div><strong>{preview?.backupBeforeRestore ?? true ? "恢复前将再次创建备份" : "不需要额外备份"}</strong><span>{planSummary ?? preview?.warnings[0] ?? "当前内容不会在没有确认的情况下被覆盖。"}</span></div></div>
-        <div className="operation-actions"><StaticActionButton className="asset-secondary-action">导出清单</StaticActionButton><button className="asset-secondary-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanRestore} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成恢复计划"}</button></div>
-        <ApplyConfirmationPanel actionLabel="恢复此备份" canApply={canApply} confirmationValue={confirmationValue} description="会从 backup manifest 恢复受影响路径；后端会校验 previewId 并先备份当前状态。" isApplying={isApplying} onApply={handleApplyRestore} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行恢复" />
-        </> : <div className="asset-inspector-empty"><ArchiveRestore size={22} /><strong>暂无恢复预览</strong><span>选择真实备份记录后，这里会显示受影响路径。</span></div>}
+        {selected ? (
+          <>
+            <div className="section-heading">
+              <div><h3>{selected.title}</h3><p>{selected.id}</p></div>
+              <span className="healthy-badge">只读历史</span>
+            </div>
+
+            <div className="restore-summary">
+              <FileJson size={18} />
+              <div>
+                <strong>Manifest 文件</strong>
+                <code>{selected.manifestPath}</code>
+              </div>
+            </div>
+
+            <section className="affected-paths">
+              <h4>记录的文件路径</h4>
+              {selected.paths.length > 0 ? selected.paths.map((path) => (
+                <div key={path}><FolderKanban size={14} /><code>{path}</code></div>
+              )) : (
+                <p>当前列表合同尚未返回 manifest 条目，请从上述 manifest 路径查看完整清单。</p>
+              )}
+            </section>
+
+            <div className="operation-warning neutral">
+              <BookOpenCheck size={17} />
+              <div>
+                <strong>手动恢复说明</strong>
+                <span>
+                  先退出 Claude Code、Codex 和相关编辑器；复制当前目标文件作为额外保护；
+                  打开 manifest，仅按其中的 originalPath 与 backupPath 逐项恢复。应用不会自动覆盖或恢复任何文件。
+                </span>
+              </div>
+            </div>
+
+            <section className="affected-paths">
+              <h4>备份信息</h4>
+              <div><History size={14} /><span>创建时间：{selected.created}</span></div>
+              <div><Archive size={14} /><span>大小：{selected.size}，条目：{selected.entryCount}，runtime root：{selected.runtimeRoot}</span></div>
+            </section>
+          </>
+        ) : (
+          <div className="asset-inspector-empty">
+            <Archive size={22} />
+            <strong>暂无备份详情</strong>
+            <span>选择真实备份记录后，这里会显示 manifest 路径和手动恢复说明。</span>
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用恢复操作。";
+  return error instanceof Error ? error.message : "无法读取备份历史。";
 }
 
 function toBackupItem(backup: BackupSummary): BackupItem {
@@ -195,8 +193,10 @@ function toBackupItem(backup: BackupSummary): BackupItem {
     title: backup.label,
     created: backup.createdAt || "未知时间",
     size: formatBytes(backup.sizeBytes),
-    paths: [],
-    impact: `恢复 ${backup.entryCount} 项路径，大小 ${formatBytes(backup.sizeBytes)}`,
+    entryCount: backup.entryCount,
+    manifestPath: backup.manifestPath ?? `~/.my-agent-assets/backups/${backup.id}/manifest.json`,
+    runtimeRoot: backup.runtimeRoot ?? "请查看 manifest",
+    paths: backup.affectedPaths ?? [],
   };
 }
 
@@ -204,4 +204,12 @@ function formatBytes(sizeBytes: number) {
   if (sizeBytes >= 1024 * 1024) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
   if (sizeBytes >= 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   return `${sizeBytes} B`;
+}
+
+function parseDisplayBytes(value: string) {
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount)) return 0;
+  if (value.endsWith("MB")) return amount * 1024 * 1024;
+  if (value.endsWith("KB")) return amount * 1024;
+  return amount;
 }

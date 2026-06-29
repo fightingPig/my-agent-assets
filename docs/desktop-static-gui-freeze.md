@@ -1,3 +1,9 @@
+> **Historical milestone — superseded where scope has evolved**
+>
+> This document records the static GUI freeze baseline. It does not define the final provider or workflow scope.
+>
+> The final model uses **one canonical asset center, multiple runtime sources, and multiple compatible mount targets**. Codex-compatible Skills and MCP servers will support discovery, import into the shared canonical asset center, and compatible mounting. Codex Commands and Codex OAuth token management remain prohibited. Final workflow decisions in `docs/final-product-model.md` and `my_agent_assets_final_goal.md` take precedence over historical references to read-only Codex support, typed confirmation, or Restore behavior.
+
 # Desktop Static GUI Freeze
 
 The My Agent Assets V1 desktop static GUI milestone is complete. This document records the frozen frontend baseline before real Tauri and Rust business integration begins.

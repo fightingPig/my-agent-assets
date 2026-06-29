@@ -1,3 +1,11 @@
+> **Historical milestone — superseded for final product scope**
+>
+> This document records the earlier Codex read-only milestone. It is not the current product contract.
+>
+> The final model uses **one canonical asset center, multiple runtime sources, and multiple compatible mount targets**. Codex-compatible Skills and MCP servers will support discovery, import into that shared canonical asset center, and compatible user/project mounting. Codex Commands, Command targets, `AGENTS.md` asset management, and Codex OAuth token management remain prohibited.
+>
+> See `docs/final-product-model.md` and `my_agent_assets_final_goal.md` for authoritative scope. The historical implementation details below remain unchanged as milestone evidence.
+
 # Codex Read-only Provider Support
 
 My Agent Assets supports Codex as a read-only Asset Center provider. The existing Provider switch selects either `Claude Code` or `Codex` without changing the desktop window shell.

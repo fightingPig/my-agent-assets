@@ -395,6 +395,7 @@ pub struct BackupManifestSummary {
     pub affected_paths: Vec<String>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestorePreview {
@@ -499,6 +500,7 @@ pub struct PreviewConflictsInput {
     pub asset_ids: Vec<String>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewRestoreInput {
@@ -557,6 +559,7 @@ pub struct MountApplyInput {
     pub backup_before_apply: bool,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RestoreApplyInput {

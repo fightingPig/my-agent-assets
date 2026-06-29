@@ -1,14 +1,18 @@
 use crate::contracts::{
-    AssetStatus, AssetSummary, AssetType, BackupSummary, ConflictPreview, ConflictResolution,
+    AssetStatus, AssetSummary, AssetType, ConflictPreview, ConflictResolution,
     ConflictResolutionChoice, GitStatus, ImportPreview, MountPreview, MountTarget, PlanStep,
-    PlanStepKind, PreviewConflictsInput, PreviewImportInput, PreviewMountInput,
-    PreviewRestoreInput, PreviewSyncInput, RestorePreview, RiskLevel, RuntimeScope, ScanScope,
-    SyncDirection, SyncPreview,
+    PlanStepKind, PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewSyncInput,
+    RiskLevel, RuntimeScope, ScanScope, SyncDirection, SyncPreview,
 };
+#[cfg(test)]
+use crate::contracts::{BackupSummary, PreviewRestoreInput, RestorePreview};
+#[cfg(test)]
+use crate::path_utils::display_path;
 use crate::path_utils::{
-    display_path, expand_tilde, guard_existing_path, home_dir, validate_single_path_component,
+    expand_tilde, guard_existing_path, home_dir, validate_single_path_component,
 };
 use crate::read_only;
+#[cfg(test)]
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -26,19 +30,6 @@ pub fn preview_conflicts_command(input: PreviewConflictsInput) -> Vec<ConflictPr
     match home_dir() {
         Some(home) => preview_conflicts_for_home(&home, input),
         None => preview_conflicts(input),
-    }
-}
-
-pub fn preview_restore_command(input: PreviewRestoreInput) -> RestorePreview {
-    match home_dir() {
-        Some(home) => preview_restore_for_home(&home, input),
-        None => {
-            let mut preview = preview_restore(input);
-            preview
-                .warnings
-                .push("HOME is unavailable; using synthetic restore preview.".into());
-            preview
-        }
     }
 }
 
@@ -188,6 +179,7 @@ pub fn preview_conflicts_for_home(
         .collect()
 }
 
+#[cfg(test)]
 pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
     let preview_id = restore_preview_id(&input.backup_id);
     let backup = BackupSummary {
@@ -236,6 +228,7 @@ pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
     }
 }
 
+#[cfg(test)]
 pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> RestorePreview {
     if let Err(error) = validate_single_path_component(&input.backup_id, "backup ID") {
         let mut preview = preview_restore(input);
@@ -458,6 +451,7 @@ pub fn mount_preview_id(asset_id: &str, target: &MountTarget) -> String {
     )
 }
 
+#[cfg(test)]
 pub fn restore_preview_id(backup_id: &str) -> String {
     stable_preview_id("restore", &[backup_id.to_string()])
 }
@@ -543,6 +537,7 @@ fn invalid_asset_from_id(asset_id: &str, error: &str) -> AssetSummary {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RestoreManifestPreview {
@@ -552,6 +547,7 @@ struct RestoreManifestPreview {
     entries: Vec<RestoreEntryPreview>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RestoreEntryPreview {

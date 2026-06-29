@@ -19,16 +19,28 @@ import type {
   PreviewConflictsInput,
   PreviewImportInput,
   PreviewMountInput,
-  PreviewRestoreInput,
   PreviewSyncInput,
   ProjectSummary,
-  RestoreApplyInput,
-  RestorePreview,
   ScanAssetsInput,
   ScanResult,
   SettingsSaveInput,
   SyncApplyInput,
   SyncPreview,
+  RuntimeDiscoveryScope,
+  RuntimeDiscoveryResult,
+  CanonicalImportPreviewRequest,
+  CanonicalImportPreview,
+  CanonicalImportApplyRequest,
+  CanonicalImportApplyResult,
+  RegisteredMountTarget,
+  CanonicalMountPreviewRequest,
+  CanonicalMountPreview,
+  CanonicalMountApplyRequest,
+  CanonicalMountApplyResult,
+  CanonicalUnmountPreviewRequest,
+  CanonicalUnmountPreview,
+  CanonicalUnmountApplyRequest,
+  CanonicalUnmountApplyResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -107,6 +119,168 @@ export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
   return isRecord(result) && Array.isArray(result.assets) && isRecord(result.counts) ? result as ScanResult : fallback;
 }
 
+export async function discoverRuntimeSources(
+  input: RuntimeDiscoveryScope,
+): Promise<RuntimeDiscoveryResult> {
+  const fallback: RuntimeDiscoveryResult = {
+    sources: [],
+    warnings: ["Tauri runtime is unavailable; runtime discovery skipped."],
+  };
+  const result = await invokeRead<unknown>(
+    "discover_runtime_sources",
+    { input },
+    fallback,
+  );
+  return isRecord(result) &&
+    Array.isArray(result.sources) &&
+    Array.isArray(result.warnings)
+    ? (result as RuntimeDiscoveryResult)
+    : fallback;
+}
+
+export async function canonicalImportPreview(
+  input: CanonicalImportPreviewRequest,
+): Promise<CanonicalImportPreview> {
+  const fallback: CanonicalImportPreview = {
+    previewId: "canonical-import-unavailable",
+    sourceId: input.sourceId,
+    assetId: "",
+    assetType: "skill",
+    sourceName: "",
+    destinationName: "",
+    sourcePath: "",
+    destinationPath: "",
+    disposition: "conflict",
+    warnings: ["Tauri runtime is unavailable; canonical import preview skipped."],
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "canonical_import_preview",
+    { input },
+    fallback,
+  );
+  return isRecord(result) &&
+    typeof result.previewId === "string" &&
+    typeof result.sourceId === "string"
+    ? (result as CanonicalImportPreview)
+    : fallback;
+}
+
+export async function canonicalImportApply(
+  input: CanonicalImportApplyRequest,
+): Promise<CanonicalImportApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_import_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_import_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_import_apply returned an invalid response.");
+  }
+  return result as CanonicalImportApplyResult;
+}
+
+export async function listMountTargets(): Promise<RegisteredMountTarget[]> {
+  const result = await invokeRead<unknown>("list_mount_targets", undefined, []);
+  return Array.isArray(result) ? (result as RegisteredMountTarget[]) : [];
+}
+
+export async function canonicalMountPreview(
+  input: CanonicalMountPreviewRequest,
+): Promise<CanonicalMountPreview> {
+  const fallback: CanonicalMountPreview = {
+    previewId: "canonical-mount-unavailable",
+    assetId: input.assetId,
+    targetId: input.targetId,
+    canonicalPath: "",
+    affectedTargetPath: "",
+    compatible: false,
+    adapter: "symlink_directory",
+    unsupportedReason: "Tauri runtime is unavailable.",
+    disposition: "blocked",
+    plannedEffects: [],
+    warnings: ["Tauri runtime is unavailable; canonical mount preview skipped."],
+    backupRequired: false,
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "canonical_mount_preview",
+    { input },
+    fallback,
+  );
+  return isRecord(result) &&
+    typeof result.previewId === "string" &&
+    typeof result.targetId === "string"
+    ? (result as CanonicalMountPreview)
+    : fallback;
+}
+
+export async function canonicalMountApply(
+  input: CanonicalMountApplyRequest,
+): Promise<CanonicalMountApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_mount_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_mount_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_mount_apply returned an invalid response.");
+  }
+  return result as CanonicalMountApplyResult;
+}
+
+export async function canonicalUnmountPreview(
+  input: CanonicalUnmountPreviewRequest,
+): Promise<CanonicalUnmountPreview> {
+  const fallback: CanonicalUnmountPreview = {
+    previewId: "canonical-unmount-unavailable",
+    assetId: input.assetId,
+    targetId: input.targetId,
+    affectedTargetPath: "",
+    plannedEffects: [],
+    warnings: ["Tauri runtime is unavailable; canonical unmount preview skipped."],
+    backupRequired: false,
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeOrFallback<unknown>(
+    "canonical_unmount_preview",
+    { input },
+    fallback,
+  );
+  return isRecord(result) && typeof result.previewId === "string"
+    ? (result as CanonicalUnmountPreview)
+    : fallback;
+}
+
+export async function canonicalUnmountApply(
+  input: CanonicalUnmountApplyRequest,
+): Promise<CanonicalUnmountApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_unmount_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_unmount_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_unmount_apply returned an invalid response.");
+  }
+  return result as CanonicalUnmountApplyResult;
+}
+
 export async function listCodexSkills(
   input: CodexDiscoveryInput = { projectPath: null },
 ): Promise<CodexSkillListResult> {
@@ -153,29 +327,6 @@ export async function previewMount(input: PreviewMountInput): Promise<MountPrevi
 export async function previewConflicts(input: PreviewConflictsInput): Promise<ConflictPreview[]> {
   const result = await invokeOrFallback<unknown>("preview_conflicts", { input }, []);
   return Array.isArray(result) ? result as ConflictPreview[] : [];
-}
-
-export async function previewRestore(input: PreviewRestoreInput): Promise<RestorePreview> {
-  const fallbackBackup: BackupSummary = {
-    id: input.backupId,
-    label: `Restore preview for ${input.backupId}`,
-    createdAt: "",
-    sizeBytes: 0,
-    entryCount: 0,
-  };
-  const fallback: RestorePreview = {
-    previewId: `preview:restore:${input.backupId}`,
-    backup: fallbackBackup,
-    affectedPaths: [],
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; restore preview skipped."],
-    backupBeforeRestore: true,
-    canApply: false,
-  };
-  const result = await invokeOrFallback<unknown>("preview_restore", { input }, fallback);
-  return isRecord(result) && typeof result.previewId === "string" && isRecord(result.backup) && Array.isArray(result.affectedPaths)
-    ? result as RestorePreview
-    : fallback;
 }
 
 export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview> {
@@ -254,22 +405,6 @@ export async function mountApply(input: MountApplyInput): Promise<ApplyResult> {
     errors: ["mount_apply could not run outside the Tauri runtime."],
   };
   const result = await invokeOrFallback<unknown>("mount_apply", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
-    ? result as ApplyResult
-    : fallback;
-}
-
-export async function restoreApply(input: RestoreApplyInput): Promise<ApplyResult> {
-  const fallback: ApplyResult = {
-    mode: input.mode,
-    ok: false,
-    previewId: input.previewId,
-    backup: null,
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; restore apply skipped."],
-    errors: ["restore_apply could not run outside the Tauri runtime."],
-  };
-  const result = await invokeOrFallback<unknown>("restore_apply", { input }, fallback);
   return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
     ? result as ApplyResult
     : fallback;

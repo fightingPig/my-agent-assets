@@ -3,6 +3,45 @@ import { describe, expect, it, vi } from "vitest";
 import { ApplyConfirmationPanel } from "./ApplyConfirmationPanel";
 
 describe("ApplyConfirmationPanel", () => {
+  it("uses preview readiness instead of typed confirmation and keeps the action no-drag", () => {
+    const { rerender } = render(
+      <ApplyConfirmationPanel
+        actionLabel="确认导入"
+        canApply
+        confirmationValue=""
+        description="将覆盖已存在的 runtime 内容。"
+        isApplying={false}
+        onApply={vi.fn()}
+        onConfirmationChange={vi.fn()}
+        result={null}
+        title="高风险操作"
+      />,
+    );
+
+    expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
+    expect(screen.queryByText(/输入 APPLY/)).not.toBeInTheDocument();
+    const action = screen.getByRole("button", { name: "确认导入" });
+    expect(action).toBeEnabled();
+    expect(action).toHaveAttribute("data-no-drag", "true");
+    expect(screen.getByText("将覆盖已存在的 runtime 内容。").closest(".operation-warning")).not.toBeNull();
+
+    rerender(
+      <ApplyConfirmationPanel
+        actionLabel="确认导入"
+        canApply={false}
+        confirmationValue="APPLY"
+        description="执行说明"
+        isApplying={false}
+        onApply={vi.fn()}
+        onConfirmationChange={vi.fn()}
+        result={null}
+        title="执行导入"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
+  });
+
   it("shows step, backup, warning, and failure guidance details", () => {
     const { rerender } = render(
       <ApplyConfirmationPanel

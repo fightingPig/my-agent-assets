@@ -4,8 +4,13 @@ import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 export type ApplyConfirmationPanelProps = {
   title: string;
   description: string;
-  confirmationValue: string;
-  onConfirmationChange: (value: string) => void;
+  /**
+   * Retained temporarily so existing write-flow pages can migrate without a
+   * coordinated layout change. Confirmation text is no longer rendered or
+   * used as an execution gate.
+   */
+  confirmationValue?: string;
+  onConfirmationChange?: (value: string) => void;
   onApply: () => void;
   canApply: boolean;
   isApplying: boolean;
@@ -14,13 +19,9 @@ export type ApplyConfirmationPanelProps = {
   operationError?: string | null;
 };
 
-const CONFIRMATION_TOKEN = "APPLY";
-
 export function ApplyConfirmationPanel({
   title,
   description,
-  confirmationValue,
-  onConfirmationChange,
   onApply,
   canApply,
   isApplying,
@@ -28,8 +29,7 @@ export function ApplyConfirmationPanel({
   result,
   operationError = null,
 }: ApplyConfirmationPanelProps) {
-  const confirmed = confirmationValue.trim() === CONFIRMATION_TOKEN;
-  const disabled = !canApply || !confirmed || isApplying;
+  const disabled = !canApply || isApplying;
   const successfulSteps = result?.steps.filter((step) => step.status === "success").length ?? 0;
   const skippedSteps = result?.steps.filter((step) => step.status === "skipped").length ?? 0;
   const failedSteps = result?.steps.filter((step) => step.status === "failed").length ?? 0;
@@ -45,21 +45,11 @@ export function ApplyConfirmationPanel({
     : null;
 
   return (
-    <div className="apply-confirmation-panel">
-      <div>
+    <div className="apply-confirmation-panel" style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
+      <div className="operation-warning">
         <strong>{title}</strong>
         <span>{description}</span>
       </div>
-      <label>
-        <span>输入 {CONFIRMATION_TOKEN} 以启用执行</span>
-        <input
-          data-no-drag="true"
-          onChange={(event) => onConfirmationChange(event.target.value)}
-          placeholder={CONFIRMATION_TOKEN}
-          style={NO_DRAG_REGION_STYLE}
-          value={confirmationValue}
-        />
-      </label>
       <button
         className="asset-business-action"
         data-no-drag="true"

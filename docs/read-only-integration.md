@@ -1,3 +1,11 @@
+> **Historical milestone — superseded for final workflow scope**
+>
+> This document records the read-only and preview-only integration milestone. It is not the final product contract.
+>
+> The final model uses **one canonical asset center, multiple runtime sources, and multiple compatible mount targets**. Codex-compatible Skills and MCP servers will support discovery, import into the shared canonical asset center, and compatible user/project mounting. Codex Commands, Command targets, and Codex OAuth token management remain prohibited. Final confirmation, backup, Restore, Git, and apply semantics are defined by `docs/final-product-model.md` and `my_agent_assets_final_goal.md`.
+>
+> The implementation details below are retained as historical evidence and may describe behavior that later work must replace.
+
 # Read-only And Preview-only Integration
 
 This milestone connects the frozen desktop GUI contracts to safe read-only and preview-only Tauri commands, then wires selected static pages to those commands.

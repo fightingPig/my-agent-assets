@@ -1,7 +1,8 @@
+#[cfg(test)]
+use crate::contracts::{AppearanceTheme, DensityPreference, DesktopSettings, LogLevel};
 use crate::contracts::{
-    AppearanceTheme, AssetCounts, AssetStatus, AssetSummary, AssetType, BackupSummary,
-    DensityPreference, DesktopSettings, GitStatus, ListAssetsInput, LogLevel, ProjectStatus,
-    ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
+    AssetCounts, AssetStatus, AssetSummary, AssetType, BackupSummary, GitStatus, ListAssetsInput,
+    ProjectStatus, ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
 use serde::Deserialize;
@@ -49,6 +50,7 @@ pub fn scan_assets_command(input: ScanAssetsInput) -> ScanResult {
     }
 }
 
+#[cfg(test)]
 pub fn settings_for_home(home: Option<&Path>) -> DesktopSettings {
     let (asset_center_path, scan_roots) = match home {
         Some(home) => (

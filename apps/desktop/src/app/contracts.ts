@@ -210,22 +210,15 @@ export type BackupSummary = {
   createdAt: string;
   sizeBytes: number;
   entryCount: number;
+  manifestPath?: string;
+  runtimeRoot?: string;
+  affectedPaths?: string[];
 };
 
 export type BackupManifestSummary = BackupSummary & {
   manifestPath: string;
   runtimeRoot: string;
   affectedPaths: string[];
-};
-
-export type RestorePreview = {
-  previewId: string;
-  backup: BackupSummary;
-  affectedPaths: string[];
-  steps: PlanStep[];
-  warnings: string[];
-  backupBeforeRestore: boolean;
-  canApply: boolean;
 };
 
 export type ApplyResult = {
@@ -287,7 +280,6 @@ export type PreviewImportInput = {
 export type ListAssetsInput = { assetType: AssetType | null };
 export type PreviewMountInput = { assetId: string; target: MountTarget };
 export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
-export type PreviewRestoreInput = { backupId: string };
 export type PreviewSyncInput = { direction: SyncDirection };
 export type SyncApplyInput = {
   previewId: string;
@@ -318,9 +310,226 @@ export type MountApplyInput = {
   target: MountTarget;
   backupBeforeApply: boolean;
 };
-export type RestoreApplyInput = {
+
+export const RUNTIME_PROVIDERS = ["claude_code", "codex", "custom"] as const;
+export type RuntimeProvider = (typeof RUNTIME_PROVIDERS)[number];
+export const RUNTIME_SOURCE_FORMATS = [
+  "skill_directory",
+  "markdown",
+  "claude_mcp_json",
+  "codex_mcp_toml",
+] as const;
+export type RuntimeSourceFormat = (typeof RUNTIME_SOURCE_FORMATS)[number];
+export const RUNTIME_SOURCE_SCOPES = ["user", "project", "custom"] as const;
+export type RuntimeSourceScope = (typeof RUNTIME_SOURCE_SCOPES)[number];
+
+export type RuntimeDiscoveryScope =
+  | { kind: "user" }
+  | { kind: "project"; projectPath: string }
+  | {
+      kind: "custom";
+      path: string;
+      assetKind: AssetType;
+      sourceFormat: RuntimeSourceFormat;
+    };
+
+export type DiscoveredRuntimeSource = {
+  sourceId: string;
+  provider: RuntimeProvider;
+  sourcePath: string;
+  configPath?: string;
+  assetKind: AssetType;
+  assetName: string;
+  sourceFormat: RuntimeSourceFormat;
+  scope: RuntimeSourceScope;
+  isManaged: boolean;
+  isSymlink: boolean;
+  symlinkTarget?: string;
+  warnings: string[];
+  eligibleImport: boolean;
+  eligibleAdopt: boolean;
+};
+
+export type RuntimeDiscoveryResult = {
+  sources: DiscoveredRuntimeSource[];
+  warnings: string[];
+};
+
+export type CanonicalImportResolution =
+  | { kind: "unresolved" }
+  | { kind: "skip" }
+  | { kind: "overwrite" }
+  | { kind: "rename"; newName: string };
+
+export const CANONICAL_IMPORT_DISPOSITIONS = [
+  "create",
+  "conflict",
+  "skip",
+  "overwrite",
+  "rename",
+  "unchanged",
+] as const;
+export type CanonicalImportDisposition =
+  (typeof CANONICAL_IMPORT_DISPOSITIONS)[number];
+
+export type CanonicalImportPreviewRequest = {
+  scope: RuntimeDiscoveryScope;
+  sourceId: string;
+  resolution: CanonicalImportResolution;
+};
+
+export type CanonicalImportConflict = {
+  assetId: string;
+  reason: string;
+  existingContent: string;
+  incomingContent: string;
+  rawSource: string;
+};
+
+export type CanonicalImportPreview = {
   previewId: string;
-  mode: ApplyMode;
-  backupId: string;
-  backupBeforeRestore: boolean;
+  sourceId: string;
+  assetId: string;
+  assetType: AssetType;
+  sourceName: string;
+  destinationName: string;
+  sourcePath: string;
+  destinationPath: string;
+  disposition: CanonicalImportDisposition;
+  conflict?: CanonicalImportConflict;
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type CanonicalImportApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: CanonicalImportPreviewRequest;
+};
+
+export type CanonicalImportApplyResult = {
+  previewId: string;
+  assetId: string;
+  status: "imported" | "skipped" | "unchanged";
+  backupId?: string;
+  affectedPaths: string[];
+};
+
+export type MountTargetKind =
+  | "claude_user_skills"
+  | "claude_project_skills"
+  | "codex_user_skills"
+  | "codex_project_skills"
+  | "custom_skill_directory"
+  | "claude_user_commands"
+  | "claude_project_commands"
+  | "custom_command_directory"
+  | "claude_user_mcp_json"
+  | "claude_local_mcp_json"
+  | "claude_project_mcp_json"
+  | "codex_user_mcp_toml"
+  | "codex_project_mcp_toml"
+  | "custom_claude_mcp_json"
+  | "custom_codex_mcp_toml";
+
+export type MountAdapter =
+  | "symlink_directory"
+  | "symlink_file"
+  | "windows_directory_junction"
+  | "json_mcp_patch"
+  | "toml_mcp_patch";
+
+export type RegisteredMountTarget = {
+  id: string;
+  kind: MountTargetKind;
+  provider: RuntimeProvider;
+  accepts: AssetType[];
+  adapter: MountAdapter;
+  scope: "user" | "local" | "project" | "custom";
+  path: string;
+  projectPath?: string;
+  providerState:
+    | "not_installed"
+    | "installed_not_initialized"
+    | "initialized";
+  status: "ready" | "blocked" | "invalid";
+};
+
+export type CanonicalMountPreviewRequest = {
+  assetId: string;
+  targetId: string;
+};
+
+export type CanonicalMountPreview = {
+  previewId: string;
+  assetId: string;
+  targetId: string;
+  canonicalPath: string;
+  affectedTargetPath: string;
+  compatible: boolean;
+  adapter: MountAdapter;
+  unsupportedReason?: string;
+  disposition:
+    | "create_link"
+    | "replace_runtime_path"
+    | "compile_mcp"
+    | "already_mounted"
+    | "blocked";
+  plannedEffects: string[];
+  warnings: string[];
+  backupRequired: boolean;
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type CanonicalMountApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: CanonicalMountPreviewRequest;
+};
+
+export type CanonicalMountApplyResult = {
+  previewId: string;
+  assetId: string;
+  targetId: string;
+  mounted: boolean;
+  backupId?: string;
+  affectedPaths: string[];
+  warnings: string[];
+};
+
+export type CanonicalUnmountPreviewRequest = {
+  assetId: string;
+  targetId: string;
+};
+
+export type CanonicalUnmountPreview = {
+  previewId: string;
+  assetId: string;
+  targetId: string;
+  affectedTargetPath: string;
+  plannedEffects: string[];
+  warnings: string[];
+  backupRequired: boolean;
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type CanonicalUnmountApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: CanonicalUnmountPreviewRequest;
+};
+
+export type CanonicalUnmountApplyResult = {
+  previewId: string;
+  assetId: string;
+  targetId: string;
+  unmounted: boolean;
+  backupId?: string;
+  affectedPaths: string[];
 };

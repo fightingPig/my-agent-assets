@@ -115,12 +115,6 @@ describe("read-only desktop data api", () => {
       input: { scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] },
     });
 
-    invoke.mockResolvedValueOnce({ backup: {}, affectedPaths: [], steps: [] });
-    await api.previewRestore({ backupId: "backup-20260621-1842" });
-    expect(invoke).toHaveBeenLastCalledWith("preview_restore", {
-      input: { backupId: "backup-20260621-1842" },
-    });
-
     invoke.mockResolvedValueOnce({ direction: "pull", steps: [], warnings: [] });
     await api.previewSync({ direction: "pull" });
     expect(invoke).toHaveBeenLastCalledWith("preview_sync", {
@@ -143,6 +137,114 @@ describe("read-only desktop data api", () => {
     });
     expect(invoke).toHaveBeenLastCalledWith("sync_apply", {
       input: { previewId: "preview-sync-1", mode: "apply", direction: "push" },
+    });
+  });
+
+  it("uses shared-core discovery and canonical import command envelopes", async () => {
+    const api = await import("./data-api");
+    const scope = { kind: "project", projectPath: "/tmp/project" } as const;
+
+    invoke.mockResolvedValueOnce({ sources: [], warnings: [] });
+    await api.discoverRuntimeSources(scope);
+    expect(invoke).toHaveBeenLastCalledWith("discover_runtime_sources", {
+      input: scope,
+    });
+
+    const previewRequest = {
+      scope,
+      sourceId: "codex:project:skill:abc:review",
+      resolution: { kind: "overwrite" },
+    } as const;
+    invoke.mockResolvedValueOnce({
+      previewId: "import-1",
+      sourceId: previewRequest.sourceId,
+    });
+    await api.canonicalImportPreview(previewRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_import_preview", {
+      input: previewRequest,
+    });
+
+    const applyRequest = {
+      previewId: "import-1",
+      previewGeneratedAtEpochSeconds: 123,
+      request: previewRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "import-1",
+      assetId: "skill:review",
+      status: "imported",
+      affectedPaths: [],
+    });
+    await api.canonicalImportApply(applyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_import_apply", {
+      input: applyRequest,
+    });
+  });
+
+  it("uses target IDs for shared-core mount commands", async () => {
+    const api = await import("./data-api");
+
+    invoke.mockResolvedValueOnce([]);
+    await api.listMountTargets();
+    expect(invoke).toHaveBeenLastCalledWith("list_mount_targets");
+
+    const previewRequest = {
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "mount-1",
+      targetId: "claude-user-skills",
+    });
+    await api.canonicalMountPreview(previewRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_mount_preview", {
+      input: previewRequest,
+    });
+
+    const applyRequest = {
+      previewId: "mount-1",
+      previewGeneratedAtEpochSeconds: 123,
+      request: previewRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "mount-1",
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+      mounted: true,
+      affectedPaths: [],
+      warnings: [],
+    });
+    await api.canonicalMountApply(applyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_mount_apply", {
+      input: applyRequest,
+    });
+    expect(applyRequest.request).not.toHaveProperty("runtimePath");
+
+    const unmountPreviewRequest = {
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+    };
+    invoke.mockResolvedValueOnce({ previewId: "unmount-1" });
+    await api.canonicalUnmountPreview(unmountPreviewRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_unmount_preview", {
+      input: unmountPreviewRequest,
+    });
+
+    const unmountApplyRequest = {
+      previewId: "unmount-1",
+      previewGeneratedAtEpochSeconds: 124,
+      request: unmountPreviewRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "unmount-1",
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+      unmounted: true,
+      affectedPaths: [],
+    });
+    await api.canonicalUnmountApply(unmountApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_unmount_apply", {
+      input: unmountApplyRequest,
     });
   });
 
@@ -247,29 +349,6 @@ describe("read-only desktop data api", () => {
       },
     });
 
-    invoke.mockResolvedValueOnce({
-      mode: "planOnly",
-      ok: true,
-      previewId: "preview-restore-1",
-      backup: null,
-      steps: [],
-      warnings: [],
-      errors: [],
-    });
-    await api.restoreApply({
-      previewId: "preview-restore-1",
-      mode: "planOnly",
-      backupId: "backup-1",
-      backupBeforeRestore: true,
-    });
-    expect(invoke).toHaveBeenLastCalledWith("restore_apply", {
-      input: {
-        previewId: "preview-restore-1",
-        mode: "planOnly",
-        backupId: "backup-1",
-        backupBeforeRestore: true,
-      },
-    });
   });
 
   it("returns safe fallbacks outside Tauri", async () => {
@@ -302,10 +381,6 @@ describe("read-only desktop data api", () => {
     await expect(api.previewImport({ scope: { kind: "user" }, assetIds: [], conflictResolutions: [] })).resolves.toMatchObject({
       canApply: false,
       warnings: ["Tauri runtime is unavailable; import preview skipped."],
-    });
-    await expect(api.previewRestore({ backupId: "backup-1" })).resolves.toMatchObject({
-      canApply: false,
-      warnings: ["Tauri runtime is unavailable; restore preview skipped."],
     });
     await expect(api.previewSync({ direction: "push" })).resolves.toMatchObject({
       direction: "push",
@@ -366,17 +441,6 @@ describe("read-only desktop data api", () => {
       previewId: "preview-mount-1",
       warnings: ["Tauri runtime is unavailable; mount apply skipped."],
       errors: ["mount_apply could not run outside the Tauri runtime."],
-    });
-    await expect(api.restoreApply({
-      previewId: "preview-restore-1",
-      mode: "apply",
-      backupId: "backup-1",
-      backupBeforeRestore: true,
-    })).resolves.toMatchObject({
-      ok: false,
-      previewId: "preview-restore-1",
-      warnings: ["Tauri runtime is unavailable; restore apply skipped."],
-      errors: ["restore_apply could not run outside the Tauri runtime."],
     });
     expect(invoke).not.toHaveBeenCalled();
   });

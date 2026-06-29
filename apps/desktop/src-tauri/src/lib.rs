@@ -5,15 +5,15 @@ mod path_utils;
 mod preview;
 mod read_only;
 mod settings;
+mod shared_core;
 mod sync_apply;
 
 use contracts::{
     AppInfo, ApplyResult, AssetSummary, BackupSummary, CodexDiscoveryInput, CodexMcpListResult,
     CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
-    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewRestoreInput,
-    PreviewSyncInput, ProjectSummary, RestoreApplyInput, RestorePreview, ScanAssetsInput,
-    ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
+    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewSyncInput, ProjectSummary,
+    ScanAssetsInput, ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
 };
 
 #[tauri::command]
@@ -28,7 +28,7 @@ fn app_info() -> AppInfo {
 }
 
 #[tauri::command]
-fn settings_load() -> DesktopSettings {
+fn settings_load() -> Result<DesktopSettings, String> {
     settings::settings_load_command()
 }
 
@@ -88,11 +88,6 @@ fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
 }
 
 #[tauri::command]
-fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
-    preview::preview_restore_command(input)
-}
-
-#[tauri::command]
 fn preview_sync(input: PreviewSyncInput) -> SyncPreview {
     preview::preview_sync_command(input)
 }
@@ -118,8 +113,57 @@ fn mount_apply(input: MountApplyInput) -> ApplyResult {
 }
 
 #[tauri::command]
-fn restore_apply(input: RestoreApplyInput) -> ApplyResult {
-    apply::restore_apply_command(input)
+fn discover_runtime_sources(
+    input: my_agent_assets_core::discovery::DiscoveryScope,
+) -> Result<my_agent_assets_core::discovery::DiscoveryResult, String> {
+    shared_core::discover_runtime_sources_command(input)
+}
+
+#[tauri::command]
+fn canonical_import_preview(
+    input: my_agent_assets_core::import::ImportPreviewRequest,
+) -> Result<my_agent_assets_core::import::ImportPreview, String> {
+    shared_core::canonical_import_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_import_apply(
+    input: my_agent_assets_core::import::ImportApplyRequest,
+) -> Result<my_agent_assets_core::import::ImportApplyResult, String> {
+    shared_core::canonical_import_apply_command(input)
+}
+
+#[tauri::command]
+fn list_mount_targets() -> Result<Vec<my_agent_assets_core::targets::MountTarget>, String> {
+    shared_core::list_mount_targets_command()
+}
+
+#[tauri::command]
+fn canonical_mount_preview(
+    input: my_agent_assets_core::mount::MountPreviewRequest,
+) -> Result<my_agent_assets_core::mount::MountPreview, String> {
+    shared_core::canonical_mount_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_mount_apply(
+    input: my_agent_assets_core::mount::MountApplyRequest,
+) -> Result<my_agent_assets_core::mount::MountApplyResult, String> {
+    shared_core::canonical_mount_apply_command(input)
+}
+
+#[tauri::command]
+fn canonical_unmount_preview(
+    input: my_agent_assets_core::mount::UnmountPreviewRequest,
+) -> Result<my_agent_assets_core::mount::UnmountPreview, String> {
+    shared_core::canonical_unmount_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_unmount_apply(
+    input: my_agent_assets_core::mount::UnmountApplyRequest,
+) -> Result<my_agent_assets_core::mount::UnmountApplyResult, String> {
+    shared_core::canonical_unmount_apply_command(input)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -139,13 +183,19 @@ pub fn run() {
             preview_import,
             preview_mount,
             preview_conflicts,
-            preview_restore,
             preview_sync,
             sync_apply,
             import_apply,
             conflict_apply,
             mount_apply,
-            restore_apply
+            discover_runtime_sources,
+            canonical_import_preview,
+            canonical_import_apply,
+            list_mount_targets,
+            canonical_mount_preview,
+            canonical_mount_apply,
+            canonical_unmount_preview,
+            canonical_unmount_apply
         ])
         .run(tauri::generate_context!())
         .expect("error while running My Agent Assets");

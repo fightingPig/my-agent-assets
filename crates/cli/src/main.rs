@@ -1,7 +1,7 @@
 use my_agent_assets_core::{
     doctor, init_apply, init_plan, list_assets, mount_apply, mount_plan, remove_apply, remove_plan,
-    restore_apply, restore_plan, scan_apply, scan_plan, status, sync_command, unmount_apply,
-    AssetType, ConflictStrategy, Context, MaaError, McpScope, Result,
+    scan_apply, scan_plan, status, sync_command, unmount_apply, AssetType, ConflictStrategy,
+    Context, MaaError, McpScope, Result,
 };
 use std::env;
 use std::path::PathBuf;
@@ -109,18 +109,6 @@ fn run() -> Result<()> {
                 println!("Run with --apply to execute this plan.");
             }
         }
-        "restore" => {
-            let backup_id = next_arg(&mut args, "backup id")?;
-            let plan = if apply {
-                restore_apply(&ctx, &backup_id)?
-            } else {
-                restore_plan(&ctx, &backup_id)?
-            };
-            println!("{}", plan.render());
-            if !apply {
-                println!("Run with --apply to execute this plan.");
-            }
-        }
         "sync" => {
             let op = next_arg(&mut args, "pull or push")?;
             print!("{}", sync_command(&ctx, &op)?);
@@ -141,7 +129,7 @@ fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
 Usage:\n  maa [--home <home>] <command> [options]\n\n\
-Commands:\n  init [--apply]\n  scan [--apply]\n  list\n  status\n  doctor\n  mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]\n  unmount <name> --type skill|command|mcp [--apply]\n  remove <name> --type skill|command|mcp [--apply]\n  restore <backup-id> [--apply]\n  sync pull|push\n\n\
+Commands:\n  init [--apply]\n  scan [--apply]\n  list\n  status\n  doctor\n  mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]\n  unmount <name> --type skill|command|mcp [--apply]\n  remove <name> --type skill|command|mcp [--apply]\n  sync pull|push\n\n\
 Scan conflict options:\n  --on-conflict skip|overwrite|rename [--rename-to <new-name>]\n\n\
 Environment:\n  MY_AGENT_ASSETS_HOME overrides the runtime home. Defaults to HOME/USERPROFILE.\n"
     );
@@ -156,7 +144,6 @@ Default behavior prints a plan only. --apply executes. MCP JSON conflicts requir
         "mount" => println!(
             "Usage:\n  maa mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]"
         ),
-        "restore" => println!("Usage:\n  maa restore <backup-id> [--apply]"),
         _ => print_help(),
     }
 }

@@ -104,7 +104,7 @@ describe("macOS preview home", () => {
       ["扫描导入", "导入预览"],
       ["挂载管理", "预览挂载计划"],
       ["冲突处理", "待处理冲突"],
-      ["备份恢复", "恢复影响预览"],
+      ["备份恢复", "手动恢复说明"],
       ["同步", "本地 Git 仓库"],
       ["设置", "CLI 设置"],
     ];
@@ -250,7 +250,7 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "备份恢复" }));
-    expect(await screen.findByText("暂无本地备份")).toBeInTheDocument();
+    expect(await screen.findByText("暂无备份历史")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "backup-20260621-1842" })).not.toBeInTheDocument();
   });
 });
