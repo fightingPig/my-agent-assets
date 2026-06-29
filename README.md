@@ -1,13 +1,13 @@
 # My Agent Assets
 
-`my-agent-assets` is a local-first Claude asset manager. The V1 command line
-tool is `maa`.
+`my-agent-assets` is a local-first Claude Code and Codex asset manager. The V1
+command line tool is `maa`.
 
-V1 manages Claude assets from fake or explicit runtime roots during tests:
+The canonical asset center stores one copy of each compatible asset:
 
-- Skills from `.claude/skills/<name>/`
-- Commands from `.claude/commands/<name>.md`
-- MCP servers from Claude MCP JSON configuration sources
+- Skills imported from Claude Code, Codex, or approved custom directories
+- Commands imported from Claude-compatible Markdown sources
+- MCP servers imported from Claude JSON or Codex TOML
 
 The default asset center is `~/.my-agent-assets`, but tests and examples should
 use `--home <fake-home>` or `MY_AGENT_ASSETS_HOME` to avoid touching real data.
@@ -20,10 +20,24 @@ cargo run -p my-agent-assets-cli --bin maa -- --help
 ./scripts/e2e_fake_runtime.sh
 ```
 
+CLI semantics are explicit:
+
+```text
+scan    = discover runtime sources without writing
+import  = copy a selected source into the canonical asset center
+mount   = materialize a canonical asset at a registered target
+adopt   = import and mount back to the selected source
+```
+
+Write commands print a preview by default and require `--apply`. Mount and
+unmount accept registered target IDs, never arbitrary runtime paths. Automatic
+historical Restore is intentionally not provided.
+
 ## macOS Desktop Preview
 
-The first GUI milestone is an installable, home-page-only Tauri preview. It
-uses typed Tauri commands for local Claude data and read-only Codex Skill/MCP discovery. Tests and Visual QA may enable explicit demo fixtures, but production pages show only real data, empty states, or read errors.
+The desktop app uses typed Tauri commands backed by the same Rust core as the
+CLI. Tests and Visual QA may enable explicit demo fixtures, but production
+pages show only real data, empty states, or read errors.
 
 ```bash
 cd apps/desktop

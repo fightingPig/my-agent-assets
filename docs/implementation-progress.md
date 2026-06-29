@@ -54,10 +54,13 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 70 tests and desktop 89 tests passed
+- Rust workspace: core 76 tests and desktop 89 tests passed
 - frontend: 82 tests passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
+- shared CLI: 3 unit tests and 2 fake HOME integration tests passed
+- `scripts/e2e_fake_runtime.sh`: passed with Claude/Codex import and targetId mount flow
+- Visual QA: 26 screenshots, 0 severe issues, 0 warnings
 
 Implemented:
 - moved path component validation, tilde expansion, guarded write/existing paths, symlink traversal rejection, and root containment checks into `crates/core`
@@ -92,19 +95,28 @@ Implemented:
 - removed frontend runtime-path construction from the primary Mount workflow
 - initialization now creates portable/local backup roots, schema-versioned state files, standard targets, local-state Git exclusions, and a `main` Git branch
 - initialization idempotency and fake-HOME isolation are covered by regression tests
+- added preview/apply Target Registry add/remove operations with local registry backups and active-binding removal protection
+- migrated the CLI to sourceId-based discovery/import/adopt and targetId-only mount/unmount/delete
+- added CLI project/custom target registration with derived provider paths and explicit authorization
+- disabled legacy unrestricted Git sync and automatic historical Restore CLI paths until the safe shared services replace them
+- updated the fake runtime E2E flow to prove Claude/Codex canonical import, dual-provider Skill mount, Command-to-Codex rejection, and unmount-all delete
+- connected Scan conflicts to Conflict Resolver through an explicit in-memory context carrying the canonical batch preview
+- migrated Conflict Resolver from legacy synthesized commands to atomic canonical Batch Import preview/apply with sourceId-bound skip/rename/overwrite decisions
+- MCP conflicts show canonical existing/incoming JSON and expandable raw source content
+- added shared portable/local/legacy Backup History enumeration with manifest paths, affected paths, sizes, operation types, symlink-safe traversal, and sensitive MCP risk flags
+- migrated the Desktop Backup History command to shared core; no historical Restore command is exposed
 
 Not implemented:
 - shared Git service
-- Desktop/CLI adapters for the new unified source-discovery DTO
-- migrate production pages from legacy Scan/Import/Mount commands to the shared adapters
-- remaining detail/conflict/backup/sync UI migration to shared workflows
-- CLI migration to shared workflows
+- Tauri target add/remove adapters and GUI target registration
+- remaining Asset/Project detail mount migration and Sync UI migration to shared workflows
 - automatic startup recovery for incomplete operation journals
 - shared Git service and stale fingerprint cache
 
 Next:
-- add project/custom target authorization workflows
-- migrate Desktop pages and CLI commands to shared-core APIs
+- add Tauri target add/remove adapters and GUI target registration
+- migrate Conflict, Backup History, Sync, and remaining detail pages away from legacy commands
+- implement the shared Git service with private-repository push validation
 - remove legacy runtimePath, duplicate provider discovery, and historical Restore implementations
 
 ## Progress Update Template

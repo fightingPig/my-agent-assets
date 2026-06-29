@@ -158,6 +158,98 @@ impl TargetCompatibility {
 }
 
 impl MountTarget {
+    pub fn project(
+        id: impl Into<String>,
+        kind: MountTargetKind,
+        project_path: PathBuf,
+    ) -> Result<Self> {
+        validate_authorized_path(&project_path, "project path")?;
+        let (provider, asset_kind, adapter, relative_path) = match kind {
+            MountTargetKind::ClaudeProjectSkills => (
+                RuntimeProvider::ClaudeCode,
+                AssetKind::Skill,
+                directory_mount_adapter(),
+                Path::new(".claude/skills"),
+            ),
+            MountTargetKind::CodexProjectSkills => (
+                RuntimeProvider::Codex,
+                AssetKind::Skill,
+                directory_mount_adapter(),
+                Path::new(".agents/skills"),
+            ),
+            MountTargetKind::ClaudeProjectCommands => (
+                RuntimeProvider::ClaudeCode,
+                AssetKind::Command,
+                MountAdapter::SymlinkFile,
+                Path::new(".claude/commands"),
+            ),
+            MountTargetKind::ClaudeProjectMcpJson => (
+                RuntimeProvider::ClaudeCode,
+                AssetKind::Mcp,
+                MountAdapter::JsonMcpPatch,
+                Path::new(".mcp.json"),
+            ),
+            MountTargetKind::CodexProjectMcpToml => (
+                RuntimeProvider::Codex,
+                AssetKind::Mcp,
+                MountAdapter::TomlMcpPatch,
+                Path::new(".codex/config.toml"),
+            ),
+            _ => {
+                return Err(MaaError::new(format!(
+                    "target kind {:?} is not a project target",
+                    kind
+                )))
+            }
+        };
+        let target = Self {
+            id: id.into(),
+            kind,
+            provider,
+            accepts: vec![asset_kind],
+            adapter,
+            scope: TargetScope::Project,
+            path: project_path.join(relative_path),
+            project_path: Some(project_path),
+            provider_state: ProviderState::Initialized,
+            status: TargetStatus::Ready,
+        };
+        target.validate()?;
+        Ok(target)
+    }
+
+    pub fn custom(id: impl Into<String>, kind: MountTargetKind, path: PathBuf) -> Result<Self> {
+        validate_authorized_path(&path, "target path")?;
+        let (asset_kind, adapter) = match kind {
+            MountTargetKind::CustomSkillDirectory => (AssetKind::Skill, directory_mount_adapter()),
+            MountTargetKind::CustomCommandDirectory => {
+                (AssetKind::Command, MountAdapter::SymlinkFile)
+            }
+            MountTargetKind::CustomClaudeMcpJson => (AssetKind::Mcp, MountAdapter::JsonMcpPatch),
+            MountTargetKind::CustomCodexMcpToml => (AssetKind::Mcp, MountAdapter::TomlMcpPatch),
+            _ => {
+                return Err(MaaError::new(format!(
+                    "target kind {:?} is not a custom target",
+                    kind
+                )))
+            }
+        };
+        let target = Self {
+            id: id.into(),
+            kind,
+            provider: RuntimeProvider::Custom,
+            accepts: vec![asset_kind],
+            adapter,
+            scope: TargetScope::Custom,
+            path,
+            project_path: None,
+            provider_state: ProviderState::Initialized,
+            status: TargetStatus::Ready,
+        };
+        target.validate()?;
+        Ok(target)
+    }
+
     pub fn compatibility(&self, asset_kind: AssetKind) -> TargetCompatibility {
         if self.status != TargetStatus::Ready {
             return TargetCompatibility::blocked(format!(
@@ -276,6 +368,14 @@ impl MountTarget {
         }
 
         Ok(())
+    }
+}
+
+fn directory_mount_adapter() -> MountAdapter {
+    if cfg!(windows) {
+        MountAdapter::WindowsDirectoryJunction
+    } else {
+        MountAdapter::SymlinkDirectory
     }
 }
 

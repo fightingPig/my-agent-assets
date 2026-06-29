@@ -1,10 +1,13 @@
 #[cfg(test)]
+use crate::contracts::BackupSummary;
+#[cfg(test)]
 use crate::contracts::{AppearanceTheme, DensityPreference, DesktopSettings, LogLevel};
 use crate::contracts::{
-    AssetCounts, AssetStatus, AssetSummary, AssetType, BackupSummary, GitStatus, ListAssetsInput,
-    ProjectStatus, ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
+    AssetCounts, AssetStatus, AssetSummary, AssetType, GitStatus, ListAssetsInput, ProjectStatus,
+    ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
 };
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
+#[cfg(test)]
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
@@ -29,13 +32,6 @@ pub fn list_assets_command(input: ListAssetsInput) -> Vec<AssetSummary> {
 pub fn list_projects_command() -> Vec<ProjectSummary> {
     match home_dir() {
         Some(home) => list_projects_for_home(&home),
-        None => vec![],
-    }
-}
-
-pub fn list_backups_command() -> Vec<BackupSummary> {
-    match home_dir() {
-        Some(home) => list_backups_for_home(&home),
         None => vec![],
     }
 }
@@ -194,6 +190,7 @@ pub fn list_projects_for_home(home: &Path) -> Vec<ProjectSummary> {
     projects
 }
 
+#[cfg(test)]
 pub fn list_backups_for_home(home: &Path) -> Vec<BackupSummary> {
     let backup_root = home.join(".my-agent-assets").join("backups");
     let Ok(entries) = fs::read_dir(&backup_root) else {
@@ -273,6 +270,7 @@ pub fn git_status_for_home(home: &Path) -> GitStatus {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BackupManifestProbe {
@@ -282,12 +280,14 @@ struct BackupManifestProbe {
     entries: Vec<BackupEntryProbe>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BackupEntryProbe {
     size_bytes: u64,
 }
 
+#[cfg(test)]
 fn backup_summary_from_manifest(path: &Path) -> Option<BackupSummary> {
     let text = fs::read_to_string(path).ok()?;
     let manifest = serde_json::from_str::<BackupManifestProbe>(&text).ok()?;

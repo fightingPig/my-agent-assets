@@ -1,5 +1,6 @@
 pub mod adopt;
 pub mod asset_registry;
+pub mod backup_history;
 pub mod batch_import;
 pub mod delete;
 pub mod discovery;
@@ -10,6 +11,7 @@ pub mod mount_registry;
 pub mod operation;
 pub mod path_safety;
 pub mod settings;
+pub mod target_management;
 pub mod targets;
 
 use serde::{Deserialize, Serialize};

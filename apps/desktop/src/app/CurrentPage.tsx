@@ -1,5 +1,9 @@
 import type { AppInfo } from "./contracts";
-import type { AssetDetailContext, ProjectDetailContext } from "./detail-context";
+import type {
+  AssetDetailContext,
+  ConflictResolverContext,
+  ProjectDetailContext,
+} from "./detail-context";
 import type { PageId } from "./pages";
 import type { AssetProvider } from "./provider";
 import { AssetDetailPage } from "../pages/AssetDetailPage";
@@ -21,8 +25,10 @@ type CurrentPageProps = {
   appInfo: AppInfo;
   assetDetail?: AssetDetailContext | null;
   projectDetail?: ProjectDetailContext | null;
+  conflictContext?: ConflictResolverContext | null;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
   onOpenProjectDetail?: (detail: ProjectDetailContext) => void;
+  onOpenConflicts?: (context: ConflictResolverContext) => void;
   onPageChange?: (page: PageId) => void;
   provider?: AssetProvider;
   demoMode?: boolean;
@@ -37,8 +43,10 @@ export function CurrentPage({
   appInfo,
   assetDetail,
   projectDetail,
+  conflictContext,
   onOpenAssetDetail,
   onOpenProjectDetail,
+  onOpenConflicts,
   onPageChange,
   provider = "claude",
   demoMode = false,
@@ -51,9 +59,9 @@ export function CurrentPage({
     case "asset-detail": return <AssetDetailPage demoMode={demoMode} detail={assetDetail ?? undefined} />;
     case "projects": return <ProjectsListPage demoMode={demoMode} onOpenProjectDetail={onOpenProjectDetail} />;
     case "project-detail": return <ProjectDetailPage demoMode={demoMode} detail={projectDetail ?? undefined} />;
-    case "scan": return <ScanImportPage demoMode={demoMode} />;
+    case "scan": return <ScanImportPage demoMode={demoMode} onOpenConflicts={onOpenConflicts} />;
     case "mounts": return <MountManagerPage demoMode={demoMode} />;
-    case "conflicts": return <ConflictResolverPage demoMode={demoMode} />;
+    case "conflicts": return <ConflictResolverPage context={conflictContext ?? undefined} demoMode={demoMode} />;
     case "backups": return <BackupRestorePage demoMode={demoMode} />;
     case "sync": return <SyncPage demoMode={demoMode} />;
     case "settings": return <SettingsPage demoMode={demoMode} />;

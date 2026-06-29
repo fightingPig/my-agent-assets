@@ -9,7 +9,7 @@ mod shared_core;
 mod sync_apply;
 
 use contracts::{
-    AppInfo, ApplyResult, AssetSummary, BackupSummary, CodexDiscoveryInput, CodexMcpListResult,
+    AppInfo, ApplyResult, AssetSummary, CodexDiscoveryInput, CodexMcpListResult,
     CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, GitStatus,
     ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
     PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewSyncInput, ProjectSummary,
@@ -53,8 +53,8 @@ fn list_projects() -> Vec<ProjectSummary> {
 }
 
 #[tauri::command]
-fn list_backups() -> Vec<BackupSummary> {
-    read_only::list_backups_command()
+fn list_backups() -> Result<Vec<my_agent_assets_core::backup_history::BackupHistoryEntry>, String> {
+    shared_core::list_backup_history_command()
 }
 
 #[tauri::command]

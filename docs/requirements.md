@@ -1,4 +1,7 @@
-# My Agent Assets V1 Requirements
+# My Agent Assets Initial V1 Requirements
+
+> Historical baseline. `my_agent_assets_final_goal.md` is authoritative where
+> provider scope, CLI semantics, backup behavior, or safety rules differ.
 
 ## Background
 
@@ -42,24 +45,27 @@ V1 supports these Claude MCP scopes:
 
 V1 does not read or write `~/.claude/mcp.json`.
 
-## CLI
+## Current CLI Direction
 
 ```bash
 maa init
 maa scan
-maa scan --apply
+maa import <source-id> [--apply]
+maa adopt <source-id> [--apply]
+maa target list
+maa target add <target-kind> <target-id> --project <path> | --path <path>
+maa target remove <target-id>
 maa list
 maa status
 maa doctor
-maa mount <name> --type skill|command|mcp
-maa unmount <name> --type skill|command|mcp
-maa remove <name> --type skill|command|mcp
-maa restore <backup-id>
-maa sync pull
-maa sync push
+maa mount <asset-id> --target <target-id> [--apply]
+maa unmount <asset-id> --target <target-id> [--apply]
+maa remove <asset-id> [--unmount-all] [--apply]
 ```
 
-All mutating operations default to plan output. `--apply` performs changes.
+`scan` is read-only discovery. All mutating operations default to preview
+output; `--apply` performs the previewed change. Automatic historical Restore
+is not part of the product.
 
 MCP conflicts require an explicit decision. When an incoming MCP has the same
 name as an existing asset but different JSON, the plan must show both original
@@ -81,13 +87,13 @@ checkout.
 ## Acceptance Criteria
 
 - `scan` does not mutate runtime files.
-- `scan --apply` imports fake runtime assets into a fake asset center.
+- `scan` does not write; explicit `import` or `adopt --apply` performs writes.
 - Skill and Command runtime paths become symlinks after adoption.
 - MCP assets are extracted into the asset center without deleting or immediately
   rewriting the original Claude JSON source.
 - Backup manifests are created for mutating adoption.
-- `restore --apply` restores fake runtime paths from backup.
+- Backup History provides files and manual restore guidance, not automatic
+  historical Restore.
 - Tests and e2e scripts never access real `~/.claude`, `~/.claude.json`, or
   `~/.my-agent-assets`.
-- Restore rejects unsafe backup ids and manifests that reference paths outside
-  allowed runtime roots.
+- Apply accepts registered target IDs instead of arbitrary runtime paths.

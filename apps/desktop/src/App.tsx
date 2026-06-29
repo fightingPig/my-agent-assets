@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { CurrentPage } from "./app/CurrentPage";
 import type { AppInfo } from "./app/contracts";
-import type { AssetDetailContext, ProjectDetailContext } from "./app/detail-context";
+import type {
+  AssetDetailContext,
+  ConflictResolverContext,
+  ProjectDetailContext,
+} from "./app/detail-context";
 import { getPageById, type PageId } from "./app/pages";
 import type { AssetProvider } from "./app/provider";
 import { AppFrame } from "./components/shell/AppFrame";
@@ -30,6 +34,7 @@ function App({ demoMode = false }: AppProps = {}) {
   const [provider, setProvider] = useState<AssetProvider>("claude");
   const [assetDetail, setAssetDetail] = useState<AssetDetailContext | null>(null);
   const [projectDetail, setProjectDetail] = useState<ProjectDetailContext | null>(null);
+  const [conflictContext, setConflictContext] = useState<ConflictResolverContext | null>(null);
   const platform = getDesktopPlatform();
   const currentPage = getPageById(activePage);
 
@@ -46,6 +51,11 @@ function App({ demoMode = false }: AppProps = {}) {
   const openProjectDetail = (detail: ProjectDetailContext) => {
     setProjectDetail(detail);
     setActivePage("project-detail");
+  };
+
+  const openConflicts = (context: ConflictResolverContext) => {
+    setConflictContext(context);
+    setActivePage("conflicts");
   };
 
   const changeProvider = (nextProvider: AssetProvider) => {
@@ -68,7 +78,9 @@ function App({ demoMode = false }: AppProps = {}) {
         activePage={activePage}
         appInfo={appInfo}
         assetDetail={assetDetail}
+        conflictContext={conflictContext}
         onOpenAssetDetail={openAssetDetail}
+        onOpenConflicts={openConflicts}
         onOpenProjectDetail={openProjectDetail}
         onPageChange={setActivePage}
         provider={provider}

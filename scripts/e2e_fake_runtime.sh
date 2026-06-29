@@ -4,193 +4,115 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_ROOT="$(mktemp -d /tmp/my-agent-assets-e2e-XXXXXX)"
 FAKE_HOME="$TMP_ROOT/fake-home"
-FAKE_WORKSPACE="$TMP_ROOT/fake-workspace"
-PROJECT_A="$FAKE_WORKSPACE/project-a"
+PROJECT_A="$TMP_ROOT/workspace/project-a"
 
 cleanup() {
   rm -rf "$TMP_ROOT"
 }
 trap cleanup EXIT INT TERM
 
-assert_file() {
-  test -f "$1" || {
-    echo "expected file: $1" >&2
-    exit 1
-  }
-}
-
-assert_dir() {
-  test -d "$1" || {
-    echo "expected dir: $1" >&2
-    exit 1
-  }
-}
-
-assert_symlink() {
-  test -L "$1" || {
-    echo "expected symlink: $1" >&2
-    exit 1
-  }
-}
-
-assert_not_symlink() {
-  if test -L "$1"; then
-    echo "expected non-symlink: $1" >&2
-    exit 1
-  fi
-}
-
-assert_json_key() {
-  jq -e "$2" "$1" >/dev/null || {
-    echo "expected jq key $2 in $1" >&2
-    exit 1
-  }
-}
-
-if [[ -z "$TMP_ROOT" || "$TMP_ROOT" == "$HOME" || "$TMP_ROOT" == "/" ]]; then
-  echo "unsafe temp root: $TMP_ROOT" >&2
+fail() {
+  echo "$*" >&2
   exit 1
-fi
-
-mkdir -p "$FAKE_HOME/.claude/skills/review" "$FAKE_HOME/.claude/commands"
-mkdir -p "$PROJECT_A/.claude/skills/db-review" "$PROJECT_A/.claude/commands"
-
-cat >"$FAKE_HOME/.claude/skills/review/SKILL.md" <<'DATA'
-# Review Skill
-DATA
-
-cat >"$FAKE_HOME/.claude/commands/commit.md" <<'DATA'
-# Commit Command
-DATA
-
-cat >"$PROJECT_A/.claude/skills/db-review/SKILL.md" <<'DATA'
-# DB Review Skill
-DATA
-
-cat >"$PROJECT_A/.claude/commands/deploy.md" <<'DATA'
-# Deploy Command
-DATA
-
-cat >"$FAKE_HOME/.claude.json" <<DATA
-{
-  "theme": "dark",
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["github-mcp"]
-    }
-  },
-  "projects": {
-    "$PROJECT_A": {
-      "mcpServers": {
-        "local-tool": {
-          "command": "node",
-          "args": ["local.js"]
-        }
-      }
-    }
-  }
 }
-DATA
 
-cat >"$PROJECT_A/.mcp.json" <<'DATA'
-{
-  "projectOnly": true,
-  "mcpServers": {
-    "project-tool": {
-      "command": "node",
-      "args": ["project.js"]
-    }
-  }
-}
-DATA
+[[ "$TMP_ROOT" == /tmp/my-agent-assets-e2e-* ]] || fail "unsafe temp root: $TMP_ROOT"
+[[ "$TMP_ROOT" != "$HOME" && "$TMP_ROOT" != "/" ]] || fail "refusing to use real HOME"
+
+mkdir -p \
+  "$FAKE_HOME/.claude/skills/review" \
+  "$FAKE_HOME/.claude/commands" \
+  "$FAKE_HOME/.agents/skills/codex-review" \
+  "$FAKE_HOME/.codex" \
+  "$PROJECT_A"
+
+printf '# Review Skill\n' >"$FAKE_HOME/.claude/skills/review/SKILL.md"
+printf '# Commit Command\n' >"$FAKE_HOME/.claude/commands/commit.md"
+printf '# Codex Review Skill\n' >"$FAKE_HOME/.agents/skills/codex-review/SKILL.md"
+printf '{"mcpServers":{"postgres":{"command":"postgres-mcp","args":["--read-only"]}}}\n' \
+  >"$FAKE_HOME/.claude.json"
+printf '[mcp_servers.filesystem]\ncommand = "npx"\nargs = ["-y", "filesystem-mcp"]\n' \
+  >"$FAKE_HOME/.codex/config.toml"
 
 cd "$ROOT_DIR"
 cargo build -p my-agent-assets-cli --bin maa >/dev/null
 BIN="$ROOT_DIR/target/debug/maa"
 
 "$BIN" --home "$FAKE_HOME" init --apply >/tmp/maa-init.out
-assert_dir "$FAKE_HOME/.my-agent-assets/.git"
-cat >"$FAKE_HOME/.my-agent-assets/config.yaml" <<DATA
-asset_center: $FAKE_HOME/.my-agent-assets
-git_repo:
-scan_roots:
-  - $FAKE_WORKSPACE
-max_depth: 5
-runtime:
-  provider: claude
-DATA
+test -d "$FAKE_HOME/.my-agent-assets/.git"
 
-"$BIN" --home "$FAKE_HOME" scan >/tmp/maa-scan-plan.out
-assert_not_symlink "$FAKE_HOME/.claude/skills/review"
-assert_file "$FAKE_HOME/.claude/commands/commit.md"
-if find "$FAKE_HOME/.my-agent-assets/assets" -type f | grep -q .; then
-  echo "scan without --apply unexpectedly wrote assets" >&2
-  exit 1
+"$BIN" --home "$FAKE_HOME" scan --scope user >"$TMP_ROOT/scan.json"
+test -z "$(find "$FAKE_HOME/.my-agent-assets/assets" -type f -print -quit)"
+
+source_id() {
+  jq -r --arg provider "$1" --arg kind "$2" --arg name "$3" \
+    '.sources[] | select(.provider == $provider and .assetKind == $kind and .assetName == $name) | .sourceId' \
+    "$TMP_ROOT/scan.json"
+}
+
+REVIEW_SOURCE="$(source_id claude_code skill review)"
+COMMAND_SOURCE="$(source_id claude_code command commit)"
+CODEX_SOURCE="$(source_id codex skill codex-review)"
+CLAUDE_MCP_SOURCE="$(source_id claude_code mcp postgres)"
+CODEX_MCP_SOURCE="$(source_id codex mcp filesystem)"
+
+for source in \
+  "$REVIEW_SOURCE" \
+  "$COMMAND_SOURCE" \
+  "$CODEX_SOURCE" \
+  "$CLAUDE_MCP_SOURCE" \
+  "$CODEX_MCP_SOURCE"
+do
+  test -n "$source"
+  "$BIN" --home "$FAKE_HOME" import "$source" --scope user --apply >/dev/null
+done
+
+test -f "$FAKE_HOME/.my-agent-assets/assets/skills/review/SKILL.md"
+test -f "$FAKE_HOME/.my-agent-assets/assets/skills/codex-review/SKILL.md"
+test -f "$FAKE_HOME/.my-agent-assets/assets/commands/commit.md"
+test -f "$FAKE_HOME/.my-agent-assets/assets/mcps/postgres.json"
+test -f "$FAKE_HOME/.my-agent-assets/assets/mcps/filesystem.json"
+
+"$BIN" --home "$FAKE_HOME" target add claude-project-skills project-a-claude-skills \
+  --project "$PROJECT_A" --apply >/dev/null
+"$BIN" --home "$FAKE_HOME" target add codex-project-skills project-a-codex-skills \
+  --project "$PROJECT_A" --apply >/dev/null
+
+"$BIN" --home "$FAKE_HOME" mount skill:review \
+  --target project-a-claude-skills --apply >/dev/null
+"$BIN" --home "$FAKE_HOME" mount skill:review \
+  --target project-a-codex-skills --apply >/dev/null
+
+test -L "$PROJECT_A/.claude/skills/review"
+test -L "$PROJECT_A/.agents/skills/review"
+
+if "$BIN" --home "$FAKE_HOME" mount command:commit \
+  --target project-a-codex-skills --apply >/tmp/maa-invalid-command.out 2>&1
+then
+  fail "Command to Codex unexpectedly succeeded"
 fi
+grep -q Codex /tmp/maa-invalid-command.out
 
-"$BIN" --home "$FAKE_HOME" scan --apply >/tmp/maa-scan-apply.out
-
-assert_dir "$FAKE_HOME/.my-agent-assets/assets/skills/review"
-assert_file "$FAKE_HOME/.my-agent-assets/assets/commands/commit.md"
-assert_file "$FAKE_HOME/.my-agent-assets/assets/mcps/github.json"
-assert_file "$FAKE_HOME/.my-agent-assets/assets/mcps/local-tool.json"
-assert_file "$FAKE_HOME/.my-agent-assets/assets/mcps/project-tool.json"
-assert_symlink "$FAKE_HOME/.claude/skills/review"
-assert_symlink "$FAKE_HOME/.claude/commands/commit.md"
-assert_symlink "$PROJECT_A/.claude/skills/db-review"
-assert_symlink "$PROJECT_A/.claude/commands/deploy.md"
-assert_json_key "$FAKE_HOME/.claude.json" '.mcpServers.github'
-assert_json_key "$FAKE_HOME/.claude.json" '.projects["'"$PROJECT_A"'"].mcpServers["local-tool"]'
-assert_json_key "$PROJECT_A/.mcp.json" '."projectOnly"'
-assert_json_key "$PROJECT_A/.mcp.json" '.mcpServers["project-tool"]'
-
-jq '.mcpServers.github.args = ["github-mcp-v2"]' "$FAKE_HOME/.claude.json" >"$TMP_ROOT/claude-json.tmp"
-mv "$TMP_ROOT/claude-json.tmp" "$FAKE_HOME/.claude.json"
-"$BIN" --home "$FAKE_HOME" scan >/tmp/maa-mcp-conflict-plan.out
-grep -q 'asset-center-json' /tmp/maa-mcp-conflict-plan.out
-grep -q 'scanned-runtime-json' /tmp/maa-mcp-conflict-plan.out
-if "$BIN" --home "$FAKE_HOME" scan --apply >/tmp/maa-mcp-conflict-apply.out 2>&1; then
-  echo "expected unresolved MCP conflict to fail without a decision" >&2
-  exit 1
+if "$BIN" --home "$FAKE_HOME" remove skill:review --apply >/tmp/maa-bound-delete.out 2>&1
+then
+  fail "bound asset deletion unexpectedly succeeded"
 fi
-"$BIN" --home "$FAKE_HOME" scan --apply --on-conflict rename --rename-to github-v2 >/tmp/maa-mcp-rename.out
-assert_file "$FAKE_HOME/.my-agent-assets/assets/mcps/github-v2.json"
-assert_json_key "$FAKE_HOME/.claude.json" '.mcpServers.github'
-jq -e '.mcpServers.github.args == ["github-mcp-v2"]' "$FAKE_HOME/.claude.json" >/dev/null
-if jq -e '.mcpServers["github-v2"]' "$FAKE_HOME/.claude.json" >/dev/null; then
-  echo "scan import should not compile renamed MCP into runtime immediately" >&2
-  exit 1
+grep -q binding /tmp/maa-bound-delete.out
+
+"$BIN" --home "$FAKE_HOME" remove skill:review --unmount-all --apply >/dev/null
+test ! -e "$FAKE_HOME/.my-agent-assets/assets/skills/review"
+test ! -e "$PROJECT_A/.claude/skills/review"
+test ! -e "$PROJECT_A/.agents/skills/review"
+
+"$BIN" --home "$FAKE_HOME" list >"$TMP_ROOT/list.json"
+"$BIN" --home "$FAKE_HOME" status >"$TMP_ROOT/status.json"
+"$BIN" --home "$FAKE_HOME" doctor >"$TMP_ROOT/doctor.txt"
+
+if "$BIN" --home "$FAKE_HOME" sync push >/tmp/maa-legacy-sync.out 2>&1; then
+  fail "legacy unrestricted sync unexpectedly succeeded"
 fi
-
-"$BIN" --home "$FAKE_HOME" mount review --type skill --project "$PROJECT_A" --apply >/tmp/maa-mount.out
-assert_symlink "$PROJECT_A/.claude/skills/review"
-
-"$BIN" --home "$FAKE_HOME" unmount review --type skill --apply >/tmp/maa-unmount.out
-if test -e "$PROJECT_A/.claude/skills/review"; then
-  echo "expected project review mount to be removed" >&2
-  exit 1
+if "$BIN" --home "$FAKE_HOME" restore backup-1 --apply >/tmp/maa-restore.out 2>&1; then
+  fail "automatic historical Restore unexpectedly succeeded"
 fi
-
-"$BIN" --home "$FAKE_HOME" remove deploy --type command >/tmp/maa-remove-plan.out
-assert_file "$FAKE_HOME/.my-agent-assets/assets/commands/deploy.md"
-"$BIN" --home "$FAKE_HOME" remove deploy --type command --apply >/tmp/maa-remove-apply.out
-if test -e "$FAKE_HOME/.my-agent-assets/assets/commands/deploy.md"; then
-  echo "expected deploy asset to be removed" >&2
-  exit 1
-fi
-
-BACKUP_ID="$(grep -rl "$FAKE_HOME/.claude/skills/review" "$FAKE_HOME/.my-agent-assets/backups" | head -n 1 | xargs dirname | xargs basename)"
-test -n "$BACKUP_ID"
-"$BIN" --home "$FAKE_HOME" restore "$BACKUP_ID" --apply >/tmp/maa-restore.out
-assert_not_symlink "$FAKE_HOME/.claude/skills/review"
-assert_file "$FAKE_HOME/.claude/skills/review/SKILL.md"
-assert_not_symlink "$FAKE_HOME/.claude/commands/commit.md"
-assert_file "$FAKE_HOME/.claude/commands/commit.md"
-assert_file "$PROJECT_A/.claude/commands/deploy.md"
-
-"$BIN" --home "$FAKE_HOME" list >/tmp/maa-list.out
-"$BIN" --home "$FAKE_HOME" status >/tmp/maa-status.out
-"$BIN" --home "$FAKE_HOME" doctor >/tmp/maa-doctor.out
 
 echo "E2E fake runtime passed: $TMP_ROOT"

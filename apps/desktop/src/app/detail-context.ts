@@ -1,5 +1,5 @@
 import type { AssetStatusTone } from "../components/assets/AssetCenterLayout";
-import type { AssetType } from "./contracts";
+import type { AssetType, BatchImportPreview, RuntimeDiscoveryScope } from "./contracts";
 import type { StaticProject } from "../pages/project-data";
 
 export type AssetDetailContext = {
@@ -21,3 +21,8 @@ export type AssetDetailContext = {
 };
 
 export type ProjectDetailContext = StaticProject;
+
+export type ConflictResolverContext = {
+  scope: RuntimeDiscoveryScope;
+  preview: BatchImportPreview;
+};

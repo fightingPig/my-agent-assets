@@ -745,15 +745,23 @@ mod tests {
             )
             .unwrap();
         }
+        fs::create_dir_all(selected.join(".claude/skills/review")).unwrap();
+        fs::write(selected.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
         let result = discover(
             &home,
             DiscoveryScope::Project {
                 project_path: selected.clone(),
             },
         );
-        assert_eq!(result.sources.len(), 1);
-        assert!(result.sources[0].source_path.starts_with(selected));
-        assert!(!result.sources[0].source_path.starts_with(other));
+        assert_eq!(result.sources.len(), 2);
+        assert!(result
+            .sources
+            .iter()
+            .all(|source| source.source_path.starts_with(&selected)));
+        assert!(result
+            .sources
+            .iter()
+            .all(|source| !source.source_path.starts_with(&other)));
         let _ = fs::remove_dir_all(home);
     }
 

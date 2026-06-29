@@ -1,4 +1,8 @@
-# My Agent Assets V1 Design
+# My Agent Assets Initial V1 Design
+
+> Historical baseline. `my_agent_assets_final_goal.md` and
+> `docs/final-product-model.md` define the current multi-provider canonical
+> model and override this document where they differ.
 
 ## Architecture
 
@@ -75,9 +79,9 @@ fields and unmanaged MCP servers.
 JSON parsing and formatting uses `serde_json`; config and registry files use
 `serde_yaml`.
 
-Backups are restored only after validating the backup id and manifest paths.
-Restore targets must be inside the configured home or scan roots, and backup
-entries must point inside the selected backup directory.
+Backups are exposed as portable/local history with manifest paths and manual
+restore guidance. The application does not perform automatic historical
+Restore.
 
 During scan/import, MCP configs are extracted into the asset center and mount
 records are created, but the original Claude JSON source is not deleted and is
@@ -90,12 +94,12 @@ the plan shows both JSON bodies:
 - asset-center JSON
 - scanned runtime JSON
 
-Apply requires an explicit conflict decision:
+Import requires an explicit conflict decision:
 
 ```bash
-maa scan --apply --on-conflict skip
-maa scan --apply --on-conflict overwrite
-maa scan --apply --on-conflict rename --rename-to github-work
+maa import <source-id> --resolution skip --apply
+maa import <source-id> --resolution overwrite --apply
+maa import <source-id> --resolution rename --rename-to github-work --apply
 ```
 
 ## Cross Platform Notes

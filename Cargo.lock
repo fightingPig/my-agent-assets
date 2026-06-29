@@ -1753,6 +1753,8 @@ name = "my-agent-assets-cli"
 version = "0.1.0"
 dependencies = [
  "my-agent-assets-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

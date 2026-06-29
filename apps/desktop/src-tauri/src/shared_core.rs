@@ -3,6 +3,7 @@ use my_agent_assets_core::adopt::{
     apply_adopt, preview_adopt, AdoptApplyRequest, AdoptApplyResult, AdoptPreview,
     AdoptPreviewRequest,
 };
+use my_agent_assets_core::backup_history::{list_backups, BackupHistoryEntry};
 use my_agent_assets_core::batch_import::{
     apply_batch_import, preview_batch_import, BatchImportApplyRequest, BatchImportApplyResult,
     BatchImportPreview, BatchImportPreviewRequest,
@@ -50,6 +51,12 @@ pub fn list_mount_targets_command() -> Result<Vec<MountTarget>, String> {
     Ok(load_targets(&home)
         .map_err(|error| error.to_string())?
         .targets)
+}
+
+pub fn list_backup_history_command() -> Result<Vec<BackupHistoryEntry>, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; backup history skipped.".to_string())?;
+    Ok(list_backups(&home))
 }
 
 pub fn canonical_mount_preview_command(input: MountPreviewRequest) -> Result<MountPreview, String> {

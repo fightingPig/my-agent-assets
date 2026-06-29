@@ -1,20 +1,46 @@
-use my_agent_assets_core::{
-    doctor, init_apply, init_plan, list_assets, mount_apply, mount_plan, remove_apply, remove_plan,
-    scan_apply, scan_plan, status, sync_command, unmount_apply, AssetType, ConflictStrategy,
-    Context, MaaError, McpScope, Result,
+use my_agent_assets_core::adopt::{
+    apply_adopt, preview_adopt, AdoptApplyRequest, AdoptPreviewRequest, AdoptSelection,
 };
+use my_agent_assets_core::asset_registry::{inspect_content, load as load_assets};
+use my_agent_assets_core::delete::{
+    apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
+};
+use my_agent_assets_core::discovery::{discover, DiscoveryScope, SourceFormat};
+use my_agent_assets_core::import::{
+    apply_import, preview_import, ImportApplyRequest, ImportPreviewRequest, ImportResolution,
+};
+use my_agent_assets_core::mount::{
+    apply_mount, apply_unmount, preview_mount, preview_unmount, MountApplyRequest,
+    MountPreviewRequest, UnmountApplyRequest, UnmountPreviewRequest,
+};
+use my_agent_assets_core::mount_registry::load as load_mounts;
+use my_agent_assets_core::operation::incomplete_journals;
+use my_agent_assets_core::target_management::{
+    apply_add_target, apply_remove_target, preview_add_target, preview_remove_target,
+    TargetAddApplyRequest, TargetAddPreviewRequest, TargetRemoveApplyRequest,
+    TargetRemovePreviewRequest,
+};
+use my_agent_assets_core::targets::{
+    load as load_targets, AssetKind, MountTarget, MountTargetKind,
+};
+use my_agent_assets_core::{doctor, init_apply, init_plan, Context, MaaError, Result};
+use serde::Serialize;
+use serde_json::json;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
-    if let Err(err) = run() {
-        eprintln!("error: {err}");
+    if let Err(error) = run() {
+        eprintln!("error: {error}");
         std::process::exit(1);
     }
 }
 
 fn run() -> Result<()> {
-    let mut args: Vec<String> = env::args().skip(1).collect();
+    run_args(env::args().skip(1).collect())
+}
+
+fn run_args(mut args: Vec<String>) -> Result<()> {
     if args.is_empty() || matches!(args.first().map(String::as_str), Some("--help" | "-h")) {
         print_help();
         return Ok(());
@@ -27,9 +53,9 @@ fn run() -> Result<()> {
         .ok_or_else(|| {
             MaaError::new("could not determine home directory; pass --home explicitly")
         })?;
-    let ctx = Context::new(home);
+    let context = Context::new(home.clone());
     let apply = take_flag(&mut args, "--apply");
-    let command = args.remove(0);
+    let command = next_arg(&mut args, "command")?;
     if take_flag(&mut args, "--help") || take_flag(&mut args, "-h") {
         print_command_help(&command);
         return Ok(());
@@ -38,80 +64,181 @@ fn run() -> Result<()> {
     match command.as_str() {
         "init" => {
             let plan = if apply {
-                init_apply(&ctx)?
+                init_apply(&context)?
             } else {
-                init_plan(&ctx)
+                init_plan(&context)
             };
+            println!("{}", plan.render());
             if !apply {
-                println!("{}", plan.render());
                 println!("Run with --apply to create the asset center.");
-            } else {
-                println!("{}", plan.render());
             }
         }
         "scan" => {
-            let conflict_strategy = conflict_strategy(&mut args)?;
-            let plan = if apply {
-                scan_apply(&ctx, conflict_strategy)?
-            } else {
-                scan_plan(&ctx)?
+            reject_apply(apply, "scan is read-only; use `maa import` or `maa adopt` to write")?;
+            let scope = parse_discovery_scope(&home, &mut args)?;
+            print_json(&discover(&home, scope))?;
+        }
+        "import" => {
+            let source_id = next_arg(&mut args, "source ID")?;
+            let scope = parse_discovery_scope(&home, &mut args)?;
+            let request = ImportPreviewRequest {
+                scope,
+                source_id,
+                resolution: parse_resolution(&mut args)?,
             };
-            println!("{}", plan.render());
-            if !apply {
-                println!("Run with --apply to execute this plan.");
+            let preview = preview_import(&home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_import(
+                    &home,
+                    &ImportApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this preview.");
             }
         }
-        "list" => print!("{}", list_assets(&ctx)?),
-        "status" => print!("{}", status(&ctx)?),
-        "doctor" => print!("{}", doctor(&ctx)?),
-        "mount" => {
-            let name = next_arg(&mut args, "asset name")?;
-            let kind = required_type(&mut args)?;
-            let scope = take_option(&mut args, "--scope")
-                .map(|v| McpScope::parse(&v))
-                .transpose()?;
-            let project = take_option(&mut args, "--project").map(PathBuf::from);
-            let target = target_for(&ctx, &kind, &scope, project);
-            let plan = if apply {
-                mount_apply(&ctx, &name, kind, target, scope)?
-            } else {
-                mount_plan(&ctx, &name, kind, target, scope)?
+        "adopt" => {
+            let source_id = next_arg(&mut args, "source ID")?;
+            let scope = parse_discovery_scope(&home, &mut args)?;
+            let request = AdoptPreviewRequest {
+                scope,
+                selections: vec![AdoptSelection {
+                    source_id,
+                    resolution: parse_resolution(&mut args)?,
+                }],
             };
-            println!("{}", plan.render());
-            if !apply {
-                println!("Run with --apply to execute this plan.");
+            let preview = preview_adopt(&home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_adopt(
+                    &home,
+                    &AdoptApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this preview.");
+            }
+        }
+        "target" => handle_target(&home, &mut args, apply)?,
+        "mount" => {
+            let request = MountPreviewRequest {
+                asset_id: next_arg(&mut args, "asset ID")?,
+                target_id: required_option(&mut args, "--target")?,
+            };
+            let preview = preview_mount(&home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_mount(
+                    &home,
+                    &MountApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this preview.");
             }
         }
         "unmount" => {
-            let name = next_arg(&mut args, "asset name")?;
-            let kind = required_type(&mut args)?;
+            let request = UnmountPreviewRequest {
+                asset_id: next_arg(&mut args, "asset ID")?,
+                target_id: required_option(&mut args, "--target")?,
+            };
+            let preview = preview_unmount(&home, &request)?;
             if apply {
-                println!("{}", unmount_apply(&ctx, &name, kind)?.render());
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_unmount(
+                    &home,
+                    &UnmountApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
             } else {
-                println!(
-                    "Unmount plan\n1. [remove-mount] remove mounts for {}:{} risk=medium",
-                    kind.singular(),
-                    name
-                );
-                println!("Run with --apply to execute this plan.");
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this preview.");
             }
         }
         "remove" => {
-            let name = next_arg(&mut args, "asset name")?;
-            let kind = required_type(&mut args)?;
-            let plan = if apply {
-                remove_apply(&ctx, &name, kind)?
-            } else {
-                remove_plan(&ctx, &name, kind)?
+            let request = DeletePreviewRequest {
+                asset_id: next_arg(&mut args, "asset ID")?,
+                mode: if take_flag(&mut args, "--unmount-all") {
+                    DeleteMode::UnmountAll
+                } else {
+                    DeleteMode::RequireUnmounted
+                },
             };
-            println!("{}", plan.render());
-            if !apply {
-                println!("Run with --apply to execute this plan.");
+            let preview = preview_delete(&home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_delete(
+                    &home,
+                    &DeleteApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this preview.");
+            }
+        }
+        "list" => {
+            reject_apply(apply, "list is read-only")?;
+            print_json(&load_assets(&home).map_err(|error| MaaError::new(error.to_string()))?)?;
+        }
+        "status" => {
+            reject_apply(apply, "status is read-only")?;
+            let assets =
+                load_assets(&home).map_err(|error| MaaError::new(error.to_string()))?;
+            let mounts =
+                load_mounts(&home).map_err(|error| MaaError::new(error.to_string()))?;
+            let targets = load_targets(&home)?;
+            let diagnostics = inspect_content(&home, &assets)
+                .map_err(|error| MaaError::new(error.to_string()))?;
+            print_json(&json!({
+                "assetCount": assets.assets.len(),
+                "bindingCount": mounts.bindings.len(),
+                "targetCount": targets.targets.len(),
+                "diagnostics": diagnostics,
+                "incompleteOperations": incomplete_journals(&home)?,
+            }))?;
+        }
+        "doctor" => {
+            reject_apply(apply, "doctor is read-only")?;
+            print!("{}", doctor(&context)?);
+            let incomplete = incomplete_journals(&home)?;
+            if !incomplete.is_empty() {
+                print_json(&json!({ "incompleteOperations": incomplete }))?;
             }
         }
         "sync" => {
-            let op = next_arg(&mut args, "pull or push")?;
-            print!("{}", sync_command(&ctx, &op)?);
+            return Err(MaaError::new(
+                "safe Git sync is not available yet; the legacy unrestricted sync path is disabled",
+            ))
+        }
+        "restore" => {
+            return Err(MaaError::new(
+                "automatic historical Restore is not supported; use Backup History and the manual restore guide",
+            ))
         }
         other => return Err(MaaError::new(format!("unknown command: {other}"))),
     }
@@ -125,24 +252,236 @@ fn run() -> Result<()> {
     Ok(())
 }
 
+fn handle_target(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()> {
+    match next_arg(args, "target operation")?.as_str() {
+        "list" => {
+            reject_apply(apply, "target list is read-only")?;
+            print_json(&load_targets(home)?)
+        }
+        "add" => {
+            let kind = parse_target_kind(&next_arg(args, "target kind")?)?;
+            let id = next_arg(args, "target ID")?;
+            let target = if is_project_kind(kind) {
+                let project = canonical_existing_directory(
+                    home,
+                    PathBuf::from(required_option(args, "--project")?),
+                )?;
+                MountTarget::project(id, kind, project)?
+            } else {
+                let path = expand_home(home, &required_option(args, "--path")?);
+                MountTarget::custom(id, kind, path)?
+            };
+            let request = TargetAddPreviewRequest { target };
+            let preview = preview_add_target(home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_add_target(
+                    home,
+                    &TargetAddApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to register this target.");
+                Ok(())
+            }
+        }
+        "remove" => {
+            let request = TargetRemovePreviewRequest {
+                target_id: next_arg(args, "target ID")?,
+            };
+            let preview = preview_remove_target(home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_remove_target(
+                    home,
+                    &TargetRemoveApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to remove this target.");
+                Ok(())
+            }
+        }
+        operation => Err(MaaError::new(format!(
+            "unknown target operation: {operation}"
+        ))),
+    }
+}
+
+fn parse_discovery_scope(home: &Path, args: &mut Vec<String>) -> Result<DiscoveryScope> {
+    let scope = take_option(args, "--scope").unwrap_or_else(|| "user".into());
+    match scope.as_str() {
+        "user" => Ok(DiscoveryScope::User),
+        "project" => Ok(DiscoveryScope::Project {
+            project_path: canonical_existing_directory(
+                home,
+                PathBuf::from(required_option(args, "--project")?),
+            )?,
+        }),
+        "custom" => Ok(DiscoveryScope::Custom {
+            path: expand_home(home, &required_option(args, "--path")?),
+            asset_kind: parse_asset_kind(&required_option(args, "--type")?)?,
+            source_format: parse_source_format(&required_option(args, "--format")?)?,
+        }),
+        value => Err(MaaError::new(format!(
+            "unknown scope: {value}; expected user, project, or custom"
+        ))),
+    }
+}
+
+fn parse_resolution(args: &mut Vec<String>) -> Result<ImportResolution> {
+    match take_option(args, "--resolution")
+        .unwrap_or_else(|| "unresolved".into())
+        .as_str()
+    {
+        "unresolved" => Ok(ImportResolution::Unresolved),
+        "skip" => Ok(ImportResolution::Skip),
+        "overwrite" => Ok(ImportResolution::Overwrite),
+        "rename" => Ok(ImportResolution::Rename {
+            new_name: required_option(args, "--rename-to")?,
+        }),
+        value => Err(MaaError::new(format!(
+            "unknown resolution: {value}; expected unresolved, skip, overwrite, or rename"
+        ))),
+    }
+}
+
+fn parse_asset_kind(value: &str) -> Result<AssetKind> {
+    match value {
+        "skill" => Ok(AssetKind::Skill),
+        "command" => Ok(AssetKind::Command),
+        "mcp" => Ok(AssetKind::Mcp),
+        _ => Err(MaaError::new(format!("unknown asset type: {value}"))),
+    }
+}
+
+fn parse_source_format(value: &str) -> Result<SourceFormat> {
+    match value {
+        "skill-directory" => Ok(SourceFormat::SkillDirectory),
+        "markdown" => Ok(SourceFormat::Markdown),
+        "claude-mcp-json" => Ok(SourceFormat::ClaudeMcpJson),
+        "codex-mcp-toml" => Ok(SourceFormat::CodexMcpToml),
+        _ => Err(MaaError::new(format!("unknown source format: {value}"))),
+    }
+}
+
+fn parse_target_kind(value: &str) -> Result<MountTargetKind> {
+    match value {
+        "claude-project-skills" => Ok(MountTargetKind::ClaudeProjectSkills),
+        "codex-project-skills" => Ok(MountTargetKind::CodexProjectSkills),
+        "claude-project-commands" => Ok(MountTargetKind::ClaudeProjectCommands),
+        "claude-project-mcp" => Ok(MountTargetKind::ClaudeProjectMcpJson),
+        "codex-project-mcp" => Ok(MountTargetKind::CodexProjectMcpToml),
+        "custom-skills" => Ok(MountTargetKind::CustomSkillDirectory),
+        "custom-commands" => Ok(MountTargetKind::CustomCommandDirectory),
+        "custom-claude-mcp" => Ok(MountTargetKind::CustomClaudeMcpJson),
+        "custom-codex-mcp" => Ok(MountTargetKind::CustomCodexMcpToml),
+        _ => Err(MaaError::new(format!("unknown target kind: {value}"))),
+    }
+}
+
+fn is_project_kind(kind: MountTargetKind) -> bool {
+    matches!(
+        kind,
+        MountTargetKind::ClaudeProjectSkills
+            | MountTargetKind::CodexProjectSkills
+            | MountTargetKind::ClaudeProjectCommands
+            | MountTargetKind::ClaudeProjectMcpJson
+            | MountTargetKind::CodexProjectMcpToml
+    )
+}
+
+fn canonical_existing_directory(home: &Path, path: PathBuf) -> Result<PathBuf> {
+    let path = if path == Path::new("~") {
+        home.to_path_buf()
+    } else if let Ok(relative) = path.strip_prefix("~") {
+        home.join(relative)
+    } else {
+        path
+    };
+    let canonical = std::fs::canonicalize(&path).map_err(|error| {
+        MaaError::new(format!(
+            "project path must be an existing directory ({}): {error}",
+            path.display()
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(MaaError::new(format!(
+            "project path is not a directory: {}",
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+fn expand_home(home: &Path, value: &str) -> PathBuf {
+    if value == "~" {
+        home.to_path_buf()
+    } else if let Some(relative) = value.strip_prefix("~/") {
+        home.join(relative)
+    } else {
+        PathBuf::from(value)
+    }
+}
+
+fn ensure_can_apply(can_apply: bool, warnings: &[String]) -> Result<()> {
+    if can_apply {
+        Ok(())
+    } else {
+        Err(MaaError::new(warnings.first().cloned().unwrap_or_else(
+            || "preview is blocked and cannot be applied".into(),
+        )))
+    }
+}
+
+fn reject_apply(apply: bool, message: &str) -> Result<()> {
+    if apply {
+        Err(MaaError::new(message))
+    } else {
+        Ok(())
+    }
+}
+
+fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    let json =
+        serde_json::to_string_pretty(value).map_err(|error| MaaError::new(error.to_string()))?;
+    println!("{json}");
+    Ok(())
+}
+
 fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
 Usage:\n  maa [--home <home>] <command> [options]\n\n\
-Commands:\n  init [--apply]\n  scan [--apply]\n  list\n  status\n  doctor\n  mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]\n  unmount <name> --type skill|command|mcp [--apply]\n  remove <name> --type skill|command|mcp [--apply]\n  sync pull|push\n\n\
-Scan conflict options:\n  --on-conflict skip|overwrite|rename [--rename-to <new-name>]\n\n\
-Environment:\n  MY_AGENT_ASSETS_HOME overrides the runtime home. Defaults to HOME/USERPROFILE.\n"
+Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  list\n  status\n  doctor\n\n\
+Scope options:\n  --scope user\n  --scope project --project <path>\n  --scope custom --path <path> --type skill|command|mcp \\\n+    --format skill-directory|markdown|claude-mcp-json|codex-mcp-toml\n\n\
+Conflict resolution:\n  --resolution unresolved|skip|overwrite|rename [--rename-to <name>]\n\n\
+Writes always show a preview unless --apply is explicitly supplied. Automatic Restore and the legacy unrestricted Git sync path are disabled.\n"
     );
 }
 
 fn print_command_help(command: &str) {
     match command {
         "scan" => println!(
-            "Usage:\n  maa scan [--apply] [--on-conflict skip|overwrite|rename] [--rename-to <new-name>]\n\n\
-Default behavior prints a plan only. --apply executes. MCP JSON conflicts require an explicit --on-conflict decision."
+            "Usage: maa scan [--scope user|project|custom] [scope options]\nScan only discovers sources; it never imports or mounts."
         ),
-        "mount" => println!(
-            "Usage:\n  maa mount <name> --type skill|command|mcp [--scope user|local|project] [--project <path>] [--apply]"
+        "import" => println!(
+            "Usage: maa import <source-id> [scope options] [--resolution unresolved|skip|overwrite|rename] [--rename-to <name>] [--apply]"
+        ),
+        "adopt" => println!(
+            "Usage: maa adopt <source-id> [scope options] [--resolution unresolved|skip|overwrite] [--apply]"
+        ),
+        "mount" => println!("Usage: maa mount <asset-id> --target <target-id> [--apply]"),
+        "target" => println!(
+            "Usage:\n  maa target list\n  maa target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  maa target remove <target-id> [--apply]"
         ),
         _ => print_help(),
     }
@@ -155,41 +494,8 @@ fn default_home() -> Option<PathBuf> {
         .or_else(|| env::var("USERPROFILE").ok().map(PathBuf::from))
 }
 
-fn conflict_strategy(args: &mut Vec<String>) -> Result<ConflictStrategy> {
-    let Some(value) = take_option(args, "--on-conflict") else {
-        return Ok(ConflictStrategy::Prompt);
-    };
-    match value.as_str() {
-        "skip" => Ok(ConflictStrategy::Skip),
-        "overwrite" => Ok(ConflictStrategy::Overwrite),
-        "rename" => {
-            let rename_to = take_option(args, "--rename-to").ok_or_else(|| {
-                MaaError::new("--rename-to is required with --on-conflict rename")
-            })?;
-            Ok(ConflictStrategy::Rename(rename_to))
-        }
-        other => Err(MaaError::new(format!(
-            "unknown conflict strategy: {other}; expected skip, overwrite, or rename"
-        ))),
-    }
-}
-
-fn target_for(
-    ctx: &Context,
-    kind: &AssetType,
-    scope: &Option<McpScope>,
-    project: Option<PathBuf>,
-) -> PathBuf {
-    if *kind == AssetType::Mcp && matches!(scope, Some(McpScope::User) | None) {
-        ctx.home.clone()
-    } else {
-        project.unwrap_or_else(|| ctx.home.clone())
-    }
-}
-
-fn required_type(args: &mut Vec<String>) -> Result<AssetType> {
-    let value = take_option(args, "--type").ok_or_else(|| MaaError::new("--type is required"))?;
-    AssetType::parse(&value)
+fn required_option(args: &mut Vec<String>, flag: &str) -> Result<String> {
+    take_option(args, flag).ok_or_else(|| MaaError::new(format!("{flag} is required")))
 }
 
 fn next_arg(args: &mut Vec<String>, label: &str) -> Result<String> {
@@ -201,8 +507,8 @@ fn next_arg(args: &mut Vec<String>, label: &str) -> Result<String> {
 }
 
 fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
-    if let Some(pos) = args.iter().position(|arg| arg == flag) {
-        args.remove(pos);
+    if let Some(position) = args.iter().position(|argument| argument == flag) {
+        args.remove(position);
         true
     } else {
         false
@@ -210,10 +516,53 @@ fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
 }
 
 fn take_option(args: &mut Vec<String>, flag: &str) -> Option<String> {
-    let pos = args.iter().position(|arg| arg == flag)?;
-    args.remove(pos);
-    if pos >= args.len() {
+    let position = args.iter().position(|argument| argument == flag)?;
+    args.remove(position);
+    if position >= args.len() {
         return None;
     }
-    Some(args.remove(pos))
+    Some(args.remove(position))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_all_supported_target_kinds() {
+        for kind in [
+            "claude-project-skills",
+            "codex-project-skills",
+            "claude-project-commands",
+            "claude-project-mcp",
+            "codex-project-mcp",
+            "custom-skills",
+            "custom-commands",
+            "custom-claude-mcp",
+            "custom-codex-mcp",
+        ] {
+            parse_target_kind(kind).unwrap();
+        }
+        assert!(parse_target_kind("codex-project-commands").is_err());
+    }
+
+    #[test]
+    fn unresolved_is_the_default_conflict_resolution() {
+        assert_eq!(
+            parse_resolution(&mut Vec::new()).unwrap(),
+            ImportResolution::Unresolved
+        );
+    }
+
+    #[test]
+    fn custom_scope_requires_explicit_type_and_format() {
+        let home = Path::new("/tmp/fake-home");
+        let mut args = vec![
+            "--scope".into(),
+            "custom".into(),
+            "--path".into(),
+            "/tmp/assets".into(),
+        ];
+        assert!(parse_discovery_scope(home, &mut args).is_err());
+    }
 }

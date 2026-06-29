@@ -539,6 +539,7 @@ describe("read-only UI integration", () => {
   });
 
   it("blocks Scan Import when the backend reports unresolved conflicts", async () => {
+    const onOpenConflicts = vi.fn();
     discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:review", "review"));
     canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
       items: [{
@@ -556,13 +557,18 @@ describe("read-only UI integration", () => {
       canApply: false,
     }));
 
-    render(<ScanImportPage />);
+    render(<ScanImportPage onOpenConflicts={onOpenConflicts} />);
 
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
     expect(await screen.findByText("发现 1 项内容冲突")).toBeInTheDocument();
     expect(screen.getByText(/请逐项选择跳过、重命名或覆盖/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "处理冲突" }));
+    expect(onOpenConflicts).toHaveBeenCalledWith(expect.objectContaining({
+      scope: { kind: "user" },
+      preview: expect.objectContaining({ previewId: "batch-import:test" }),
+    }));
     expect(canonicalBatchImportApply).not.toHaveBeenCalled();
   });
 
@@ -768,49 +774,83 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
-  it("updates Conflict Resolver decisions and requires a plan plus button confirmation", async () => {
-    previewConflicts.mockResolvedValue([
-      conflictPreviewFixture("conflict:skill:review", "review", "skill"),
-    ]);
+  it("resolves canonical Scan conflicts through atomic batch preview and apply", async () => {
+    const conflictItem = {
+      ...canonicalImportItemFixture("source:review", "skill:review"),
+      disposition: "conflict" as const,
+      canApply: false,
+      conflict: {
+        assetId: "skill:review",
+        reason: "same name",
+        existingContent: "# Existing",
+        incomingContent: "# Incoming",
+        rawSource: "# Incoming",
+      },
+    };
+    const context = {
+      scope: { kind: "user" as const },
+      preview: batchImportPreviewFixture({
+        items: [conflictItem],
+        canApply: false,
+      }),
+    };
+    canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
+      previewId: "batch-import:resolved",
+      items: [{
+        ...conflictItem,
+        disposition: "rename",
+        destinationName: "review-imported",
+        canApply: true,
+      }],
+      canApply: true,
+    }));
+    canonicalBatchImportApply.mockResolvedValue({
+      previewId: "batch-import:resolved",
+      items: [{
+        previewId: "import:review",
+        assetId: "skill:review-imported",
+        status: "imported",
+        affectedPaths: ["/tmp/assets/skills/review-imported"],
+      }],
+      affectedPaths: ["/tmp/assets/skills/review-imported"],
+      journalPath: "/tmp/conflict-journal",
+    });
 
-    render(<ConflictResolverPage demoMode />);
+    render(<ConflictResolverPage context={context} />);
 
-    fireEvent.click(screen.getByRole("option", { name: "review" }));
-    await waitFor(() => expect(screen.getByText(/检查架构、性能和安全边界/)).toBeInTheDocument());
+    expect(screen.getByText("# Existing")).toBeInTheDocument();
+    expect(screen.getByText("# Incoming")).toBeInTheDocument();
     expect(screen.getByText(/review 将被跳过/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /覆盖.*使用扫描结果替换现有内容/ }));
-    expect(screen.getByText(/review 将在未来确认导入时覆盖资产中心内容/)).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: /重命名.*以新名称导入当前内容/ }));
-    expect(screen.getByText(/review 将以新名称导入/)).toBeInTheDocument();
-    expect(screen.getByText(/新名称：review-imported/)).toBeInTheDocument();
-
-    await waitFor(() => expect(previewImport).toHaveBeenLastCalledWith({
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [{
-        conflictId: "conflict:skill:review",
-        resolution: "rename",
-        renameTo: "review-imported",
-      }],
-    }));
+    expect(screen.getByText(/review 将以 review-imported 导入/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "生成处理计划" }));
-    await waitFor(() => expect(conflictApply).toHaveBeenCalledWith(expect.objectContaining({
-      mode: "planOnly",
-      assetIds: ["skill:review"],
-    })));
+    await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalledWith({
+      scope: { kind: "user" },
+      selections: [{
+        sourceId: "source:review",
+        resolution: { kind: "rename", newName: "review-imported" },
+      }],
+    }));
     const applyButton = screen.getByRole("button", { name: "执行冲突处理" });
     expect(applyButton).toBeEnabled();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(applyButton);
-    await waitFor(() => expect(conflictApply).toHaveBeenLastCalledWith(expect.objectContaining({
-      mode: "apply",
-      assetIds: ["skill:review"],
-    })));
-    expect(importApply).not.toHaveBeenCalled();
-    expect(mountApply).not.toHaveBeenCalled();
+    await waitFor(() => expect(canonicalBatchImportApply).toHaveBeenCalledWith({
+      previewId: "batch-import:resolved",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        scope: { kind: "user" },
+        selections: [{
+          sourceId: "source:review",
+          resolution: { kind: "rename", newName: "review-imported" },
+        }],
+      },
+    }));
+    expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+    expect(conflictApply).not.toHaveBeenCalled();
+    expect(previewImport).not.toHaveBeenCalled();
   });
 
   it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {

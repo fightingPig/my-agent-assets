@@ -206,13 +206,20 @@ export type MountPreview = {
 
 export type BackupSummary = {
   id: string;
+  backupId?: string;
   label: string;
-  createdAt: string;
+  class?: "portable" | "local" | "legacy";
+  operation?: string;
+  createdAt?: string;
+  createdAtEpochSeconds?: number;
   sizeBytes: number;
   entryCount: number;
   manifestPath?: string;
   runtimeRoot?: string;
   affectedPaths?: string[];
+  sensitiveConfigRisk?: boolean;
+  manualRestoreOnly?: boolean;
+  warnings?: string[];
 };
 
 export type BackupManifestSummary = BackupSummary & {

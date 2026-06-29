@@ -1,4 +1,4 @@
-import { Archive, BookOpenCheck, FileJson, FolderKanban, History } from "lucide-react";
+import { AlertTriangle, Archive, BookOpenCheck, FileJson, FolderKanban, History } from "lucide-react";
 import { useEffect, useState } from "react";
 import { listBackups } from "../app/data-api";
 import type { BackupSummary } from "../app/contracts";
@@ -13,6 +13,10 @@ type BackupItem = {
   manifestPath: string;
   runtimeRoot: string;
   paths: string[];
+  class: string;
+  operation: string;
+  sensitiveConfigRisk: boolean;
+  warnings: string[];
 };
 
 const staticBackups: readonly BackupItem[] = [
@@ -25,6 +29,10 @@ const staticBackups: readonly BackupItem[] = [
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260621-1842/manifest.json",
     runtimeRoot: "~",
     paths: ["~/.claude/skills/review", "~/workspace/project-a/.mcp.json", "~/.claude/commands/deploy-prod.md"],
+    class: "local",
+    operation: "adopt",
+    sensitiveConfigRisk: true,
+    warnings: [],
   },
   {
     id: "backup-20260620-0915",
@@ -35,6 +43,10 @@ const staticBackups: readonly BackupItem[] = [
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json",
     runtimeRoot: "~",
     paths: ["~/workspace/my-app/.claude/skills/react-review", "~/workspace/my-app/.mcp.json"],
+    class: "local",
+    operation: "mount",
+    sensitiveConfigRisk: true,
+    warnings: [],
   },
   {
     id: "backup-20260618-1630",
@@ -45,6 +57,10 @@ const staticBackups: readonly BackupItem[] = [
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260618-1630/manifest.json",
     runtimeRoot: "~",
     paths: ["~/.claude/commands/format-code.md"],
+    class: "portable",
+    operation: "delete",
+    sensitiveConfigRisk: false,
+    warnings: [],
   },
 ];
 
@@ -169,7 +185,17 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
               <h4>备份信息</h4>
               <div><History size={14} /><span>创建时间：{selected.created}</span></div>
               <div><Archive size={14} /><span>大小：{selected.size}，条目：{selected.entryCount}，runtime root：{selected.runtimeRoot}</span></div>
+              <div><Archive size={14} /><span>类型：{selected.class}，操作：{selected.operation}</span></div>
             </section>
+            {selected.sensitiveConfigRisk ? (
+              <div className="operation-warning">
+                <AlertTriangle size={17} />
+                <div><strong>可能包含敏感 MCP 配置</strong><span>该备份可能包含 token、密码或 header；提交 Git 前请确认远程仓库为 Private。</span></div>
+              </div>
+            ) : null}
+            {selected.warnings.map((warning) => (
+              <p className="warning-text" key={warning}>{warning}</p>
+            ))}
           </>
         ) : (
           <div className="asset-inspector-empty">
@@ -188,15 +214,22 @@ function errorMessage(error: unknown) {
 }
 
 function toBackupItem(backup: BackupSummary): BackupItem {
+  const created = backup.createdAtEpochSeconds
+    ? new Date(backup.createdAtEpochSeconds * 1000).toLocaleString()
+    : backup.createdAt || "未知时间";
   return {
     id: backup.id,
     title: backup.label,
-    created: backup.createdAt || "未知时间",
+    created,
     size: formatBytes(backup.sizeBytes),
     entryCount: backup.entryCount,
     manifestPath: backup.manifestPath ?? `~/.my-agent-assets/backups/${backup.id}/manifest.json`,
     runtimeRoot: backup.runtimeRoot ?? "请查看 manifest",
     paths: backup.affectedPaths ?? [],
+    class: backup.class ?? "legacy",
+    operation: backup.operation ?? "legacy",
+    sensitiveConfigRisk: backup.sensitiveConfigRisk ?? false,
+    warnings: backup.warnings ?? [],
   };
 }
 
