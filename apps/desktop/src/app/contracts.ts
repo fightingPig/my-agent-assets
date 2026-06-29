@@ -243,24 +243,30 @@ export type GitStatus = {
   isRepository: boolean;
   statusMessage: string;
   branch: string;
-  remote: string | null;
+  remoteName: string;
+  remoteIdentity?: string;
+  upstream?: string;
   clean: boolean;
   ahead: number;
   behind: number;
   changedFiles: string[];
   conflicts: string[];
-  lastSyncedAt: string | null;
+  syncableChanges: string[];
+  blockedChanges: string[];
+  lastSyncedAt?: string | null;
 };
 
 export type SyncPreview = {
   previewId: string;
   direction: SyncDirection;
-  repositoryPath: string;
-  branch: string;
-  remote: string | null;
-  steps: PlanStep[];
+  status: GitStatus;
+  repositoryVisibility: "private" | "public" | "internal" | "unknown";
+  plannedEffects: string[];
   warnings: string[];
+  backupRequired: boolean;
   canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
 };
 
 export type DesktopSettings = {
@@ -290,8 +296,19 @@ export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
 export type PreviewSyncInput = { direction: SyncDirection };
 export type SyncApplyInput = {
   previewId: string;
-  mode: ApplyMode;
+  previewGeneratedAtEpochSeconds: number;
+  request: PreviewSyncInput;
+};
+export type SyncApplyResult = {
+  previewId: string;
   direction: SyncDirection;
+  affectedPaths: string[];
+  backupId?: string;
+  committed: boolean;
+  pushed: boolean;
+  pulled: boolean;
+  warnings: string[];
+  journalPath: string;
 };
 export type SettingsSaveInput = { settings: DesktopSettings };
 export type ImportApplyInput = {

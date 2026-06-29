@@ -6,14 +6,15 @@ mod preview;
 mod read_only;
 mod settings;
 mod shared_core;
+#[cfg(test)]
 mod sync_apply;
 
 use contracts::{
     AppInfo, ApplyResult, AssetSummary, CodexDiscoveryInput, CodexMcpListResult,
-    CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, GitStatus,
-    ImportApplyInput, ImportPreview, ListAssetsInput, MountApplyInput, MountPreview,
-    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewSyncInput, ProjectSummary,
-    ScanAssetsInput, ScanResult, SettingsSaveInput, SyncApplyInput, SyncPreview,
+    CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, ImportApplyInput,
+    ImportPreview, ListAssetsInput, MountApplyInput, MountPreview, PreviewConflictsInput,
+    PreviewImportInput, PreviewMountInput, ProjectSummary, ScanAssetsInput, ScanResult,
+    SettingsSaveInput,
 };
 
 #[tauri::command]
@@ -38,8 +39,8 @@ fn settings_save(input: SettingsSaveInput) -> Result<DesktopSettings, String> {
 }
 
 #[tauri::command]
-fn git_status() -> GitStatus {
-    read_only::git_status_command()
+fn git_status() -> Result<my_agent_assets_core::git_sync::GitStatus, String> {
+    shared_core::git_status_command()
 }
 
 #[tauri::command]
@@ -88,13 +89,17 @@ fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
 }
 
 #[tauri::command]
-fn preview_sync(input: PreviewSyncInput) -> SyncPreview {
-    preview::preview_sync_command(input)
+fn preview_sync(
+    input: my_agent_assets_core::git_sync::SyncPreviewRequest,
+) -> Result<my_agent_assets_core::git_sync::SyncPreview, String> {
+    shared_core::sync_preview_command(input)
 }
 
 #[tauri::command]
-fn sync_apply(input: SyncApplyInput) -> ApplyResult {
-    sync_apply::sync_apply_command(input)
+fn sync_apply(
+    input: my_agent_assets_core::git_sync::SyncApplyRequest,
+) -> Result<my_agent_assets_core::git_sync::SyncApplyResult, String> {
+    shared_core::sync_apply_command(input)
 }
 
 #[tauri::command]
@@ -275,9 +280,6 @@ mod conflict_apply_tests;
 
 #[cfg(test)]
 mod settings_tests;
-
-#[cfg(test)]
-mod sync_apply_tests;
 
 #[cfg(test)]
 mod write_safety_e2e_tests;

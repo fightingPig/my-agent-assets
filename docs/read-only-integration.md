@@ -134,35 +134,33 @@ Production pages do not fall back to sample rows. Empty commands produce explici
 
 The Provider switch selects `Claude Code` or `Codex` within the existing Asset Center. Codex exposes only Skills and MCP Servers; Commands are hidden. Codex data is never passed into Claude import, mount, conflict apply, or adoption workflows.
 
-`StaticActionButton` is still used for visual-only business actions that do not have a safe apply workflow. Settings can call `settings_save` to persist local desktop configuration only. Scan Import can call `import_apply` in `planOnly` mode to generate an import plan, Mount Manager can call `mount_apply` in `planOnly` mode to generate a mount plan, Sync can call `preview_sync` to generate Pull/Push plans, Backup Restore can call `restore_apply` in `planOnly` mode to generate a restore plan, and Conflict Resolver can call `conflict_apply` in `planOnly` mode; all plan actions avoid file writes.
-
-Import, mount, and restore previews return deterministic `previewId` values. Their plan-only apply calls pass the preview's ID, and the backend rejects mismatched IDs before reading or writing runtime data.
-
-The Scan Import, Mount Manager, Backup Restore, and Sync pages can execute real `apply` mode only after:
-
-1. A preview exists.
-2. A plan-only apply succeeds.
-3. The user types `APPLY` in the local confirmation field.
-4. The backend validates the deterministic `previewId`.
+`StaticActionButton` remains reserved for visual-only actions with no backend
+workflow. Real writes use a backend preview followed by ordinary button
+confirmation; typed `APPLY` is not required.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 
-- Scan Import: `preview_import` after a non-empty `scan_assets` result, plus `import_apply` with `mode: "planOnly"` when generating an import plan
-- Mount Manager: `preview_mount` for the selected asset and target, plus `mount_apply` with `mode: "planOnly"` when generating a mount plan
-- Conflict Resolver: `preview_conflicts` for exact existing/incoming content, `preview_import` for a decision-bound preview ID, and `conflict_apply` behind plan-only plus typed confirmation
-- Backup Restore: `preview_restore` for the selected backup ID, plus `restore_apply` with `mode: "planOnly"` when generating a restore plan
-- Sync: `preview_sync` for local Pull/Push plan generation without running Git sync commands
+- Scan Import: shared runtime discovery, atomic Batch Import preview/apply, and
+  backend-composed Adopt.
+- Mount Manager: Target Registry enumeration and targetId-only Mount
+  preview/apply.
+- Conflict Resolver: canonical Batch Import preview/apply with exact
+  existing/incoming content and explicit skip/rename/overwrite.
+- Backup History: read-only portable/local manifests and manual restore guide;
+  no historical Restore command.
+- Sync: shared Git preview/apply with whitelist staging, fast-forward Pull, and
+  live GitHub Private verification before every Push.
 
-Preview and plan-only data affects plan text, warnings, affected paths, conflicts, and summaries; import, conflict resolution, mount, restore, and Git sync can proceed to real apply only through the typed confirmation gate.
+Preview data controls plan text, warnings, affected paths, conflicts, and
+whether the confirmation button is enabled. Apply revalidates the preview in
+the Rust backend.
 
 Asset Detail and Project Detail consume the selected list context rather than replacing it with a fixed entity. They use `preview_mount` and `mount_apply` for their existing mount workflow. After a successful apply, Asset Detail reloads `list_assets` and Project Detail reloads `list_projects`, so derived mount targets and project counts reflect the backend state.
-
-`preview_restore` now prefers `~/.my-agent-assets/backups/<backupId>/manifest.json` when present, returning the manifest's affected paths and backup summary. Missing or invalid manifests safely fall back to synthetic preview data with a warning.
 
 ## Non-goals
 
 The read-only UI milestone still does not:
 
 - Unmount assets
-- Run Git fetch, init, add, or commit
+- Automatic historical Restore
 - Change page layouts

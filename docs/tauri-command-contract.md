@@ -122,49 +122,54 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 ### `preview_restore`
 
-- **Purpose:** Validate a backup and show affected paths and restore steps.
-- **Input:** `PreviewRestoreInput { backupId }`.
-- **Output:** `RestorePreview { previewId, backup, affectedPaths, steps, warnings, backupBeforeRestore, canApply }`.
-- **Side effect:** Preview-only. Reads an existing backup manifest when present, but does not restore files or create backups.
-- **Future consumer:** Backup Restore.
-- **Status:** Implemented and registered as preview-only.
-
-`previewId` is generated from `backupId` and later validated by `restore_apply`.
+- **Status:** Historical contract only; not registered.
+- **Current product boundary:** Backup History is read-only and exposes
+  portable/local manifests, affected paths, file reveal, and manual restore
+  guidance. The application does not provide automatic historical Restore.
 
 ### `preview_sync`
 
 - **Purpose:** Build a local Git Pull or Push plan from current repository status.
 - **Input:** `PreviewSyncInput { direction }`, where `direction` is `pull | push`.
-- **Output:** `SyncPreview { previewId, direction, repositoryPath, branch, remote, steps, warnings, canApply }`.
-- **Side effect:** Preview-only. It does not run `git fetch`, `git pull`, `git push`, or mutate the repository.
-- **Future consumer:** Sync.
-- **Status:** Implemented and registered as preview-only.
+- **Output:** `SyncPreview { previewId, direction, status, repositoryVisibility, plannedEffects, warnings, backupRequired, canApply, generatedAtEpochSeconds, expiresAtEpochSeconds }`.
+- **Side effect:** Preview-only. It may run read-only `git` and `gh api`
+  commands, including `git ls-remote`, but does not modify the repository.
+- **Consumer:** Sync.
+- **Status:** Implemented in shared core and registered.
 
-`previewId` is generated from the requested direction and current Git status. `sync_apply` rejects the request if repository status changes before execution.
+`previewId` is a SHA-256 digest bound to direction, current Git state,
+canonical sync paths, remote identity, visibility result, and generation time.
+`sync_apply` re-runs visibility verification and rejects stale previews.
 
 ### `sync_apply`
 
 - **Purpose:** Execute a previously previewed local Git Pull or Push for the asset center repository.
-- **Input:** `SyncApplyInput { previewId, mode, direction }`.
-- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
-- **Side effect:** Write when `mode` is `apply`; no Git command is run when `mode` is `planOnly`.
-- **Future consumer:** Sync.
-- **Status:** Implemented and registered for `git pull --ff-only` and `git push`.
+- **Input:** `SyncApplyInput { previewId, previewGeneratedAtEpochSeconds, request: { direction } }`.
+- **Output:** `SyncApplyResult { previewId, direction, affectedPaths, backupId, committed, pushed, pulled, warnings, journalPath }`.
+- **Side effect:** Explicit write after preview and button confirmation.
+- **Consumer:** Sync.
+- **Status:** Implemented in shared core and registered.
 
 Current behavior:
 
 - The target repository is `~/.my-agent-assets`.
-- The backend recomputes `previewId` from current Git status before running any command.
-- Dirty worktrees, conflicts, missing upstreams, and non-repository paths are rejected.
-- Pull uses `git pull --ff-only`.
-- Push uses `git push`.
+- The backend locks, revalidates `previewId`, and verifies remote identity again.
+- Pull requires a clean worktree, creates a local canonical backup, and uses
+  `git pull --ff-only`.
+- Push stages only `.gitignore`, `assets/`, `assets.yaml`, and
+  `backups/portable/` through a temporary index.
+- Push never stages machine-local target or mount state.
+- Push is blocked unless `gh api` reports GitHub visibility `PRIVATE`.
+- Public, internal, unknown, unverifiable, changed, ahead-remote, and diverged
+  remotes are blocked.
+- Push does not use force, stash, merge, rebase, or reset.
 - Git commands are invoked with `std::process::Command` argument arrays, not shell strings.
 
 ### `git_status`
 
 - **Purpose:** Read the asset center's local Git state without pull, push, fetch, or credential interaction.
 - **Input:** None.
-- **Output:** `GitStatus { repositoryPath, isRepository, statusMessage, branch, remote, clean, ahead, behind, changedFiles, conflicts, lastSyncedAt }`.
+- **Output:** `GitStatus { repositoryPath, isRepository, statusMessage, branch, remoteName, remoteIdentity, upstream, clean, ahead, behind, changedFiles, conflicts, syncableChanges, blockedChanges }`.
 - **Side effect:** Read-only.
 - **Future consumer:** Sync and Dashboard.
 - **Status:** Implemented and registered as read-only.

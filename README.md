@@ -33,6 +33,10 @@ Write commands print a preview by default and require `--apply`. Mount and
 unmount accept registered target IDs, never arbitrary runtime paths. Automatic
 historical Restore is intentionally not provided.
 
+`maa sync push` stages only the canonical sync whitelist and is blocked unless
+the local `gh` authentication reports the configured GitHub repository as
+Private. `maa sync pull` requires a clean worktree and uses fast-forward only.
+
 ## macOS Desktop Preview
 
 The desktop app uses typed Tauri commands backed by the same Rust core as the

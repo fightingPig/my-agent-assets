@@ -25,6 +25,7 @@ import type {
   ScanResult,
   SettingsSaveInput,
   SyncApplyInput,
+  SyncApplyResult,
   SyncPreview,
   RuntimeDiscoveryScope,
   RuntimeDiscoveryResult,
@@ -75,12 +76,14 @@ const fallbackGitStatus: GitStatus = {
   isRepository: false,
   statusMessage: "Tauri runtime is unavailable.",
   branch: "",
-  remote: null,
+  remoteName: "origin",
   clean: true,
   ahead: 0,
   behind: 0,
   changedFiles: [],
   conflicts: [],
+  syncableChanges: [],
+  blockedChanges: [],
   lastSyncedAt: null,
 };
 
@@ -475,33 +478,34 @@ export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview>
   const fallback: SyncPreview = {
     previewId: `preview:sync:${input.direction}`,
     direction: input.direction,
-    repositoryPath: fallbackGitStatus.repositoryPath,
-    branch: fallbackGitStatus.branch,
-    remote: fallbackGitStatus.remote,
-    steps: [],
+    status: fallbackGitStatus,
+    repositoryVisibility: "unknown",
+    plannedEffects: [],
     warnings: ["Tauri runtime is unavailable; sync preview skipped."],
+    backupRequired: input.direction === "pull",
     canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
   };
   const result = await invokeOrFallback<unknown>("preview_sync", { input }, fallback);
-  return isRecord(result) && typeof result.previewId === "string" && Array.isArray(result.steps) && Array.isArray(result.warnings)
+  return isRecord(result) && typeof result.previewId === "string" && Array.isArray(result.plannedEffects) && Array.isArray(result.warnings)
     ? result as SyncPreview
     : fallback;
 }
 
-export async function syncApply(input: SyncApplyInput): Promise<ApplyResult> {
-  const fallback: ApplyResult = {
-    mode: input.mode,
-    ok: false,
-    previewId: input.previewId,
-    backup: null,
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; sync apply skipped."],
-    errors: ["sync_apply could not run outside the Tauri runtime."],
-  };
-  const result = await invokeOrFallback<unknown>("sync_apply", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
-    ? result as ApplyResult
-    : fallback;
+export async function syncApply(input: SyncApplyInput): Promise<SyncApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("sync_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("sync_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("sync_apply returned an invalid response.");
+  }
+  return result as SyncApplyResult;
 }
 
 export async function importApply(input: ImportApplyInput): Promise<ApplyResult> {

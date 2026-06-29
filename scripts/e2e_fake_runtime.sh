@@ -108,9 +108,9 @@ test ! -e "$PROJECT_A/.agents/skills/review"
 "$BIN" --home "$FAKE_HOME" status >"$TMP_ROOT/status.json"
 "$BIN" --home "$FAKE_HOME" doctor >"$TMP_ROOT/doctor.txt"
 
-if "$BIN" --home "$FAKE_HOME" sync push >/tmp/maa-legacy-sync.out 2>&1; then
-  fail "legacy unrestricted sync unexpectedly succeeded"
-fi
+"$BIN" --home "$FAKE_HOME" sync push >"$TMP_ROOT/sync-preview.json"
+sed -i.bak '/^Run the same command/,$d' "$TMP_ROOT/sync-preview.json"
+jq -e '.direction == "push" and .canApply == false' "$TMP_ROOT/sync-preview.json" >/dev/null
 if "$BIN" --home "$FAKE_HOME" restore backup-1 --apply >/tmp/maa-restore.out 2>&1; then
   fail "automatic historical Restore unexpectedly succeeded"
 fi

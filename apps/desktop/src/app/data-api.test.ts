@@ -119,28 +119,44 @@ describe("read-only desktop data api", () => {
       input: { scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] },
     });
 
-    invoke.mockResolvedValueOnce({ direction: "pull", steps: [], warnings: [] });
+    invoke.mockResolvedValueOnce({
+      previewId: "sync-1",
+      direction: "pull",
+      status: {},
+      repositoryVisibility: "unknown",
+      plannedEffects: [],
+      warnings: [],
+      backupRequired: true,
+      canApply: false,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
+    });
     await api.previewSync({ direction: "pull" });
     expect(invoke).toHaveBeenLastCalledWith("preview_sync", {
       input: { direction: "pull" },
     });
 
     invoke.mockResolvedValueOnce({
-      mode: "apply",
-      ok: true,
       previewId: "preview-sync-1",
-      backup: null,
-      steps: [],
+      direction: "push",
+      affectedPaths: ["/tmp/assets"],
+      committed: true,
+      pushed: true,
+      pulled: false,
       warnings: [],
-      errors: [],
+      journalPath: "/tmp/journal",
     });
     await api.syncApply({
       previewId: "preview-sync-1",
-      mode: "apply",
-      direction: "push",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { direction: "push" },
     });
     expect(invoke).toHaveBeenLastCalledWith("sync_apply", {
-      input: { previewId: "preview-sync-1", mode: "apply", direction: "push" },
+      input: {
+        previewId: "preview-sync-1",
+        previewGeneratedAtEpochSeconds: 100,
+        request: { direction: "push" },
+      },
     });
   });
 
@@ -453,14 +469,9 @@ describe("read-only desktop data api", () => {
     });
     await expect(api.syncApply({
       previewId: "preview-sync-1",
-      mode: "apply",
-      direction: "push",
-    })).resolves.toMatchObject({
-      ok: false,
-      previewId: "preview-sync-1",
-      warnings: ["Tauri runtime is unavailable; sync apply skipped."],
-      errors: ["sync_apply could not run outside the Tauri runtime."],
-    });
+      previewGeneratedAtEpochSeconds: 100,
+      request: { direction: "push" },
+    })).rejects.toThrow("requires the Tauri runtime");
     await expect(api.importApply({
       previewId: "preview-import-1",
       mode: "apply",

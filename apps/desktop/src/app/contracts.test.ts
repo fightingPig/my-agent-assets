@@ -71,27 +71,34 @@ describe("Tauri command contracts", () => {
     const preview = {
       previewId: "preview:sync:pull",
       direction: "pull",
-      repositoryPath: "~/.my-agent-assets",
-      branch: "main",
-      remote: "origin/main",
-      steps: [
-        {
-          id: "preview-git-sync",
-          kind: "git",
-          label: "生成 Pull 计划",
-          description: "仅生成同步计划，不执行 Git 同步命令。",
-          risk: "medium",
-        },
-      ],
-      warnings: ["Preview only: no git pull, push, or fetch is executed."],
+      status: {
+        repositoryPath: "~/.my-agent-assets",
+        isRepository: true,
+        statusMessage: "Git worktree is clean",
+        branch: "main",
+        remoteName: "origin",
+        upstream: "origin/main",
+        clean: true,
+        ahead: 0,
+        behind: 1,
+        changedFiles: [],
+        conflicts: [],
+        syncableChanges: [],
+        blockedChanges: [],
+      },
+      repositoryVisibility: "unknown",
+      plannedEffects: ["run git pull --ff-only origin main"],
+      warnings: [],
+      backupRequired: true,
       canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
     } satisfies SyncPreview;
 
     expect(input.direction).toBe("pull");
     expect(preview.direction).toBe("pull");
     expect(preview.previewId).toBe("preview:sync:pull");
-    expect(preview.steps[0].kind).toBe("git");
-    expect(preview.warnings[0]).toContain("Preview only");
+    expect(preview.plannedEffects[0]).toContain("pull --ff-only");
     expectTypeOf(input).toMatchTypeOf<PreviewSyncInput>();
     expectTypeOf(preview).toMatchTypeOf<SyncPreview>();
   });
@@ -128,13 +135,14 @@ describe("Tauri command contracts", () => {
       isRepository: false,
       statusMessage: "Asset center directory does not exist.",
       branch: "",
-      remote: null,
+      remoteName: "origin",
       clean: true,
       ahead: 0,
       behind: 0,
       changedFiles: [],
       conflicts: [],
-      lastSyncedAt: null,
+      syncableChanges: [],
+      blockedChanges: [],
     } satisfies GitStatus;
 
     expect(status.isRepository).toBe(false);
@@ -159,16 +167,15 @@ describe("Tauri command contracts", () => {
     expectTypeOf(input).toMatchTypeOf<ImportApplyInput>();
   });
 
-  it("keeps Sync apply tied to a preview and explicit mode", () => {
+  it("keeps Sync apply tied to a timestamped preview request", () => {
     const input = {
       previewId: "preview:sync:push",
-      mode: "apply",
-      direction: "push",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { direction: "push" },
     } satisfies SyncApplyInput;
 
     expect(input.previewId).toBe("preview:sync:push");
-    expect(input.mode).toBe("apply");
-    expect(input.direction).toBe("push");
+    expect(input.request.direction).toBe("push");
     expectTypeOf(input).toMatchTypeOf<SyncApplyInput>();
   });
 

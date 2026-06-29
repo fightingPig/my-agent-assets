@@ -2,26 +2,11 @@ use crate::contracts::{
     ApplyMode, ApplyResult, ApplyStepResult, ApplyStepStatus, PlanStepKind, SyncApplyInput,
     SyncDirection,
 };
-use crate::path_utils::{display_path, guard_existing_path, home_dir};
+use crate::path_utils::{display_path, guard_existing_path};
 use crate::preview;
 use crate::read_only;
 use std::path::Path;
 use std::process::Command;
-
-pub fn sync_apply_command(input: SyncApplyInput) -> ApplyResult {
-    match home_dir() {
-        Some(home) => sync_apply_for_home(&home, input),
-        None => ApplyResult {
-            mode: input.mode,
-            ok: false,
-            preview_id: input.preview_id,
-            backup: None,
-            steps: vec![],
-            warnings: vec![],
-            errors: vec!["Could not resolve HOME for sync apply.".into()],
-        },
-    }
-}
 
 pub fn sync_apply_for_home(home: &Path, input: SyncApplyInput) -> ApplyResult {
     let repository_path = home.join(".my-agent-assets");

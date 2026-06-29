@@ -1,11 +1,11 @@
 #[cfg(test)]
-use crate::contracts::BackupSummary;
-#[cfg(test)]
 use crate::contracts::{AppearanceTheme, DensityPreference, DesktopSettings, LogLevel};
 use crate::contracts::{
-    AssetCounts, AssetStatus, AssetSummary, AssetType, GitStatus, ListAssetsInput, ProjectStatus,
+    AssetCounts, AssetStatus, AssetSummary, AssetType, ListAssetsInput, ProjectStatus,
     ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
 };
+#[cfg(test)]
+use crate::contracts::{BackupSummary, GitStatus};
 use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
 #[cfg(test)]
 use serde::Deserialize;
@@ -14,13 +14,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
-
-pub fn git_status_command() -> GitStatus {
-    match home_dir() {
-        Some(home) => git_status_for_home(&home),
-        None => git_status_for_missing_home(),
-    }
-}
 
 pub fn list_assets_command(input: ListAssetsInput) -> Vec<AssetSummary> {
     match home_dir() {
@@ -205,6 +198,7 @@ pub fn list_backups_for_home(home: &Path) -> Vec<BackupSummary> {
     backups
 }
 
+#[cfg(test)]
 pub fn git_status_for_home(home: &Path) -> GitStatus {
     let repository_path = home.join(".my-agent-assets");
     let display_repository_path = display_path(&repository_path);
@@ -764,6 +758,7 @@ fn empty_scan_result(scope: ScanScope, warnings: Vec<String>) -> ScanResult {
     }
 }
 
+#[cfg(test)]
 fn safe_git_status(repository_path: String, message: &str) -> GitStatus {
     GitStatus {
         repository_path,
@@ -780,10 +775,7 @@ fn safe_git_status(repository_path: String, message: &str) -> GitStatus {
     }
 }
 
-fn git_status_for_missing_home() -> GitStatus {
-    safe_git_status("~/.my-agent-assets".into(), "HOME is unavailable.")
-}
-
+#[cfg(test)]
 fn git_success(cwd: &Path, args: &[&str]) -> bool {
     Command::new("git")
         .args(args)
@@ -805,6 +797,7 @@ fn git_output(cwd: &Path, args: &[&str]) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[cfg(test)]
 fn parse_changed_files(status: &str) -> Vec<String> {
     status
         .lines()
@@ -814,6 +807,7 @@ fn parse_changed_files(status: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(test)]
 fn parse_conflicts(status: &str) -> Vec<String> {
     status
         .lines()
@@ -827,6 +821,7 @@ fn parse_conflicts(status: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(test)]
 fn parse_ahead_behind(value: &str) -> (u32, u32) {
     let mut parts = value.split_whitespace();
     let ahead = parts.next().and_then(|item| item.parse().ok()).unwrap_or(0);

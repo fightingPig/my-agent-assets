@@ -36,12 +36,14 @@ const emptyGitStatus: GitStatus = {
   isRepository: false,
   statusMessage: "尚未读取本地 Git 仓库。",
   branch: "",
-  remote: null,
+  remoteName: "origin",
   clean: true,
   ahead: 0,
   behind: 0,
   changedFiles: [],
   conflicts: [],
+  syncableChanges: [],
+  blockedChanges: [],
   lastSyncedAt: null,
 };
 

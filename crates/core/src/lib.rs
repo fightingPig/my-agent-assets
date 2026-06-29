@@ -4,6 +4,7 @@ pub mod backup_history;
 pub mod batch_import;
 pub mod delete;
 pub mod discovery;
+pub mod git_sync;
 pub mod import;
 pub mod mcp;
 pub mod mount;

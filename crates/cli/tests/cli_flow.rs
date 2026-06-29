@@ -214,7 +214,7 @@ fn shared_core_cli_flow_uses_source_and_target_ids() {
 }
 
 #[test]
-fn legacy_unsafe_cli_operations_are_explicitly_disabled() {
+fn scan_is_read_only_sync_is_previewed_and_restore_is_disabled() {
     let home = TestHome::new();
     home.write(".claude.json", "{}\n");
     success(&home.path, &["init", "--apply"]);
@@ -223,9 +223,14 @@ fn legacy_unsafe_cli_operations_are_explicitly_disabled() {
     assert!(!scan_apply.status.success());
     assert!(String::from_utf8_lossy(&scan_apply.stderr).contains("scan is read-only"));
 
-    let sync = maa(&home.path, &["sync", "push"]);
-    assert!(!sync.status.success());
-    assert!(String::from_utf8_lossy(&sync.stderr).contains("legacy unrestricted"));
+    let sync = json_output(&home.path, &["sync", "push"]);
+    assert_eq!(sync["direction"], "push");
+    assert_eq!(sync["canApply"], false);
+    assert!(sync["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|warning| warning.as_str().unwrap_or_default().contains("remote")));
 
     let restore = maa(&home.path, &["restore", "backup-1", "--apply"]);
     assert!(!restore.status.success());

@@ -60,7 +60,7 @@ describe("Asset Center static UI", () => {
 
     fireEvent.click(screen.getByRole("option", { name: "Filesystem" }));
     expect(screen.getByText(/filesystem-mcp/)).toBeInTheDocument();
-    for (const phrase of ["GitHub", "登录", "账号", "OAuth", "云"]) {
+    for (const phrase of ["登录", "账号", "OAuth", "云账号"]) {
       expect(container.textContent).not.toContain(phrase);
     }
   });
@@ -84,7 +84,7 @@ describe("Asset Center static UI", () => {
     const { container } = render(<SyncPage demoMode />);
     expect(screen.getByText("本地 Git 仓库")).toBeInTheDocument();
     expect(screen.getAllByText("远程仓库").length).toBeGreaterThan(0);
-    for (const phrase of ["GitHub", "登录", "账号", "OAuth", "云"]) {
+    for (const phrase of ["登录", "账号", "OAuth", "云账号"]) {
       expect(container.textContent).not.toContain(phrase);
     }
   });

@@ -13,6 +13,10 @@ use my_agent_assets_core::delete::{
     DeletePreviewRequest,
 };
 use my_agent_assets_core::discovery::{discover, DiscoveryResult, DiscoveryScope};
+use my_agent_assets_core::git_sync::{
+    apply_sync, preview_sync, status as git_status, GitStatus, SyncApplyRequest, SyncApplyResult,
+    SyncPreview, SyncPreviewRequest,
+};
 use my_agent_assets_core::import::{
     apply_import, preview_import, ImportApplyRequest, ImportApplyResult, ImportPreview,
     ImportPreviewRequest,
@@ -57,6 +61,23 @@ pub fn list_backup_history_command() -> Result<Vec<BackupHistoryEntry>, String> 
     let home =
         home_dir().ok_or_else(|| "HOME is unavailable; backup history skipped.".to_string())?;
     Ok(list_backups(&home))
+}
+
+pub fn git_status_command() -> Result<GitStatus, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; Git status skipped.".to_string())?;
+    Ok(git_status(&home))
+}
+
+pub fn sync_preview_command(input: SyncPreviewRequest) -> Result<SyncPreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git sync preview skipped.".to_string())?;
+    preview_sync(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn sync_apply_command(input: SyncApplyRequest) -> Result<SyncApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git sync apply blocked.".to_string())?;
+    apply_sync(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn canonical_mount_preview_command(input: MountPreviewRequest) -> Result<MountPreview, String> {

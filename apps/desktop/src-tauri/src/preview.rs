@@ -1,17 +1,19 @@
 use crate::contracts::{
     AssetStatus, AssetSummary, AssetType, ConflictPreview, ConflictResolution,
-    ConflictResolutionChoice, GitStatus, ImportPreview, MountPreview, MountTarget, PlanStep,
-    PlanStepKind, PreviewConflictsInput, PreviewImportInput, PreviewMountInput, PreviewSyncInput,
-    RiskLevel, RuntimeScope, ScanScope, SyncDirection, SyncPreview,
+    ConflictResolutionChoice, ImportPreview, MountPreview, MountTarget, PlanStep, PlanStepKind,
+    PreviewConflictsInput, PreviewImportInput, PreviewMountInput, RiskLevel, RuntimeScope,
+    ScanScope,
 };
 #[cfg(test)]
-use crate::contracts::{BackupSummary, PreviewRestoreInput, RestorePreview};
+use crate::contracts::{
+    BackupSummary, GitStatus, PreviewRestoreInput, PreviewSyncInput, RestorePreview, SyncDirection,
+    SyncPreview,
+};
 #[cfg(test)]
 use crate::path_utils::display_path;
 use crate::path_utils::{
     expand_tilde, guard_existing_path, home_dir, validate_single_path_component,
 };
-use crate::read_only;
 #[cfg(test)]
 use serde::Deserialize;
 use serde_json::Value;
@@ -31,10 +33,6 @@ pub fn preview_conflicts_command(input: PreviewConflictsInput) -> Vec<ConflictPr
         Some(home) => preview_conflicts_for_home(&home, input),
         None => preview_conflicts(input),
     }
-}
-
-pub fn preview_sync_command(input: PreviewSyncInput) -> SyncPreview {
-    preview_sync(input, read_only::git_status_command())
 }
 
 pub fn preview_import(input: PreviewImportInput) -> ImportPreview {
@@ -329,6 +327,7 @@ pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> Rest
     }
 }
 
+#[cfg(test)]
 pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
     let preview_id = sync_preview_id(&input.direction, &status);
     let direction_label = match input.direction {
@@ -456,6 +455,7 @@ pub fn restore_preview_id(backup_id: &str) -> String {
     stable_preview_id("restore", &[backup_id.to_string()])
 }
 
+#[cfg(test)]
 pub fn sync_preview_id(direction: &SyncDirection, status: &GitStatus) -> String {
     stable_preview_id(
         "sync",

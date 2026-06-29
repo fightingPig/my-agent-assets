@@ -201,33 +201,24 @@ beforeEach(() => {
   previewSync.mockResolvedValue({
     previewId: "preview:sync:push",
     direction: "push",
-    repositoryPath: "~/.my-agent-assets",
-    branch: "main",
-    remote: "origin/main",
-    steps: [
-      { id: "check-git-repository", kind: "check", label: "校验本地 Git 仓库", description: "Repository ready.", risk: "none" },
-      { id: "preview-git-sync", kind: "git", label: "生成 Push 计划", description: "No git push is executed.", risk: "medium" },
-    ],
-    warnings: ["Preview only: no git pull, push, or fetch is executed."],
+    status: gitStatusFixture({ isRepository: true }),
+    repositoryVisibility: "private",
+    plannedEffects: ["stage canonical whitelist", "git push origin main"],
+    warnings: [],
+    backupRequired: false,
     canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 700,
   });
   syncApply.mockResolvedValue({
-    mode: "apply",
-    ok: true,
     previewId: "preview:sync:push",
-    backup: null,
-    steps: [
-      {
-        stepId: "git-sync",
-        kind: "git",
-        label: "执行 Push",
-        status: "success",
-        message: "git push completed.",
-        affectedPaths: ["~/.my-agent-assets"],
-      },
-    ],
+    direction: "push",
+    affectedPaths: ["~/.my-agent-assets"],
+    committed: true,
+    pushed: true,
+    pulled: false,
     warnings: [],
-    errors: [],
+    journalPath: "/tmp/sync-journal",
   });
   importApply.mockResolvedValue({
     mode: "planOnly",
@@ -449,19 +440,21 @@ describe("read-only UI integration", () => {
       isRepository: true,
       statusMessage: "Git repository has no upstream.",
       branch: "feature/assets",
-      remote: null,
+      remoteName: "origin",
       clean: false,
       ahead: 4,
       behind: 2,
       changedFiles: ["assets.yaml"],
       conflicts: ["mounts.yaml"],
+      syncableChanges: ["assets.yaml"],
+      blockedChanges: ["mounts.yaml"],
     }));
 
     render(<SyncPage />);
 
     expect(await screen.findByText("/tmp/assets")).toBeInTheDocument();
     expect(screen.getByText("feature/assets")).toBeInTheDocument();
-    expect(screen.getByText("未设置")).toBeInTheDocument();
+    expect(screen.getAllByText("origin").length).toBeGreaterThan(0);
     expect(screen.getByText("4 commits")).toBeInTheDocument();
     expect(screen.getByText("2 commits")).toBeInTheDocument();
     expect(screen.getAllByText("Git repository has no upstream.").length).toBeGreaterThan(0);
@@ -478,7 +471,7 @@ describe("read-only UI integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "预览 Push" }));
 
     await waitFor(() => expect(previewSync).toHaveBeenCalledWith({ direction: "push" }));
-    expect(await screen.findByText(/生成 Push 计划/)).toBeInTheDocument();
+    expect(await screen.findByText(/git push origin main/)).toBeInTheDocument();
     expect(screen.getByText("计划方向")).toBeInTheDocument();
     expect(screen.getByText("计划可执行")).toBeInTheDocument();
     const pushButton = screen.getByRole("button", { name: "执行 Push" });
@@ -488,8 +481,8 @@ describe("read-only UI integration", () => {
 
     await waitFor(() => expect(syncApply).toHaveBeenCalledWith({
       previewId: "preview:sync:push",
-      mode: "apply",
-      direction: "push",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { direction: "push" },
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
     await waitFor(() => expect(gitStatus).toHaveBeenCalledTimes(2));
@@ -987,12 +980,14 @@ function gitStatusFixture(overrides: Partial<GitStatus> = {}): GitStatus {
     isRepository: false,
     statusMessage: "Asset center directory does not exist.",
     branch: "",
-    remote: null,
+    remoteName: "origin",
     clean: true,
     ahead: 0,
     behind: 0,
     changedFiles: [],
     conflicts: [],
+    syncableChanges: [],
+    blockedChanges: [],
     lastSyncedAt: null,
     ...overrides,
   };

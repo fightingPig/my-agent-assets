@@ -6,6 +6,9 @@ use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
 };
 use my_agent_assets_core::discovery::{discover, DiscoveryScope, SourceFormat};
+use my_agent_assets_core::git_sync::{
+    apply_sync, preview_sync, SyncApplyRequest, SyncDirection, SyncPreviewRequest,
+};
 use my_agent_assets_core::import::{
     apply_import, preview_import, ImportApplyRequest, ImportPreviewRequest, ImportResolution,
 };
@@ -231,9 +234,32 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
             }
         }
         "sync" => {
-            return Err(MaaError::new(
-                "safe Git sync is not available yet; the legacy unrestricted sync path is disabled",
-            ))
+            let direction = match next_arg(&mut args, "pull or push")?.as_str() {
+                "pull" => SyncDirection::Pull,
+                "push" => SyncDirection::Push,
+                value => {
+                    return Err(MaaError::new(format!(
+                        "unknown sync direction: {value}; expected pull or push"
+                    )))
+                }
+            };
+            let request = SyncPreviewRequest { direction };
+            let preview = preview_sync(&home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_sync(
+                    &home,
+                    &SyncApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview
+                            .generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)?;
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this sync preview.");
+            }
         }
         "restore" => {
             return Err(MaaError::new(
@@ -461,10 +487,10 @@ fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
 Usage:\n  maa [--home <home>] <command> [options]\n\n\
-Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  list\n  status\n  doctor\n\n\
-Scope options:\n  --scope user\n  --scope project --project <path>\n  --scope custom --path <path> --type skill|command|mcp \\\n+    --format skill-directory|markdown|claude-mcp-json|codex-mcp-toml\n\n\
+Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  list\n  status\n  doctor\n  sync pull|push [--apply]\n\n\
+Scope options:\n  --scope user\n  --scope project --project <path>\n  --scope custom --path <path> --type skill|command|mcp \\\n    --format skill-directory|markdown|claude-mcp-json|codex-mcp-toml\n\n\
 Conflict resolution:\n  --resolution unresolved|skip|overwrite|rename [--rename-to <name>]\n\n\
-Writes always show a preview unless --apply is explicitly supplied. Automatic Restore and the legacy unrestricted Git sync path are disabled.\n"
+Writes always show a preview unless --apply is explicitly supplied. Push requires a live GitHub Private visibility check. Automatic historical Restore is disabled.\n"
     );
 }
 

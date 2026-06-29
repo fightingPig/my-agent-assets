@@ -54,13 +54,14 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 76 tests and desktop 89 tests passed
+- Rust workspace: core 82 tests and desktop 84 tests passed
 - frontend: 82 tests passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
 - `scripts/e2e_fake_runtime.sh`: passed with Claude/Codex import and targetId mount flow
 - Visual QA: 26 screenshots, 0 severe issues, 0 warnings
+- real GitHub Private fake-device sync E2E: passed with temporary branch creation, device-B clone verification, and cleanup
 
 Implemented:
 - moved path component validation, tilde expansion, guarded write/existing paths, symlink traversal rejection, and root containment checks into `crates/core`
@@ -98,25 +99,31 @@ Implemented:
 - added preview/apply Target Registry add/remove operations with local registry backups and active-binding removal protection
 - migrated the CLI to sourceId-based discovery/import/adopt and targetId-only mount/unmount/delete
 - added CLI project/custom target registration with derived provider paths and explicit authorization
-- disabled legacy unrestricted Git sync and automatic historical Restore CLI paths until the safe shared services replace them
+- disabled automatic historical Restore and replaced legacy unrestricted Git sync with the shared safe Git service
 - updated the fake runtime E2E flow to prove Claude/Codex canonical import, dual-provider Skill mount, Command-to-Codex rejection, and unmount-all delete
 - connected Scan conflicts to Conflict Resolver through an explicit in-memory context carrying the canonical batch preview
 - migrated Conflict Resolver from legacy synthesized commands to atomic canonical Batch Import preview/apply with sourceId-bound skip/rename/overwrite decisions
 - MCP conflicts show canonical existing/incoming JSON and expandable raw source content
 - added shared portable/local/legacy Backup History enumeration with manifest paths, affected paths, sizes, operation types, symlink-safe traversal, and sensitive MCP risk flags
 - migrated the Desktop Backup History command to shared core; no historical Restore command is exposed
+- implemented shared Git status and SHA-256-bound Pull/Push preview/apply
+- Pull requires a clean worktree, creates a local canonical backup, and uses fast-forward only
+- Push uses a temporary Git index and stages only `.gitignore`, `assets/`, `assets.yaml`, and `backups/portable/`
+- Push performs live `gh api` visibility verification before preview and again under lock before apply; only `PRIVATE` is accepted
+- Push blocks public/internal/unknown/unverifiable remotes, non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity
+- Push never uses force, stash, merge, rebase, or reset; failed Push restores only the app-created branch ref
+- migrated Tauri, CLI, and Sync UI to the shared Git service
+- verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
-- shared Git service
 - Tauri target add/remove adapters and GUI target registration
-- remaining Asset/Project detail mount migration and Sync UI migration to shared workflows
+- remaining Asset/Project detail mount migration
 - automatic startup recovery for incomplete operation journals
-- shared Git service and stale fingerprint cache
+- shared SHA-256 fingerprint migration for non-Git operations
 
 Next:
 - add Tauri target add/remove adapters and GUI target registration
-- migrate Conflict, Backup History, Sync, and remaining detail pages away from legacy commands
-- implement the shared Git service with private-repository push validation
+- migrate remaining detail pages away from legacy runtimePath commands
 - remove legacy runtimePath, duplicate provider discovery, and historical Restore implementations
 
 ## Progress Update Template
