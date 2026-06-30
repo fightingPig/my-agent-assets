@@ -9,7 +9,7 @@ use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts, BindingStatus,
     MountBinding,
 };
-use crate::operation::OperationLock;
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::targets::{load as load_targets, MountAdapter, MountTarget, MountTargetKind};
 use crate::{MaaError, Result};
@@ -225,7 +225,43 @@ fn planned_effects(
 
 pub fn apply_mount(home: &Path, request: &MountApplyRequest) -> Result<MountApplyResult> {
     let _operation_lock = OperationLock::acquire(home)?;
-    apply_mount_locked(home, request)
+    let preview = preview_mount_at(
+        home,
+        &request.request,
+        request.preview_generated_at_epoch_seconds,
+    )?;
+    if preview.preview_id != request.preview_id || !preview.can_apply {
+        return apply_mount_locked(home, request);
+    }
+    let operation_id = operation_id();
+    let mut journal = OperationJournal::start_recoverable(
+        home,
+        &operation_id,
+        "mount",
+        vec![
+            RecoveryTarget::asset_center(mount_registry_path(home)),
+            RecoveryTarget::registered_target(
+                request.request.target_id.clone(),
+                preview.affected_target_path.clone(),
+            ),
+        ],
+    )?;
+    match apply_mount_locked(home, request) {
+        Ok(result) => {
+            journal.record_step("mount_applied")?;
+            journal.complete()?;
+            Ok(result)
+        }
+        Err(error) => {
+            let original = error.to_string();
+            journal.rollback_now(home).map_err(|rollback| {
+                MaaError::new(format!(
+                    "{original}; persistent mount rollback failed: {rollback}"
+                ))
+            })?;
+            Err(error)
+        }
+    }
 }
 
 pub(crate) fn apply_mount_locked(
@@ -442,6 +478,19 @@ pub fn apply_unmount(home: &Path, request: &UnmountApplyRequest) -> Result<Unmou
     let target = targets.resolve(&request.request.target_id)?;
     let mut mounts = load_mounts(home).map_err(|error| MaaError::new(error.to_string()))?;
     let original_mounts = fs::read(mount_registry_path(home))?;
+    let operation_id = operation_id();
+    let mut journal = OperationJournal::start_recoverable(
+        home,
+        &operation_id,
+        "unmount",
+        vec![
+            RecoveryTarget::asset_center(mount_registry_path(home)),
+            RecoveryTarget::registered_target(
+                request.request.target_id.clone(),
+                preview.affected_target_path.clone(),
+            ),
+        ],
+    )?;
     let mut snapshot = Some(snapshot_runtime_path(&preview.affected_target_path)?);
     let backup_id = if preview.backup_required {
         Some(create_local_backup(
@@ -457,7 +506,7 @@ pub fn apply_unmount(home: &Path, request: &UnmountApplyRequest) -> Result<Unmou
         if let Some(snapshot) = snapshot.take() {
             let _ = restore_runtime_snapshot(&preview.affected_target_path, snapshot);
         }
-        return Err(error);
+        return rollback_after_error(home, &mut journal, error, "unmount");
     }
     mounts.remove(&request.request.asset_id, &request.request.target_id);
     if let Err(error) = save_mounts(home, &mounts).map_err(|error| MaaError::new(error.to_string()))
@@ -466,11 +515,13 @@ pub fn apply_unmount(home: &Path, request: &UnmountApplyRequest) -> Result<Unmou
             let _ = restore_runtime_snapshot(&preview.affected_target_path, snapshot);
         }
         let _ = fs::write(mount_registry_path(home), original_mounts);
-        return Err(error);
+        return rollback_after_error(home, &mut journal, error, "unmount");
     }
     if let Some(snapshot) = snapshot.take() {
         discard_runtime_snapshot(snapshot)?;
     }
+    journal.record_step("unmount_applied")?;
+    journal.complete()?;
     Ok(UnmountApplyResult {
         preview_id: preview.preview_id,
         asset_id: request.request.asset_id.clone(),
@@ -479,6 +530,21 @@ pub fn apply_unmount(home: &Path, request: &UnmountApplyRequest) -> Result<Unmou
         backup_id,
         affected_paths: vec![preview.affected_target_path, mount_registry_path(home)],
     })
+}
+
+fn rollback_after_error<T>(
+    home: &Path,
+    journal: &mut OperationJournal,
+    error: MaaError,
+    operation: &str,
+) -> Result<T> {
+    let original = error.to_string();
+    journal.rollback_now(home).map_err(|rollback| {
+        MaaError::new(format!(
+            "{original}; persistent {operation} rollback failed: {rollback}"
+        ))
+    })?;
+    Err(error)
 }
 
 fn preview_disposition(

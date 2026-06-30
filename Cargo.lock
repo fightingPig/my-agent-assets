@@ -1761,12 +1761,14 @@ dependencies = [
 name = "my-agent-assets-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "serde_yaml",
  "sha2",
  "toml 0.8.2",
  "toml_edit 0.20.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

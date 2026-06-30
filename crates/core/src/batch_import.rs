@@ -7,7 +7,7 @@ use crate::mount::{
     discard_runtime_snapshot, restore_runtime_snapshot, snapshot_runtime_path, RuntimeSnapshot,
 };
 use crate::mount_registry::registry_path as mount_registry_path;
-use crate::operation::{OperationJournal, OperationLock};
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -160,7 +160,18 @@ fn apply_batch_import_inner(
     }
 
     let operation_id = operation_id();
-    let mut journal = OperationJournal::start(home, &operation_id, "batch_import")?;
+    let mut recovery_targets = vec![
+        RecoveryTarget::asset_center(asset_registry_path(home)),
+        RecoveryTarget::asset_center(mount_registry_path(home)),
+    ];
+    recovery_targets.extend(
+        preview
+            .items
+            .iter()
+            .map(|item| RecoveryTarget::asset_center(item.destination_path.clone())),
+    );
+    let mut journal =
+        OperationJournal::start_recoverable(home, &operation_id, "batch_import", recovery_targets)?;
     let assets_before = fs::read(asset_registry_path(home))?;
     let mounts_before = fs::read(mount_registry_path(home))?;
     let mut snapshots = BTreeMap::<PathBuf, RuntimeSnapshot>::new();
@@ -218,16 +229,18 @@ fn apply_batch_import_inner(
             if let Err(rollback) = fs::write(mount_registry_path(home), &mounts_before) {
                 rollback_errors.push(format!("mounts.yaml restore failed: {rollback}"));
             }
-            if rollback_errors.is_empty() {
-                let _ = journal.complete();
-                return Err(error);
+            match journal.rollback_now(home) {
+                Ok(_) => return Err(error),
+                Err(persistent_error) => {
+                    rollback_errors.push(format!("persistent recovery failed: {persistent_error}"));
+                    let message = format!(
+                        "{error}; automatic rollback incomplete: {}",
+                        rollback_errors.join("; ")
+                    );
+                    let _ = journal.mark_rollback_required(&message);
+                    return Err(MaaError::new(message));
+                }
             }
-            let message = format!(
-                "{error}; automatic rollback incomplete: {}",
-                rollback_errors.join("; ")
-            );
-            let _ = journal.mark_rollback_required(&message);
-            return Err(MaaError::new(message));
         }
     };
     for snapshot in snapshots.into_values() {
