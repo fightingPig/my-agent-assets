@@ -50,6 +50,7 @@ describe("Dashboard recovery status", () => {
         completedSteps: ["backup_created"],
         recoveryMessage: "runtime rollback incomplete",
       }],
+      recentRecoveries: [],
       message: "检测到 1 个未完成事务；新的写操作已阻止，等待安全恢复。",
     });
 

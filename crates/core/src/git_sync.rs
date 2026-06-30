@@ -1,5 +1,5 @@
 use crate::mount::copy_any;
-use crate::operation::{OperationJournal, OperationLock};
+use crate::operation::{GitRefRecovery, OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_existing_path;
 use crate::settings;
 use crate::{MaaError, Result};
@@ -364,7 +364,36 @@ fn apply_sync_with(
         epoch_nanos(),
         OPERATION_COUNTER.fetch_add(1, Ordering::Relaxed)
     );
-    let mut journal = OperationJournal::start(home, &operation_id, "git-sync")?;
+    let old_head = git_stdout(&repository, &["rev-parse", "HEAD"])
+        .ok()
+        .filter(|value| !value.is_empty());
+    let reference = format!("refs/heads/{}", preview.status.branch);
+    let expected_oid = match request.request.direction {
+        SyncDirection::Pull => {
+            remote_head(&repository, &settings.git_remote, &preview.status.branch)
+        }
+        SyncDirection::Push => old_head.clone(),
+    };
+    let recovery_targets = if request.request.direction == SyncDirection::Pull {
+        sync_paths(&repository)
+            .into_iter()
+            .map(RecoveryTarget::asset_center)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut journal = OperationJournal::start_recoverable_with_git(
+        home,
+        &operation_id,
+        "git-sync",
+        recovery_targets,
+        vec![GitRefRecovery {
+            repository: repository.clone(),
+            reference: reference.clone(),
+            old_oid: old_head.clone(),
+            expected_oid,
+        }],
+    )?;
     let mut affected_paths = vec![repository.clone()];
     let mut backup_id = None;
     let mut committed = false;
@@ -392,7 +421,7 @@ fn apply_sync_with(
             affected_paths.extend(sync_paths(&repository));
         }
         SyncDirection::Push => {
-            let old_head = git_stdout(&repository, &["rev-parse", "HEAD"]).unwrap_or_default();
+            let old_head = old_head.unwrap_or_default();
             let temporary_index = repository
                 .join("cache")
                 .join(format!(".sync-index-{operation_id}"));
@@ -403,6 +432,7 @@ fn apply_sync_with(
                 old_head.clone()
             } else {
                 let commit = create_sync_commit(&repository, &temporary_index, &old_head)?;
+                journal.set_git_ref_expected(&reference, &commit)?;
                 if old_head.is_empty() {
                     run_git_checked(
                         &repository,

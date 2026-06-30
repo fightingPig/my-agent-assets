@@ -29,7 +29,7 @@ pub fn settings_save_for_home(
     home: &Path,
     input: SettingsSaveInput,
 ) -> Result<DesktopSettings, String> {
-    core_settings::save(home, &CoreSettings::from(input.settings))
+    core_settings::save_transactional(home, &CoreSettings::from(input.settings))
         .map(DesktopSettings::from)
         .map_err(|error| error.to_string())
 }

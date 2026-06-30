@@ -1,4 +1,6 @@
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
+use crate::{MaaError, Result as CoreResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
@@ -233,6 +235,40 @@ pub fn save(home: &Path, settings: &Settings) -> Result<Settings, SettingsError>
     // Reload what reached disk. This verifies serialization and guarantees the
     // returned value matches the persisted, normalized representation.
     load(home)
+}
+
+pub fn save_transactional(home: &Path, settings: &Settings) -> CoreResult<Settings> {
+    let _lock = OperationLock::acquire(home)?;
+    let operation_id = format!(
+        "settings-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let mut journal = OperationJournal::start_recoverable(
+        home,
+        &operation_id,
+        "settings_save",
+        vec![RecoveryTarget::asset_center(settings_path(home))],
+    )?;
+    match save(home, settings).map_err(|error| MaaError::new(error.to_string())) {
+        Ok(saved) => {
+            journal.record_step("settings_saved")?;
+            journal.complete()?;
+            Ok(saved)
+        }
+        Err(error) => {
+            let original = error.to_string();
+            journal.rollback_now(home).map_err(|rollback| {
+                MaaError::new(format!(
+                    "{original}; persistent settings rollback failed: {rollback}"
+                ))
+            })?;
+            Err(error)
+        }
+    }
 }
 
 impl SettingsFile {

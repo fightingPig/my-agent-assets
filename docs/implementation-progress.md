@@ -127,17 +127,23 @@ Implemented:
   remains read-only with manual restore guidance
 - added read-only recovery status plus global write blocking whenever an
   incomplete operation journal exists; Dashboard reports the blocked state
+- upgraded operation journals to schema v2 with pre-operation snapshots,
+  atomic step persistence, stale process-lock reclamation, and automatic
+  startup rollback in both Tauri and CLI
+- added recovery coverage for canonical import, batch import, adopt, mount,
+  unmount, delete, target registry changes, settings save, and Git sync
+- Git recovery restores only the asset-center branch ref and index through
+  guarded `update-ref`/`read-tree`; unexpected external ref changes fail closed
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
-- persistent pre-operation recovery payloads and automatic startup rollback
 - shared SHA-256 fingerprint migration for non-Git operations
 - removal of remaining legacy Desktop import/mount/provider transport implementations
 
 Next:
 - remove legacy runtimePath and duplicate provider discovery implementations
-- upgrade journal schema with persistent pre-operation recovery payloads, then
-  implement proof-safe automatic startup rollback
+- add crash-point integration coverage to each remaining write workflow while
+  removing the legacy Desktop write transport
 
 ## Progress Update Template
 

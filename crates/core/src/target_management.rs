@@ -1,5 +1,5 @@
 use crate::mount_registry::load as load_mounts;
-use crate::operation::OperationLock;
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::targets::{
     load as load_targets, registry_path, save as save_targets, MountTarget, MountTargetKind,
 };
@@ -123,8 +123,9 @@ pub fn apply_add_target(
     let mut registry = load_targets(home)?;
     registry.targets.push(request.request.target.clone());
     registry.validate()?;
-    let backup_path = backup_registry(home)?;
-    save_targets(home, &registry)?;
+    let (backup_path, mut journal) = save_registry_transaction(home, &registry, "target_add")?;
+    journal.record_step("target_added")?;
+    journal.complete()?;
     Ok(TargetChangeResult {
         preview_id: preview.preview_id,
         operation: "add".into(),
@@ -168,8 +169,9 @@ pub fn apply_remove_target(
         .targets
         .retain(|target| target.id != request.request.target_id);
     registry.validate()?;
-    let backup_path = backup_registry(home)?;
-    save_targets(home, &registry)?;
+    let (backup_path, mut journal) = save_registry_transaction(home, &registry, "target_remove")?;
+    journal.record_step("target_removed")?;
+    journal.complete()?;
     Ok(TargetChangeResult {
         preview_id: preview.preview_id,
         operation: "remove".into(),
@@ -177,6 +179,42 @@ pub fn apply_remove_target(
         registry_path: registry_path(home),
         backup_path,
     })
+}
+
+fn save_registry_transaction(
+    home: &Path,
+    registry: &crate::targets::TargetRegistry,
+    operation_kind: &str,
+) -> Result<(PathBuf, OperationJournal)> {
+    let operation_id = format!(
+        "{}-{}-{}",
+        operation_kind,
+        epoch_nanos(),
+        OPERATION_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let mut journal = OperationJournal::start_recoverable(
+        home,
+        &operation_id,
+        operation_kind,
+        vec![RecoveryTarget::asset_center(registry_path(home))],
+    )?;
+    let result: Result<PathBuf> = (|| {
+        let backup = backup_registry(home)?;
+        save_targets(home, registry)?;
+        Ok(backup)
+    })();
+    match result {
+        Ok(backup) => Ok((backup, journal)),
+        Err(error) => {
+            let original = error.to_string();
+            journal.rollback_now(home).map_err(|rollback| {
+                MaaError::new(format!(
+                    "{original}; persistent target registry rollback failed: {rollback}"
+                ))
+            })?;
+            Err(error)
+        }
+    }
 }
 
 fn preview_add_target_at(

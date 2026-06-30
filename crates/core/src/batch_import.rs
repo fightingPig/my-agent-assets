@@ -203,6 +203,7 @@ fn apply_batch_import_inner(
                     preview_generated_at_epoch_seconds: request.preview_generated_at_epoch_seconds,
                     request: import_request,
                 },
+                None,
             )?;
             journal.record_step(format!("imported:{}", applied.asset_id))?;
             affected.extend(applied.affected_paths.clone());

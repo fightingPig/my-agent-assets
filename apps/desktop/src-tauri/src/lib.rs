@@ -248,6 +248,9 @@ fn canonical_batch_import_apply(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Err(error) = shared_core::startup_recovery_command() {
+        eprintln!("[startup-recovery] {error}");
+    }
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             app_info,

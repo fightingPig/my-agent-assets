@@ -227,16 +227,19 @@ Current behavior:
 
 - **Purpose:** Report incomplete operation journals and whether new writes are blocked.
 - **Input:** None.
-- **Output:** `RecoveryStatus { writesBlocked, journals, message }`.
+- **Output:** `RecoveryStatus { writesBlocked, journals, recentRecoveries, message }`.
 - **Side effect:** Read-only.
 - **Consumer:** Dashboard system status.
 - **Status:** Implemented in shared core and registered.
 
 Every shared-core write acquires the global operation lock. After acquiring the
 lock, it rejects the write when any journal is still `started` or
-`rollback_required`. Read-only commands remain available. Automatic startup
-rollback is not claimed yet because the current journal schema does not persist
-enough pre-operation snapshot metadata for a proof-safe recovery.
+`rollback_required`. Read-only commands remain available. Tauri and CLI startup
+invoke the shared-core recovery routine before normal work. Recoverable schema
+v2 journals retain pre-operation path snapshots and, for Git sync, a guarded
+branch-ref recovery record. Successful rollback is retained with status
+`recovered`; failed or externally changed recovery state remains blocked for
+manual diagnosis.
 
 ### `settings_load`
 

@@ -1,3 +1,4 @@
+use my_agent_assets_core::operation::{OperationJournal, RecoveryTarget};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -235,4 +236,37 @@ fn scan_is_read_only_sync_is_previewed_and_restore_is_disabled() {
     let restore = maa(&home.path, &["restore", "backup-1", "--apply"]);
     assert!(!restore.status.success());
     assert!(String::from_utf8_lossy(&restore.stderr).contains("not supported"));
+}
+
+#[test]
+fn cli_startup_recovers_an_interrupted_transaction_before_reading_status() {
+    let home = TestHome::new();
+    success(&home.path, &["init", "--apply"]);
+    let registry = home.path.join(".my-agent-assets/assets.yaml");
+    let original = fs::read(&registry).unwrap();
+
+    let journal = OperationJournal::start_recoverable(
+        &home.path,
+        "cli-crash-recovery",
+        "test_crash",
+        vec![RecoveryTarget::asset_center(registry.clone())],
+    )
+    .unwrap();
+    drop(journal);
+    fs::write(&registry, "schemaVersion: 1\nassets: broken\n").unwrap();
+
+    let output = maa(&home.path, &["status"]);
+    assert!(
+        output.status.success(),
+        "status failed after recovery: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(fs::read(&registry).unwrap(), original);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("成功回滚 1 个"));
+    let journal_text = fs::read_to_string(
+        home.path
+            .join(".my-agent-assets/operations/cli-crash-recovery.yaml"),
+    )
+    .unwrap();
+    assert!(journal_text.contains("status: recovered"));
 }

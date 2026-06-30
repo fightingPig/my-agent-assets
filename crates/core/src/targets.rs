@@ -964,11 +964,10 @@ mod tests {
             TargetStatus::Ready
         );
         assert!(
-            registry
+            !registry
                 .compatibility("claude-user-skills", AssetKind::Skill)
                 .unwrap()
                 .compatible
-                == false
         );
     }
 

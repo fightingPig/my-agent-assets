@@ -8,7 +8,7 @@ use crate::discovery::{
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
-use crate::operation::OperationLock;
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::{guard_write_path, validate_single_path_component};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -195,12 +195,52 @@ pub(crate) fn preview_import_at(
 
 pub fn apply_import(home: &Path, request: &ImportApplyRequest) -> Result<ImportApplyResult> {
     let _operation_lock = OperationLock::acquire(home)?;
-    apply_import_locked(home, request)
+    let preview = preview_import_at(
+        home,
+        &request.request,
+        request.preview_generated_at_epoch_seconds,
+    )?;
+    if matches!(
+        preview.disposition,
+        ImportDisposition::Skip | ImportDisposition::Unchanged
+    ) || !preview.can_apply
+    {
+        return apply_import_locked(home, request, None);
+    }
+    let operation_id = operation_id();
+    let staging = home.join(".my-agent-assets/operations").join(&operation_id);
+    let mut recovery_targets = vec![
+        RecoveryTarget::asset_center(registry_path(home)),
+        RecoveryTarget::asset_center(preview.destination_path.clone()),
+        RecoveryTarget::asset_center(staging),
+    ];
+    if preview.asset_type == AssetKind::Mcp && preview.disposition == ImportDisposition::Overwrite {
+        recovery_targets.push(RecoveryTarget::asset_center(mount_registry_path(home)));
+    }
+    let mut journal =
+        OperationJournal::start_recoverable(home, &operation_id, "import", recovery_targets)?;
+    match apply_import_locked(home, request, Some(&operation_id)) {
+        Ok(result) => {
+            journal.record_step("import_applied")?;
+            journal.complete()?;
+            Ok(result)
+        }
+        Err(error) => {
+            let original = error.to_string();
+            journal.rollback_now(home).map_err(|rollback| {
+                MaaError::new(format!(
+                    "{original}; persistent import rollback failed: {rollback}"
+                ))
+            })?;
+            Err(error)
+        }
+    }
 }
 
 pub(crate) fn apply_import_locked(
     home: &Path,
     request: &ImportApplyRequest,
+    transaction_operation_id: Option<&str>,
 ) -> Result<ImportApplyResult> {
     if epoch_seconds()
         > request
@@ -262,8 +302,14 @@ pub(crate) fn apply_import_locked(
     } else {
         None
     };
-    let operation_id = operation_id();
-    let staging = root.join("operations").join(&operation_id);
+    let generated_operation_id;
+    let operation_id = if let Some(operation_id) = transaction_operation_id {
+        operation_id
+    } else {
+        generated_operation_id = operation_id();
+        &generated_operation_id
+    };
+    let staging = root.join("operations").join(operation_id);
     let staged_content = staging.join("content");
     let guarded_staging = guard_write_path(&root, &staging)?;
     fs::create_dir_all(&guarded_staging)?;
@@ -273,7 +319,7 @@ pub(crate) fn apply_import_locked(
     let backup_id = if had_destination {
         Some(create_portable_backup(
             home,
-            &operation_id,
+            operation_id,
             &destination,
             &original_registry,
         )?)

@@ -118,12 +118,14 @@ export async function recoveryStatus(): Promise<RecoveryStatus> {
   const fallback: RecoveryStatus = {
     writesBlocked: false,
     journals: [],
+    recentRecoveries: [],
     message: "Tauri runtime is unavailable; recovery status was not checked.",
   };
   const status = await invokeRead<unknown>("recovery_status", undefined, fallback);
   return isRecord(status) &&
     typeof status.writesBlocked === "boolean" &&
-    Array.isArray(status.journals)
+    Array.isArray(status.journals) &&
+    Array.isArray(status.recentRecoveries)
     ? status as RecoveryStatus
     : fallback;
 }

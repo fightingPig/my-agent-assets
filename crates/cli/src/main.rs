@@ -17,7 +17,7 @@ use my_agent_assets_core::mount::{
     MountPreviewRequest, UnmountApplyRequest, UnmountPreviewRequest,
 };
 use my_agent_assets_core::mount_registry::load as load_mounts;
-use my_agent_assets_core::operation::incomplete_journals;
+use my_agent_assets_core::operation::{incomplete_journals, recover_incomplete};
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
     TargetRegistrationApplyRequest, TargetRegistrationPreviewRequest, TargetRemoveApplyRequest,
@@ -54,6 +54,23 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
         .ok_or_else(|| {
             MaaError::new("could not determine home directory; pass --home explicitly")
         })?;
+    match recover_incomplete(&home) {
+        Ok(report) if report.attempted => {
+            let recovered = report
+                .attempts
+                .iter()
+                .filter(|attempt| attempt.recovered)
+                .count();
+            eprintln!("已自动检查未完成事务：成功回滚 {recovered} 个。");
+            if report.writes_blocked {
+                eprintln!("仍有事务未恢复；新的写操作将保持阻止。");
+            }
+        }
+        Ok(_) => {}
+        Err(error) => {
+            eprintln!("启动恢复失败：{error}；只读命令仍可使用，写操作将保持阻止。");
+        }
+    }
     let context = Context::new(home.clone());
     let apply = take_flag(&mut args, "--apply");
     let command = next_arg(&mut args, "command")?;

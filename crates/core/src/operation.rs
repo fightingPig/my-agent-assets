@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const JOURNAL_SCHEMA_VERSION: u32 = 2;
@@ -95,7 +96,6 @@ pub enum JournalStatus {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecoveryAuthority {
     AssetCenter,
-    Home,
     RegisteredTarget { target_id: String },
 }
 
@@ -110,13 +110,6 @@ impl RecoveryTarget {
         Self {
             path: path.into(),
             authority: RecoveryAuthority::AssetCenter,
-        }
-    }
-
-    pub fn home(path: impl Into<PathBuf>) -> Self {
-        Self {
-            path: path.into(),
-            authority: RecoveryAuthority::Home,
         }
     }
 
@@ -144,6 +137,19 @@ pub struct RecoveryEntry {
 pub struct RecoveryPayload {
     pub backup_root: PathBuf,
     pub entries: Vec<RecoveryEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub git_refs: Vec<GitRefRecovery>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRefRecovery {
+    pub repository: PathBuf,
+    pub reference: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_oid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_oid: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,7 +215,19 @@ impl OperationJournal {
         targets: Vec<RecoveryTarget>,
     ) -> Result<Self> {
         validate_operation_id(operation_id)?;
-        let payload = create_recovery_payload(home, operation_id, operation_kind, targets)?;
+        Self::start_recoverable_with_git(home, operation_id, operation_kind, targets, Vec::new())
+    }
+
+    pub fn start_recoverable_with_git(
+        home: &Path,
+        operation_id: &str,
+        operation_kind: &str,
+        targets: Vec<RecoveryTarget>,
+        git_refs: Vec<GitRefRecovery>,
+    ) -> Result<Self> {
+        validate_operation_id(operation_id)?;
+        let payload =
+            create_recovery_payload(home, operation_id, operation_kind, targets, git_refs)?;
         match Self::start_with_payload(home, operation_id, operation_kind, Some(payload.clone())) {
             Ok(journal) => Ok(journal),
             Err(error) => {
@@ -284,6 +302,27 @@ impl OperationJournal {
         self.state.recovered_at_epoch_seconds = Some(epoch_seconds());
         self.persist()?;
         Ok(affected)
+    }
+
+    pub fn set_git_ref_expected(&mut self, reference: &str, expected_oid: &str) -> Result<()> {
+        validate_git_reference(reference)?;
+        validate_git_oid(expected_oid)?;
+        let recovery = self
+            .state
+            .recovery
+            .as_mut()
+            .ok_or_else(|| MaaError::new("operation has no persistent recovery payload"))?;
+        let git_ref = recovery
+            .git_refs
+            .iter_mut()
+            .find(|entry| entry.reference == reference)
+            .ok_or_else(|| {
+                MaaError::new(format!(
+                    "operation recovery payload has no Git ref '{reference}'"
+                ))
+            })?;
+        git_ref.expected_oid = Some(expected_oid.to_string());
+        self.persist()
     }
 
     pub fn path(&self) -> &Path {
@@ -402,6 +441,7 @@ fn create_recovery_payload(
     operation_id: &str,
     operation_kind: &str,
     targets: Vec<RecoveryTarget>,
+    git_refs: Vec<GitRefRecovery>,
 ) -> Result<RecoveryPayload> {
     let asset_center = home.join(".my-agent-assets");
     let backup_root = guard_write_path(
@@ -439,6 +479,9 @@ fn create_recovery_payload(
             backup_path,
         });
     }
+    for git_ref in &git_refs {
+        validate_git_ref_recovery(home, git_ref)?;
+    }
     let affected = entries
         .iter()
         .map(|entry| format!("  - {}", entry.target_path.display()))
@@ -455,6 +498,7 @@ fn create_recovery_payload(
     Ok(RecoveryPayload {
         backup_root,
         entries,
+        git_refs,
     })
 }
 
@@ -481,6 +525,9 @@ fn restore_payload(
             fs::symlink_metadata(backup)?;
         }
     }
+    for git_ref in &payload.git_refs {
+        validate_git_ref_recovery(home, git_ref)?;
+    }
 
     let mut affected = Vec::new();
     for (index, entry) in payload.entries.iter().enumerate().rev() {
@@ -504,16 +551,123 @@ fn restore_payload(
         }
         affected.push(entry.target_path.clone());
     }
+    for git_ref in payload.git_refs.iter().rev() {
+        restore_git_ref(git_ref)?;
+        affected.push(git_ref.repository.clone());
+    }
     Ok(affected)
+}
+
+fn validate_git_ref_recovery(home: &Path, recovery: &GitRefRecovery) -> Result<()> {
+    let expected_repository = home.join(".my-agent-assets");
+    if recovery.repository != expected_repository {
+        return Err(MaaError::new(format!(
+            "Git recovery repository is not the asset center: {}",
+            recovery.repository.display()
+        )));
+    }
+    guard_existing_path(home, &recovery.repository)?;
+    if !recovery.repository.join(".git").is_dir() {
+        return Err(MaaError::new("Git recovery repository is not initialized"));
+    }
+    validate_git_reference(&recovery.reference)?;
+    if let Some(oid) = &recovery.old_oid {
+        validate_git_oid(oid)?;
+    }
+    if let Some(oid) = &recovery.expected_oid {
+        validate_git_oid(oid)?;
+    }
+    Ok(())
+}
+
+fn validate_git_reference(reference: &str) -> Result<()> {
+    let suffix = reference
+        .strip_prefix("refs/heads/")
+        .ok_or_else(|| MaaError::new("Git recovery only supports local branch refs"))?;
+    let valid = !suffix.is_empty()
+        && !suffix.starts_with('-')
+        && !suffix.contains("..")
+        && !suffix.contains("@{")
+        && !suffix.ends_with('.')
+        && !suffix.ends_with('/')
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'/'));
+    if valid {
+        Ok(())
+    } else {
+        Err(MaaError::new(format!(
+            "unsafe Git recovery reference: {reference}"
+        )))
+    }
+}
+
+fn validate_git_oid(oid: &str) -> Result<()> {
+    if (oid.len() == 40 || oid.len() == 64) && oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(MaaError::new("invalid Git recovery object id"))
+    }
+}
+
+fn restore_git_ref(recovery: &GitRefRecovery) -> Result<()> {
+    let current = git_output(
+        &recovery.repository,
+        &["rev-parse", "--verify", &recovery.reference],
+    )
+    .ok();
+    if current == recovery.old_oid {
+        return Ok(());
+    }
+    let expected = recovery.expected_oid.as_deref().ok_or_else(|| {
+        MaaError::new(format!(
+            "Git ref '{}' changed before an expected recovery value was persisted",
+            recovery.reference
+        ))
+    })?;
+    if current.as_deref() != Some(expected) {
+        return Err(MaaError::new(format!(
+            "Git ref '{}' changed outside the interrupted transaction",
+            recovery.reference
+        )));
+    }
+    match &recovery.old_oid {
+        Some(old_oid) => run_git(
+            &recovery.repository,
+            &["update-ref", &recovery.reference, old_oid, expected],
+        )?,
+        None => run_git(
+            &recovery.repository,
+            &["update-ref", "-d", &recovery.reference, expected],
+        )?,
+    }
+    match &recovery.old_oid {
+        Some(old_oid) => run_git(&recovery.repository, &["read-tree", old_oid])?,
+        None => run_git(&recovery.repository, &["read-tree", "--empty"])?,
+    }
+    Ok(())
+}
+
+fn git_output(repository: &Path, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .current_dir(repository)
+        .args(args)
+        .output()
+        .map_err(|error| MaaError::new(format!("cannot run Git recovery command: {error}")))?;
+    if !output.status.success() {
+        return Err(MaaError::new("Git recovery command failed"));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn run_git(repository: &Path, args: &[&str]) -> Result<()> {
+    git_output(repository, args).map(|_| ())
 }
 
 fn validate_recovery_target(home: &Path, path: &Path, authority: &RecoveryAuthority) -> Result<()> {
     match authority {
         RecoveryAuthority::AssetCenter => {
             guard_write_path(&home.join(".my-agent-assets"), path)?;
-        }
-        RecoveryAuthority::Home => {
-            guard_write_path(home, path)?;
         }
         RecoveryAuthority::RegisteredTarget { target_id } => {
             let targets = load_targets(home)?;
@@ -740,6 +894,7 @@ mod tests {
     use super::*;
     use crate::mount_registry::{save as save_mounts, MountRegistry};
     use crate::targets::{save as save_targets, MountAdapter, ProviderState, TargetRegistry};
+    use std::process::Command;
 
     fn home(name: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!(
@@ -765,6 +920,21 @@ mod tests {
         save_targets(&home, &targets).unwrap();
         save_mounts(&home, &MountRegistry::default()).unwrap();
         home
+    }
+
+    fn test_git(repository: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .current_dir(repository)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
     #[test]
@@ -863,6 +1033,56 @@ mod tests {
         assert!(!status.writes_blocked);
         assert_eq!(status.recent_recoveries.len(), 1);
         assert_eq!(status.recent_recoveries[0].status, JournalStatus::Recovered);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn recoverable_journal_restores_asset_center_git_ref_and_index() {
+        let home = home("git-ref");
+        let repository = home.join(".my-agent-assets");
+        test_git(&repository, &["init", "-b", "main"]);
+        test_git(
+            &repository,
+            &["config", "user.email", "test@example.invalid"],
+        );
+        test_git(&repository, &["config", "user.name", "Test"]);
+        let asset = repository.join("assets.yaml");
+        fs::write(&asset, "schemaVersion: 1\nassets: {}\n").unwrap();
+        test_git(&repository, &["add", "assets.yaml"]);
+        test_git(&repository, &["commit", "-m", "initial"]);
+        let old_oid = test_git(&repository, &["rev-parse", "HEAD"]);
+
+        let mut journal = OperationJournal::start_recoverable_with_git(
+            &home,
+            "git-crash",
+            "git-sync",
+            vec![RecoveryTarget::asset_center(asset.clone())],
+            vec![GitRefRecovery {
+                repository: repository.clone(),
+                reference: "refs/heads/main".into(),
+                old_oid: Some(old_oid.clone()),
+                expected_oid: Some(old_oid.clone()),
+            }],
+        )
+        .unwrap();
+        fs::write(&asset, "schemaVersion: 1\nassets: changed\n").unwrap();
+        test_git(&repository, &["add", "assets.yaml"]);
+        test_git(&repository, &["commit", "-m", "changed"]);
+        let changed_oid = test_git(&repository, &["rev-parse", "HEAD"]);
+        journal
+            .set_git_ref_expected("refs/heads/main", &changed_oid)
+            .unwrap();
+        drop(journal);
+
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert_eq!(test_git(&repository, &["rev-parse", "HEAD"]), old_oid);
+        assert_eq!(
+            fs::read_to_string(&asset).unwrap(),
+            "schemaVersion: 1\nassets: {}\n"
+        );
+        assert!(test_git(&repository, &["diff", "--cached", "--quiet"]).is_empty());
         let _ = fs::remove_dir_all(home);
     }
 

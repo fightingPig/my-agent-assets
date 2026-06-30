@@ -10,7 +10,7 @@ use crate::mount::{
     MountPreviewRequest, RuntimeSnapshot,
 };
 use crate::mount_registry::registry_path as mount_registry_path;
-use crate::operation::{OperationJournal, OperationLock};
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::targets::{load as load_targets, MountTarget};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -275,7 +275,30 @@ fn apply_adopt_inner(
     }
 
     let operation_id = operation_id();
-    let mut journal = OperationJournal::start(home, &operation_id, "import_and_adopt")?;
+    let mut recovery_targets = vec![
+        RecoveryTarget::asset_center(asset_registry_path(home)),
+        RecoveryTarget::asset_center(mount_registry_path(home)),
+    ];
+    for item in &preview.items {
+        if item.import_plan.disposition == crate::import::ImportDisposition::Skip {
+            continue;
+        }
+        recovery_targets.push(RecoveryTarget::asset_center(
+            item.import_plan.destination_path.clone(),
+        ));
+        if let (Some(target_id), Some(target_path)) = (&item.target_id, &item.target_path) {
+            recovery_targets.push(RecoveryTarget::registered_target(
+                target_id.clone(),
+                target_path.clone(),
+            ));
+        }
+    }
+    let mut journal = OperationJournal::start_recoverable(
+        home,
+        &operation_id,
+        "import_and_adopt",
+        recovery_targets,
+    )?;
     let assets_before = fs::read(asset_registry_path(home))?;
     let mounts_before = fs::read(mount_registry_path(home))?;
     let mut snapshots = BTreeMap::<PathBuf, RuntimeSnapshot>::new();
@@ -331,6 +354,7 @@ fn apply_adopt_inner(
                     preview_generated_at_epoch_seconds: request.preview_generated_at_epoch_seconds,
                     request: import_request,
                 },
+                None,
             )?;
             journal.record_step(format!("imported:{}", import_result.asset_id))?;
 
@@ -387,16 +411,18 @@ fn apply_adopt_inner(
             if let Err(rollback) = fs::write(mount_registry_path(home), &mounts_before) {
                 rollback_errors.push(format!("mounts.yaml restore failed: {rollback}"));
             }
-            if rollback_errors.is_empty() {
-                let _ = journal.complete();
-                return Err(error);
+            match journal.rollback_now(home) {
+                Ok(_) => return Err(error),
+                Err(persistent_error) => {
+                    rollback_errors.push(format!("persistent recovery failed: {persistent_error}"));
+                    let message = format!(
+                        "{error}; automatic rollback incomplete: {}",
+                        rollback_errors.join("; ")
+                    );
+                    let _ = journal.mark_rollback_required(&message);
+                    return Err(MaaError::new(message));
+                }
             }
-            let message = format!(
-                "{error}; automatic rollback incomplete: {}",
-                rollback_errors.join("; ")
-            );
-            let _ = journal.mark_rollback_required(&message);
-            return Err(MaaError::new(message));
         }
     };
     for snapshot in snapshots.into_values() {

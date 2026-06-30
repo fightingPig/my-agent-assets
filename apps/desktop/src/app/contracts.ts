@@ -256,7 +256,11 @@ export type GitStatus = {
   lastSyncedAt?: string | null;
 };
 
-export type OperationJournalStatus = "started" | "rollback_required" | "completed";
+export type OperationJournalStatus =
+  | "started"
+  | "rollback_required"
+  | "recovered"
+  | "completed";
 
 export type OperationJournalSummary = {
   schemaVersion: number;
@@ -266,11 +270,13 @@ export type OperationJournalSummary = {
   createdAtEpochSeconds: number;
   completedSteps: string[];
   recoveryMessage?: string;
+  recoveredAtEpochSeconds?: number;
 };
 
 export type RecoveryStatus = {
   writesBlocked: boolean;
   journals: OperationJournalSummary[];
+  recentRecoveries: OperationJournalSummary[];
   message: string;
 };
 

@@ -56,6 +56,7 @@ const emptyGitStatus: GitStatus = {
 const healthyRecoveryStatus: RecoveryStatus = {
   writesBlocked: false,
   journals: [],
+  recentRecoveries: [],
   message: "没有未完成事务。",
 };
 

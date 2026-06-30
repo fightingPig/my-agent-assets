@@ -10,7 +10,7 @@ use crate::mount::{
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
-use crate::operation::{OperationJournal, OperationLock};
+use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::targets::load as load_targets;
 use crate::{MaaError, Result};
@@ -218,7 +218,24 @@ fn apply_delete_inner(
     let (kind, name) = parse_asset_id(&request.request.asset_id)
         .map_err(|error| MaaError::new(error.to_string()))?;
     let operation_id = operation_id();
-    let mut journal = OperationJournal::start(home, &operation_id, "delete_asset")?;
+    let root = home.join(".my-agent-assets");
+    let staging = guard_write_path(
+        &root,
+        &root
+            .join("operations")
+            .join(format!("{operation_id}-canonical")),
+    )?;
+    let mut recovery_targets = vec![
+        RecoveryTarget::asset_center(asset_registry_path(home)),
+        RecoveryTarget::asset_center(mount_registry_path(home)),
+        RecoveryTarget::asset_center(preview.canonical_path.clone()),
+        RecoveryTarget::asset_center(staging.clone()),
+    ];
+    recovery_targets.extend(preview.bindings.iter().map(|impact| {
+        RecoveryTarget::registered_target(impact.target_id.clone(), impact.target_path.clone())
+    }));
+    let mut journal =
+        OperationJournal::start_recoverable(home, &operation_id, "delete_asset", recovery_targets)?;
     let original_assets = fs::read(asset_registry_path(home))?;
     let original_mounts = fs::read(mount_registry_path(home))?;
     let portable_backup_id = create_portable_backup(
@@ -244,13 +261,6 @@ fn apply_delete_inner(
         }
     }
 
-    let root = home.join(".my-agent-assets");
-    let staging = guard_write_path(
-        &root,
-        &root
-            .join("operations")
-            .join(format!("{operation_id}-canonical")),
-    )?;
     let mut canonical_moved = false;
     let result = (|| -> Result<(Vec<PathBuf>, crate::asset_registry::AssetRegistry, crate::mount_registry::MountRegistry)> {
         let mut affected = Vec::new();
@@ -298,16 +308,18 @@ fn apply_delete_inner(
                     rollback_errors.push(format!("{} restore failed: {rollback}", path.display()));
                 }
             }
-            if rollback_errors.is_empty() {
-                let _ = journal.complete();
-                return Err(error);
+            match journal.rollback_now(home) {
+                Ok(_) => return Err(error),
+                Err(persistent_error) => {
+                    rollback_errors.push(format!("persistent recovery failed: {persistent_error}"));
+                    let message = format!(
+                        "{error}; automatic rollback incomplete: {}",
+                        rollback_errors.join("; ")
+                    );
+                    let _ = journal.mark_rollback_required(&message);
+                    return Err(MaaError::new(message));
+                }
             }
-            let message = format!(
-                "{error}; automatic rollback incomplete: {}",
-                rollback_errors.join("; ")
-            );
-            let _ = journal.mark_rollback_required(&message);
-            return Err(MaaError::new(message));
         }
     };
 
