@@ -1,10 +1,9 @@
-use super::apply::{import_apply_for_home, mount_apply_for_home, restore_apply_for_home};
+use super::apply::{import_apply_for_home, mount_apply_for_home};
 use super::contracts::{
     ApplyMode, ConflictResolution, ConflictResolutionChoice, ImportApplyInput, MountApplyInput,
-    MountTarget, RestoreApplyInput, RuntimeScope, ScanScope, SettingsSaveInput, SyncApplyInput,
-    SyncDirection,
+    MountTarget, RuntimeScope, ScanScope, SettingsSaveInput, SyncApplyInput, SyncDirection,
 };
-use super::preview::{import_preview_id, mount_preview_id, restore_preview_id, sync_preview_id};
+use super::preview::{import_preview_id, mount_preview_id, sync_preview_id};
 use super::read_only::{git_status_for_home, settings_for_home};
 use super::settings::{settings_load_for_home, settings_save_for_home};
 use super::sync_apply::sync_apply_for_home;
@@ -65,20 +64,16 @@ fn fake_home_write_workflow_stays_isolated_and_sync_plan_only_does_not_mutate_re
     );
     assert!(mount.ok, "{:?}", mount.errors);
 
-    let restore = restore_apply_for_home(
-        home.path(),
-        RestoreApplyInput {
-            preview_id: restore_preview_id(&backup_id),
-            mode: ApplyMode::Apply,
-            backup_id,
-            backup_before_restore: true,
-        },
-    );
-    assert!(restore.ok, "{:?}", restore.errors);
     assert_eq!(
         home.read(".my-agent-assets/assets/commands/deploy.md"),
-        "# Old Deploy"
+        "# New Deploy"
     );
+    assert!(home
+        .asset_center()
+        .join("backups")
+        .join(backup_id)
+        .join("manifest.json")
+        .is_file());
 
     let mut settings = settings_for_home(Some(home.path()));
     settings.max_depth = 9;
@@ -127,7 +122,6 @@ fn fake_home_plan_only_workflow_leaves_entire_home_and_non_target_home_unchanged
         ".my-agent-assets/assets/mcps/PostgreSQL.json",
         r#"{"command":"postgres"}"#,
     );
-    let restore_backup_id = create_restore_fixture(&home);
     setup_git_with_ahead_commit(home.path());
 
     let home_before = snapshot_tree(home.path());
@@ -181,17 +175,6 @@ fn fake_home_plan_only_workflow_leaves_entire_home_and_non_target_home_unchanged
         },
     );
     assert!(mcp_mount.ok, "{:?}", mcp_mount.errors);
-
-    let restore = restore_apply_for_home(
-        home.path(),
-        RestoreApplyInput {
-            preview_id: restore_preview_id(&restore_backup_id),
-            mode: ApplyMode::PlanOnly,
-            backup_id: restore_backup_id,
-            backup_before_restore: true,
-        },
-    );
-    assert!(restore.ok, "{:?}", restore.errors);
 
     let status = git_status_for_home(home.path());
     let sync = sync_apply_for_home(
@@ -271,43 +254,6 @@ fn setup_git_with_ahead_commit(home: &Path) {
     fs::write(repository.join("ahead.txt"), "ahead").expect("ahead file should be written");
     run_git(&repository, &["add", "ahead.txt"]);
     run_git(&repository, &["commit", "-m", "ahead"]);
-}
-
-fn create_restore_fixture(home: &TempHome) -> String {
-    let backup_id = "restore-fixture";
-    home.write(
-        &format!(".my-agent-assets/backups/{backup_id}/files/deploy.md"),
-        "# Previous Deploy",
-    );
-    home.write(
-        &format!(".my-agent-assets/backups/{backup_id}/manifest.json"),
-        &format!(
-            r#"{{
-  "id": "{backup_id}",
-  "label": "Restore fixture",
-  "createdAt": "2026-06-27T00:00:00Z",
-  "runtimeRoot": "{}",
-  "entries": [
-    {{
-      "originalPath": "{}",
-      "backupPath": "{}",
-      "kind": "file",
-      "sizeBytes": 17
-    }}
-  ]
-}}"#,
-            home.path().display(),
-            home.path()
-                .join(".my-agent-assets/assets/commands/deploy.md")
-                .display(),
-            home.path()
-                .join(format!(
-                    ".my-agent-assets/backups/{backup_id}/files/deploy.md"
-                ))
-                .display()
-        ),
-    );
-    backup_id.into()
 }
 
 fn run_git(cwd: &Path, args: &[&str]) {

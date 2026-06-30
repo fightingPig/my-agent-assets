@@ -54,8 +54,8 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 85 tests and desktop 84 tests passed
-- frontend: 84 tests passed
+- Rust workspace: core 84 tests and desktop 71 tests passed
+- frontend: 85 tests passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
@@ -122,16 +122,22 @@ Implemented:
   confirmation; user-level built-in targets remain non-removable in the GUI
 - migrated Asset Detail and Project Detail from frontend-built `runtimePath`
   requests to authorized targetId-only canonical Mount
+- removed historical Restore preview/apply DTOs, implementations, and tests from
+  both the legacy Desktop transport and the old monolithic core; Backup History
+  remains read-only with manual restore guidance
+- added read-only recovery status plus global write blocking whenever an
+  incomplete operation journal exists; Dashboard reports the blocked state
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
-- automatic startup recovery for incomplete operation journals
+- persistent pre-operation recovery payloads and automatic startup rollback
 - shared SHA-256 fingerprint migration for non-Git operations
-- removal of remaining legacy Desktop transport/test implementations
+- removal of remaining legacy Desktop import/mount/provider transport implementations
 
 Next:
-- remove legacy runtimePath, duplicate provider discovery, and historical Restore test implementations
-- implement automatic startup recovery for incomplete operation journals
+- remove legacy runtimePath and duplicate provider discovery implementations
+- upgrade journal schema with persistent pre-operation recovery payloads, then
+  implement proof-safe automatic startup rollback
 
 ## Progress Update Template
 

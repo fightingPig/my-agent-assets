@@ -223,6 +223,21 @@ Current behavior:
 - **Future consumer:** Sync and Dashboard.
 - **Status:** Implemented and registered as read-only.
 
+### `recovery_status`
+
+- **Purpose:** Report incomplete operation journals and whether new writes are blocked.
+- **Input:** None.
+- **Output:** `RecoveryStatus { writesBlocked, journals, message }`.
+- **Side effect:** Read-only.
+- **Consumer:** Dashboard system status.
+- **Status:** Implemented in shared core and registered.
+
+Every shared-core write acquires the global operation lock. After acquiring the
+lock, it rejects the write when any journal is still `started` or
+`rollback_required`. Read-only commands remain available. Automatic startup
+rollback is not claimed yet because the current journal schema does not persist
+enough pre-operation snapshot metadata for a proof-safe recovery.
+
 ### `settings_load`
 
 - **Purpose:** Load desktop configuration for paths, scanning, safety, local Git, appearance, logs, and CLI display.

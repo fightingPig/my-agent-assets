@@ -395,19 +395,6 @@ pub struct BackupManifestSummary {
     pub affected_paths: Vec<String>,
 }
 
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RestorePreview {
-    pub preview_id: String,
-    pub backup: BackupSummary,
-    pub affected_paths: Vec<String>,
-    pub steps: Vec<PlanStep>,
-    pub warnings: Vec<String>,
-    pub backup_before_restore: bool,
-    pub can_apply: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyResult {
@@ -500,13 +487,6 @@ pub struct PreviewConflictsInput {
     pub asset_ids: Vec<String>,
 }
 
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreviewRestoreInput {
-    pub backup_id: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewSyncInput {
@@ -557,16 +537,6 @@ pub struct MountApplyInput {
     pub asset_id: String,
     pub target: MountTarget,
     pub backup_before_apply: bool,
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RestoreApplyInput {
-    pub preview_id: String,
-    pub mode: ApplyMode,
-    pub backup_id: String,
-    pub backup_before_restore: bool,
 }
 
 #[cfg(test)]

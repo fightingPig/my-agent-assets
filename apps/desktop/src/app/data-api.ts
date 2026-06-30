@@ -10,6 +10,7 @@ import type {
   CodexSkillListResult,
   DesktopSettings,
   GitStatus,
+  RecoveryStatus,
   ApplyResult,
   ImportApplyInput,
   ImportPreview,
@@ -111,6 +112,20 @@ export async function listBackups(): Promise<BackupSummary[]> {
 export async function gitStatus(): Promise<GitStatus> {
   const status = await invokeRead<unknown>("git_status", undefined, fallbackGitStatus);
   return isRecord(status) && typeof status.repositoryPath === "string" ? status as GitStatus : fallbackGitStatus;
+}
+
+export async function recoveryStatus(): Promise<RecoveryStatus> {
+  const fallback: RecoveryStatus = {
+    writesBlocked: false,
+    journals: [],
+    message: "Tauri runtime is unavailable; recovery status was not checked.",
+  };
+  const status = await invokeRead<unknown>("recovery_status", undefined, fallback);
+  return isRecord(status) &&
+    typeof status.writesBlocked === "boolean" &&
+    Array.isArray(status.journals)
+    ? status as RecoveryStatus
+    : fallback;
 }
 
 export async function settingsLoad(): Promise<DesktopSettings> {

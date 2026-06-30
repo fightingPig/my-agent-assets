@@ -44,6 +44,11 @@ fn git_status() -> Result<my_agent_assets_core::git_sync::GitStatus, String> {
 }
 
 #[tauri::command]
+fn recovery_status() -> Result<my_agent_assets_core::operation::RecoveryStatus, String> {
+    shared_core::recovery_status_command()
+}
+
+#[tauri::command]
 fn list_assets(input: ListAssetsInput) -> Vec<AssetSummary> {
     read_only::list_assets_command(input)
 }
@@ -249,6 +254,7 @@ pub fn run() {
             settings_load,
             settings_save,
             git_status,
+            recovery_status,
             list_assets,
             list_projects,
             list_backups,

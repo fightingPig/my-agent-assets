@@ -159,7 +159,6 @@ pub enum ActionKind {
     RegisterMount,
     RemoveMount,
     RemoveAsset,
-    RestorePath,
     Check,
 }
 
@@ -174,7 +173,6 @@ impl ActionKind {
             Self::RegisterMount => "register-mount",
             Self::RemoveMount => "remove-mount",
             Self::RemoveAsset => "remove-asset",
-            Self::RestorePath => "restore-path",
             Self::Check => "check",
         }
     }
@@ -926,46 +924,6 @@ pub fn remove_apply(ctx: &Context, name: &str, kind: AssetType) -> Result<Plan> 
     Ok(plan)
 }
 
-pub fn restore_plan(ctx: &Context, backup_id: &str) -> Result<Plan> {
-    let backup_root = backup_root_for(ctx, backup_id)?;
-    let manifest = BackupManifest::load(&backup_root.join("manifest.txt"))?;
-    validate_restore_manifest(ctx, &backup_root, &manifest)?;
-    let mut plan = Plan::new("Restore plan");
-    for entry in manifest.entries {
-        plan.push(PlanItem {
-            kind: ActionKind::RestorePath,
-            asset: None,
-            source: Some(entry.backup),
-            target: Some(entry.original),
-            message: "restore runtime path from backup".to_string(),
-            risk: "high",
-            details: Vec::new(),
-        });
-    }
-    Ok(plan)
-}
-
-pub fn restore_apply(ctx: &Context, backup_id: &str) -> Result<Plan> {
-    let plan = restore_plan(ctx, backup_id)?;
-    let backup_root = backup_root_for(ctx, backup_id)?;
-    let manifest = BackupManifest::load(&backup_root.join("manifest.txt"))?;
-    validate_restore_manifest(ctx, &backup_root, &manifest)?;
-    for entry in manifest.entries {
-        if entry.original.exists() {
-            remove_path(&entry.original)?;
-        }
-        if entry.kind == "dir" {
-            copy_dir_all(&entry.backup, &entry.original)?;
-        } else {
-            if let Some(parent) = entry.original.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::copy(&entry.backup, &entry.original)?;
-        }
-    }
-    Ok(plan)
-}
-
 pub fn sync_command(ctx: &Context, op: &str) -> Result<String> {
     ensure_initialized(ctx)?;
     let args: &[&str] = match op {
@@ -1654,94 +1612,6 @@ impl BackupManifest {
         }
         out
     }
-
-    fn load(path: &Path) -> Result<Self> {
-        let text = fs::read_to_string(path)?;
-        let mut id = String::new();
-        let mut entries = Vec::new();
-        for (idx, line) in text.lines().enumerate() {
-            if let Some(rest) = line.strip_prefix("id|") {
-                id = rest.to_string();
-                continue;
-            }
-            if let Some(rest) = line.strip_prefix("entry|") {
-                let parts: Vec<&str> = rest.split('|').collect();
-                if parts.len() != 3 || !matches!(parts[0], "dir" | "file") {
-                    return Err(MaaError::new(format!(
-                        "malformed backup manifest line {}: {}",
-                        idx + 1,
-                        line
-                    )));
-                }
-                entries.push(BackupEntry {
-                    kind: parts[0].to_string(),
-                    original: PathBuf::from(parts[1]),
-                    backup: PathBuf::from(parts[2]),
-                });
-                continue;
-            }
-            if !line.trim().is_empty() {
-                return Err(MaaError::new(format!(
-                    "malformed backup manifest line {}: {}",
-                    idx + 1,
-                    line
-                )));
-            }
-        }
-        if id.is_empty() {
-            return Err(MaaError::new("backup manifest missing id"));
-        }
-        Ok(Self { id, entries })
-    }
-}
-
-fn backup_root_for(ctx: &Context, backup_id: &str) -> Result<PathBuf> {
-    validate_backup_id(backup_id)?;
-    Ok(ctx.asset_center.join("backups").join(backup_id))
-}
-
-fn validate_backup_id(backup_id: &str) -> Result<()> {
-    if backup_id.is_empty()
-        || backup_id.contains("..")
-        || backup_id
-            .chars()
-            .any(|ch| !(ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'))
-    {
-        return Err(MaaError::new(format!("invalid backup id: {backup_id}")));
-    }
-    Ok(())
-}
-
-fn validate_restore_manifest(
-    ctx: &Context,
-    backup_root: &Path,
-    manifest: &BackupManifest,
-) -> Result<()> {
-    let mut allowed_original_roots = vec![ctx.home.clone()];
-    allowed_original_roots.extend(scan_roots(ctx)?);
-    for entry in &manifest.entries {
-        if !is_within_any(&entry.original, &allowed_original_roots) {
-            return Err(MaaError::new(format!(
-                "restore target is outside allowed runtime roots: {}",
-                entry.original.display()
-            )));
-        }
-        if !is_within(&entry.backup, backup_root) {
-            return Err(MaaError::new(format!(
-                "restore backup path is outside backup root: {}",
-                entry.backup.display()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn is_within_any(path: &Path, roots: &[PathBuf]) -> bool {
-    roots.iter().any(|root| is_within(path, root))
-}
-
-fn is_within(path: &Path, root: &Path) -> bool {
-    path == root || path.starts_with(root)
 }
 
 fn backup_path(path: &Path, backup_root: &Path, manifest: &mut BackupManifest) -> Result<()> {
@@ -2011,37 +1881,6 @@ mod tests {
     fn relative_to_rejects_paths_outside_base() {
         let err = relative_to(Path::new("/tmp/outside"), Path::new("/var/base")).unwrap_err();
         assert!(err.to_string().contains("is not inside"));
-    }
-
-    #[test]
-    fn restore_rejects_path_traversal_backup_ids() {
-        let root = test_dir("restore-traversal");
-        let ctx = Context::new(root.clone());
-        init_apply(&ctx).unwrap();
-        let err = restore_plan(&ctx, "../../bad").unwrap_err();
-        assert!(err.to_string().contains("invalid backup id"));
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn restore_rejects_manifest_paths_outside_allowed_roots() {
-        let root = test_dir("restore-manifest");
-        let ctx = Context::new(root.clone());
-        init_apply(&ctx).unwrap();
-        let backup_root = ctx.asset_center.join("backups/backup-safe");
-        fs::create_dir_all(&backup_root).unwrap();
-        fs::write(backup_root.join("item-0"), "secret").unwrap();
-        fs::write(
-            backup_root.join("manifest.txt"),
-            format!(
-                "id|backup-safe\nentry|file|/tmp/outside-target|{}\n",
-                backup_root.join("item-0").display()
-            ),
-        )
-        .unwrap();
-        let err = restore_plan(&ctx, "backup-safe").unwrap_err();
-        assert!(err.to_string().contains("outside allowed runtime roots"));
-        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

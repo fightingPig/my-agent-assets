@@ -1,6 +1,9 @@
 # Write Safety Contract
 
-This document defines the safety boundary for write/apply commands. `import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are implemented.
+This document defines the safety boundary for write/apply commands. Canonical
+Import, Adopt, Mount, Unmount, Delete, Target Registry, Git Sync, and local
+settings writes are implemented. Historical automatic Restore commands have
+been removed.
 
 ## Scope
 
@@ -9,7 +12,6 @@ Implemented write commands cover:
 - Import apply
 - Conflict apply
 - Mount apply
-- Restore apply
 - Sync apply
 - Settings save
 
@@ -26,7 +28,9 @@ Every apply command must receive a single `input` object containing:
 
 Apply commands must not accept arbitrary frontend paths as sufficient authority to write. The backend must rebuild or validate the plan from trusted state and compare it with the preview identity before writing.
 
-Preview commands return deterministic `previewId` values for import, mount, restore, and sync previews. Apply commands recompute the expected `previewId` from their input and fail before any write when the supplied ID does not match.
+Preview commands return bound `previewId` values for supported write workflows.
+Apply commands recompute the expected identity from trusted state and fail
+before any write when the supplied ID does not match.
 
 `mode` has two wire values:
 
@@ -37,7 +41,7 @@ Preview commands return deterministic `previewId` values for import, mount, rest
 
 All path-bearing inputs are untrusted. Before path construction or filesystem mutation, the backend:
 
-- validates asset IDs and backup IDs as one safe path component
+- validates asset IDs and target IDs as safe path components
 - rejects `/`, `\`, `:`, control characters, leading/trailing whitespace, `.` and `..`
 - rejects `ParentDir` components instead of normalizing them away
 - requires every write target to remain below the resolved fake or real HOME
@@ -45,7 +49,10 @@ All path-bearing inputs are untrusted. Before path construction or filesystem mu
 
 These checks are backend invariants and do not rely on frontend validation.
 
-The desktop UI must not call `mode: "apply"` directly from a primary action. It must first produce a successful preview and plan-only apply result, then require a local typed confirmation of `APPLY`. The backend still owns the final safety check by validating `previewId`.
+The desktop UI must first produce a successful preview and then require an
+ordinary explicit button confirmation. Typed `APPLY` is not required. The
+backend still owns the final safety checks through `previewId`, expiry,
+stale-state validation, locks, backups, journals, and rollback.
 
 ## Required DTOs
 
@@ -59,10 +66,11 @@ The frontend and Rust contract layers define:
 - `ImportApplyInput`
 - `ConflictApplyInput`
 - `MountApplyInput`
-- `RestoreApplyInput`
 - `SyncApplyInput`
 
-`import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save` are registered and use these DTOs.
+Production pages use shared-core canonical contracts. Legacy Desktop
+`import_apply`, `conflict_apply`, and `mount_apply` transports remain only
+during migration and must not receive new consumers.
 
 ## Backup Rule
 
@@ -77,7 +85,8 @@ Backup manifests must record:
 - created time
 - size and entry count
 
-Restore must be possible from the manifest without consulting UI state.
+Backup history must expose enough information for the documented manual restore
+guide. The application does not expose an arbitrary historical Restore command.
 
 ## Write Algorithm
 
@@ -178,17 +187,6 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Existing mount targets are backed up before replacement when `backupBeforeApply` is true
 - MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
 - `planOnly` mode creates no symlink, writes no JSON, and creates no backup
-
-`restore_apply` currently supports fake-HOME-tested restore from backup manifests:
-
-- Manifests are loaded from `~/.my-agent-assets/backups/<backupId>/manifest.json`
-- File, directory, and symlink backup entries can be restored
-- Restore targets must stay under the backend's HOME
-- Backup entry paths must stay under the selected backup directory
-- Manifest IDs and runtime roots must match the selected fake/real HOME context
-- Manifest paths, entry kinds, and restored symlink targets are validated before `planOnly` or apply
-- Current runtime state is backed up before replacement when `backupBeforeRestore` is true
-- `planOnly` mode reads the manifest but restores no files and creates no backup
 
 `settings_save` currently supports fake-HOME-tested settings persistence:
 

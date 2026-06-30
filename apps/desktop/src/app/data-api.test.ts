@@ -52,6 +52,14 @@ describe("read-only desktop data api", () => {
     await api.gitStatus();
     expect(invoke).toHaveBeenLastCalledWith("git_status");
 
+    invoke.mockResolvedValueOnce({
+      writesBlocked: false,
+      journals: [],
+      message: "没有未完成事务。",
+    });
+    await api.recoveryStatus();
+    expect(invoke).toHaveBeenLastCalledWith("recovery_status");
+
     invoke.mockResolvedValueOnce({ assetCenterPath: "~/.my-agent-assets" });
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");

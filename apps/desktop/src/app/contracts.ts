@@ -256,6 +256,24 @@ export type GitStatus = {
   lastSyncedAt?: string | null;
 };
 
+export type OperationJournalStatus = "started" | "rollback_required" | "completed";
+
+export type OperationJournalSummary = {
+  schemaVersion: number;
+  operationId: string;
+  operationKind: string;
+  status: OperationJournalStatus;
+  createdAtEpochSeconds: number;
+  completedSteps: string[];
+  recoveryMessage?: string;
+};
+
+export type RecoveryStatus = {
+  writesBlocked: boolean;
+  journals: OperationJournalSummary[];
+  message: string;
+};
+
 export type SyncPreview = {
   previewId: string;
   direction: SyncDirection;

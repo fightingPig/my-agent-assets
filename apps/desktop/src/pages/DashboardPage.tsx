@@ -9,8 +9,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, listAssets, listProjects } from "../app/data-api";
-import type { AppInfo, AssetSummary, GitStatus, ProjectSummary } from "../app/contracts";
+import { gitStatus, listAssets, listProjects, recoveryStatus } from "../app/data-api";
+import type {
+  AppInfo,
+  AssetSummary,
+  GitStatus,
+  ProjectSummary,
+  RecoveryStatus,
+} from "../app/contracts";
 import {
   projects as demoProjects,
   recentActivity as demoRecentActivity,
@@ -47,10 +53,17 @@ const emptyGitStatus: GitStatus = {
   lastSyncedAt: null,
 };
 
+const healthyRecoveryStatus: RecoveryStatus = {
+  writesBlocked: false,
+  journals: [],
+  message: "没有未完成事务。",
+};
+
 export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps) {
   const [assets, setAssets] = useState<readonly AssetSummary[]>([]);
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
+  const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
   const [stateLabel, setStateLabel] = useState(demoMode ? "Visual QA 示例数据" : "读取中");
 
   useEffect(() => {
@@ -61,12 +74,13 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
 
     let cancelled = false;
     setStateLabel("读取中");
-    Promise.all([listAssets({ assetType: null }), listProjects(), gitStatus()])
-      .then(([loadedAssets, loadedProjects, loadedRepository]) => {
+    Promise.all([listAssets({ assetType: null }), listProjects(), gitStatus(), recoveryStatus()])
+      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery]) => {
         if (cancelled) return;
         setAssets(loadedAssets);
         setProjects(loadedProjects);
         setRepository(loadedRepository);
+        setRecovery(loadedRecovery);
         setStateLabel("只读真实数据");
       })
       .catch((error) => {
@@ -74,6 +88,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         setAssets([]);
         setProjects([]);
         setRepository(emptyGitStatus);
+        setRecovery(healthyRecoveryStatus);
         setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
@@ -107,9 +122,9 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       status: appInfo.backendReady ? "已连接" : "未连接",
     },
     {
-      label: "数据状态",
-      detail: stateLabel,
-      status: stateLabel.startsWith("读取失败") ? "需检查" : "正常",
+      label: "事务恢复",
+      detail: recovery.message,
+      status: recovery.writesBlocked ? "写入已阻止" : "正常",
     },
   ];
 

@@ -26,6 +26,7 @@ use my_agent_assets_core::mount::{
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
     UnmountPreview, UnmountPreviewRequest,
 };
+use my_agent_assets_core::operation::{recovery_status, RecoveryStatus};
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
     TargetChangePreview, TargetChangeResult, TargetRegistrationApplyRequest,
@@ -103,6 +104,12 @@ pub fn list_backup_history_command() -> Result<Vec<BackupHistoryEntry>, String> 
 pub fn git_status_command() -> Result<GitStatus, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; Git status skipped.".to_string())?;
     Ok(git_status(&home))
+}
+
+pub fn recovery_status_command() -> Result<RecoveryStatus, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; recovery status skipped.".to_string())?;
+    recovery_status(&home).map_err(|error| error.to_string())
 }
 
 pub fn sync_preview_command(input: SyncPreviewRequest) -> Result<SyncPreview, String> {

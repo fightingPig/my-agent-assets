@@ -5,17 +5,10 @@ use crate::contracts::{
     ScanScope,
 };
 #[cfg(test)]
-use crate::contracts::{
-    BackupSummary, GitStatus, PreviewRestoreInput, PreviewSyncInput, RestorePreview, SyncDirection,
-    SyncPreview,
-};
-#[cfg(test)]
-use crate::path_utils::display_path;
+use crate::contracts::{GitStatus, PreviewSyncInput, SyncDirection, SyncPreview};
 use crate::path_utils::{
     expand_tilde, guard_existing_path, home_dir, validate_single_path_component,
 };
-#[cfg(test)]
-use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -178,156 +171,6 @@ pub fn preview_conflicts_for_home(
 }
 
 #[cfg(test)]
-pub fn preview_restore(input: PreviewRestoreInput) -> RestorePreview {
-    let preview_id = restore_preview_id(&input.backup_id);
-    let backup = BackupSummary {
-        id: input.backup_id.clone(),
-        label: format!("Restore preview for {}", input.backup_id),
-        created_at: "preview-only".into(),
-        size_bytes: 0,
-        entry_count: 3,
-    };
-    let affected_paths = vec![
-        format!("backups/{}/manifest.json", input.backup_id),
-        "~/.claude/skills/review".into(),
-        "~/workspace/project-a/.mcp.json".into(),
-    ];
-
-    RestorePreview {
-        preview_id,
-        backup,
-        affected_paths,
-        steps: vec![
-            step(
-                "check-backup",
-                PlanStepKind::Check,
-                "校验备份清单",
-                "确认备份 ID 与 manifest 引用。",
-                RiskLevel::None,
-            ),
-            step(
-                "backup-current",
-                PlanStepKind::Backup,
-                "预览当前状态备份",
-                "恢复前将先创建当前状态备份。",
-                RiskLevel::Low,
-            ),
-            step(
-                "preview-restore",
-                PlanStepKind::Restore,
-                "生成恢复影响预览",
-                "仅展示受影响路径，不还原文件。",
-                RiskLevel::High,
-            ),
-        ],
-        warnings: vec!["Preview only: restore is not executed.".into()],
-        backup_before_restore: true,
-        can_apply: !input.backup_id.trim().is_empty(),
-    }
-}
-
-#[cfg(test)]
-pub fn preview_restore_for_home(home: &Path, input: PreviewRestoreInput) -> RestorePreview {
-    if let Err(error) = validate_single_path_component(&input.backup_id, "backup ID") {
-        let mut preview = preview_restore(input);
-        preview.can_apply = false;
-        preview.warnings.push(error);
-        return preview;
-    }
-    let manifest_path = home
-        .join(".my-agent-assets")
-        .join("backups")
-        .join(&input.backup_id)
-        .join("manifest.json");
-    let manifest_path = match guard_existing_path(home, &manifest_path) {
-        Ok(path) => path,
-        Err(error) => {
-            let mut preview = preview_restore(input);
-            preview.can_apply = false;
-            preview.warnings.push(format!(
-                "Could not safely resolve backup manifest {}; using synthetic restore preview: {}",
-                display_path(&manifest_path),
-                error
-            ));
-            return preview;
-        }
-    };
-    let text = match fs::read_to_string(&manifest_path) {
-        Ok(text) => text,
-        Err(error) => {
-            let mut preview = preview_restore(input);
-            preview.warnings.push(format!(
-                "Could not read backup manifest {}; using synthetic restore preview: {}",
-                display_path(&manifest_path),
-                error
-            ));
-            return preview;
-        }
-    };
-    let manifest = match serde_json::from_str::<RestoreManifestPreview>(&text) {
-        Ok(manifest) => manifest,
-        Err(error) => {
-            let mut preview = preview_restore(input);
-            preview.warnings.push(format!(
-                "Could not parse backup manifest {}; using synthetic restore preview: {}",
-                display_path(&manifest_path),
-                error
-            ));
-            return preview;
-        }
-    };
-    let affected_paths = manifest
-        .entries
-        .iter()
-        .map(|entry| entry.original_path.clone())
-        .collect::<Vec<_>>();
-    let size_bytes = manifest
-        .entries
-        .iter()
-        .map(|entry| entry.size_bytes)
-        .sum::<u64>();
-    let entry_count = affected_paths.len() as u32;
-
-    RestorePreview {
-        preview_id: restore_preview_id(&input.backup_id),
-        backup: BackupSummary {
-            id: manifest.id,
-            label: manifest.label,
-            created_at: manifest.created_at,
-            size_bytes,
-            entry_count,
-        },
-        affected_paths,
-        steps: vec![
-            step(
-                "check-backup",
-                PlanStepKind::Check,
-                "校验备份清单",
-                format!("读取 manifest：{}", display_path(&manifest_path)),
-                RiskLevel::None,
-            ),
-            step(
-                "backup-current",
-                PlanStepKind::Backup,
-                "预览当前状态备份",
-                "恢复前将先创建当前状态备份。",
-                RiskLevel::Low,
-            ),
-            step(
-                "preview-restore",
-                PlanStepKind::Restore,
-                "生成恢复影响预览",
-                format!("仅展示 {} 个受影响路径，不还原文件。", entry_count),
-                RiskLevel::High,
-            ),
-        ],
-        warnings: vec!["Preview only: restore is not executed.".into()],
-        backup_before_restore: true,
-        can_apply: entry_count > 0,
-    }
-}
-
-#[cfg(test)]
 pub fn preview_sync(input: PreviewSyncInput, status: GitStatus) -> SyncPreview {
     let preview_id = sync_preview_id(&input.direction, &status);
     let direction_label = match input.direction {
@@ -451,11 +294,6 @@ pub fn mount_preview_id(asset_id: &str, target: &MountTarget) -> String {
 }
 
 #[cfg(test)]
-pub fn restore_preview_id(backup_id: &str) -> String {
-    stable_preview_id("restore", &[backup_id.to_string()])
-}
-
-#[cfg(test)]
 pub fn sync_preview_id(direction: &SyncDirection, status: &GitStatus) -> String {
     stable_preview_id(
         "sync",
@@ -535,24 +373,6 @@ fn invalid_asset_from_id(asset_id: &str, error: &str) -> AssetSummary {
         updated_at: None,
         mount_targets: vec![],
     }
-}
-
-#[cfg(test)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RestoreManifestPreview {
-    id: String,
-    label: String,
-    created_at: String,
-    entries: Vec<RestoreEntryPreview>,
-}
-
-#[cfg(test)]
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RestoreEntryPreview {
-    original_path: String,
-    size_bytes: u64,
 }
 
 fn conflict_from_id(asset_id: &str) -> Result<ConflictPreview, String> {

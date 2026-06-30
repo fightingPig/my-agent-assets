@@ -1,12 +1,10 @@
 use super::contracts::{
     ConflictResolutionChoice, GitStatus, MountTarget, PreviewConflictsInput, PreviewImportInput,
-    PreviewMountInput, PreviewRestoreInput, PreviewSyncInput, RuntimeScope, ScanScope,
-    SyncDirection,
+    PreviewMountInput, PreviewSyncInput, RuntimeScope, ScanScope, SyncDirection,
 };
 use super::preview::{
     import_preview_id, preview_conflicts, preview_conflicts_for_home, preview_import,
-    preview_mount, preview_restore, preview_restore_for_home, preview_sync, restore_preview_id,
-    sync_preview_id,
+    preview_mount, preview_sync, sync_preview_id,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -235,90 +233,6 @@ fn preview_conflicts_reads_exact_mcp_json_and_omits_identical_content_without_wr
     assert!(conflicts[0].existing_content.contains("\"existing\""));
     assert!(conflicts[0].incoming_content.contains("\"incoming\""));
     assert!(!conflicts[0].existing_content.contains("\"incoming\""));
-}
-
-#[test]
-fn preview_restore_returns_impact_without_writes() {
-    let probe = TempProbe::new("restore");
-    let before = probe.snapshot();
-    let preview = preview_restore(PreviewRestoreInput {
-        backup_id: "backup-20260621-1842".into(),
-    });
-
-    assert_eq!(probe.snapshot(), before);
-    assert_eq!(preview.backup.id, "backup-20260621-1842");
-    assert_eq!(preview.affected_paths.len(), 3);
-    assert!(preview.backup_before_restore);
-    assert!(preview.can_apply);
-    assert_eq!(preview.steps.len(), 3);
-    assert_eq!(
-        preview.preview_id,
-        restore_preview_id("backup-20260621-1842")
-    );
-}
-
-#[test]
-fn preview_restore_reads_manifest_paths_without_restoring_files() {
-    let home = TempProbe::new("restore-manifest");
-    fs::create_dir_all(home.path.join(".my-agent-assets/backups/backup-real"))
-        .expect("backup directory should be created");
-    fs::write(
-        home.path
-            .join(".my-agent-assets/backups/backup-real/manifest.json"),
-        r#"{
-  "id": "backup-real",
-  "label": "Real manifest backup",
-  "createdAt": "2026-06-27T12:00:00Z",
-  "runtimeRoot": "/tmp/fake-home",
-  "entries": [
-    { "originalPath": "/tmp/fake-home/.claude/skills/review", "backupPath": "files/review", "kind": "file", "sizeBytes": 128 },
-    { "originalPath": "/tmp/fake-home/workspace/project-a/.mcp.json", "backupPath": "files/.mcp.json", "kind": "file", "sizeBytes": 64 }
-  ]
-}"#,
-    )
-    .expect("manifest should be written");
-    let before = home.snapshot();
-
-    let preview = preview_restore_for_home(
-        &home.path,
-        PreviewRestoreInput {
-            backup_id: "backup-real".into(),
-        },
-    );
-
-    assert_eq!(home.snapshot(), before);
-    assert_eq!(preview.backup.id, "backup-real");
-    assert_eq!(preview.backup.label, "Real manifest backup");
-    assert_eq!(preview.backup.entry_count, 2);
-    assert_eq!(preview.backup.size_bytes, 192);
-    assert_eq!(
-        preview.affected_paths,
-        vec![
-            "/tmp/fake-home/.claude/skills/review",
-            "/tmp/fake-home/workspace/project-a/.mcp.json"
-        ]
-    );
-    assert!(preview.can_apply);
-    assert!(preview.warnings[0].contains("Preview only"));
-    assert!(preview.preview_id.starts_with("preview:restore:"));
-}
-
-#[test]
-fn preview_restore_rejects_unsafe_backup_id_without_path_traversal() {
-    let home = TempProbe::new("restore-unsafe-id");
-    let preview = preview_restore_for_home(
-        &home.path,
-        PreviewRestoreInput {
-            backup_id: "../outside".into(),
-        },
-    );
-
-    assert!(!preview.can_apply);
-    assert!(preview
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("safe path component")));
-    assert!(!home.path.join(".my-agent-assets").exists());
 }
 
 #[test]

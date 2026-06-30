@@ -34,7 +34,19 @@ impl OperationLock {
             epoch_seconds()
         )?;
         file.sync_all()?;
-        Ok(Self { path })
+        let lock = Self { path };
+        let incomplete = incomplete_journals(home)?;
+        if !incomplete.is_empty() {
+            let ids = incomplete
+                .iter()
+                .map(|journal| journal.operation_id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(MaaError::new(format!(
+                "new writes are blocked by incomplete operation journal(s): {ids}; run recovery diagnostics before retrying"
+            )));
+        }
+        Ok(lock)
     }
 }
 
@@ -66,6 +78,14 @@ pub struct JournalFile {
     pub completed_steps: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovery_message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryStatus {
+    pub writes_blocked: bool,
+    pub journals: Vec<JournalFile>,
+    pub message: String,
 }
 
 pub struct OperationJournal {
@@ -147,6 +167,24 @@ pub fn incomplete_journals(home: &Path) -> Result<Vec<JournalFile>> {
     Ok(journals)
 }
 
+pub fn recovery_status(home: &Path) -> Result<RecoveryStatus> {
+    let journals = incomplete_journals(home)?;
+    let writes_blocked = !journals.is_empty();
+    let message = if writes_blocked {
+        format!(
+            "检测到 {} 个未完成事务；新的写操作已阻止，等待安全恢复。",
+            journals.len()
+        )
+    } else {
+        "没有未完成事务。".to_string()
+    };
+    Ok(RecoveryStatus {
+        writes_blocked,
+        journals,
+        message,
+    })
+}
+
 fn epoch_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -184,6 +222,33 @@ mod tests {
 
         drop(lock);
         assert!(OperationLock::acquire(&home).is_ok());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn incomplete_journal_blocks_new_writes_but_remains_readable() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-operation-blocked-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        let journal = OperationJournal::start(&home, "interrupted-1", "mount").unwrap();
+        let incomplete = incomplete_journals(&home).unwrap();
+        assert_eq!(incomplete.len(), 1);
+        assert_eq!(incomplete[0].operation_id, "interrupted-1");
+        let status = recovery_status(&home).unwrap();
+        assert!(status.writes_blocked);
+        assert_eq!(status.journals.len(), 1);
+
+        let error = OperationLock::acquire(&home).unwrap_err();
+        assert!(error.to_string().contains("new writes are blocked"));
+        assert!(error.to_string().contains("interrupted-1"));
+        assert!(!home.join(".my-agent-assets/locks/global.lock").exists());
+
+        drop(journal);
         let _ = fs::remove_dir_all(home);
     }
 }
