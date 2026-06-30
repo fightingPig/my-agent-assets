@@ -134,16 +134,22 @@ Implemented:
   unmount, delete, target registry changes, settings save, and Git sync
 - Git recovery restores only the asset-center branch ref and index through
   guarded `update-ref`/`read-tree`; unexpected external ref changes fail closed
+- removed the Desktop-only apply/preview implementations and their legacy
+  Tauri commands; production Scan, Conflict, and Mount workflows now call
+  shared-core discovery, batch import, target registry, and mount services
+- migrated Codex Asset Center provider views from a Desktop-only parser to the
+  shared-core runtime discovery adapter
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
 - shared SHA-256 fingerprint migration for non-Git operations
-- removal of remaining legacy Desktop import/mount/provider transport implementations
+- migration of the remaining Desktop list-assets/list-projects read models to
+  shared-core query services
 
 Next:
-- remove legacy runtimePath and duplicate provider discovery implementations
-- add crash-point integration coverage to each remaining write workflow while
-  removing the legacy Desktop write transport
+- add shared-core list-assets/list-projects query DTOs and remove the remaining
+  Desktop filesystem projection
+- add crash-point integration coverage to each remaining write workflow
 
 ## Progress Update Template
 

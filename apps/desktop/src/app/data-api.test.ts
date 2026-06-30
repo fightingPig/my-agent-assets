@@ -70,62 +70,10 @@ describe("read-only desktop data api", () => {
       input: { settings: savedSettings },
     });
 
-    invoke.mockResolvedValueOnce({ assets: [] });
-    await api.scanAssets({ scope: { kind: "custom", path: "~/workspace/project-a" } });
-    expect(invoke).toHaveBeenLastCalledWith("scan_assets", {
-      input: { scope: { kind: "custom", path: "~/workspace/project-a" } },
-    });
-
-    invoke.mockResolvedValueOnce({ skills: [], warnings: [] });
-    await api.listCodexSkills({ projectPath: "/tmp/project" });
-    expect(invoke).toHaveBeenLastCalledWith("list_codex_skills", {
-      input: { projectPath: "/tmp/project" },
-    });
-
-    invoke.mockResolvedValueOnce({ servers: [], warnings: [] });
-    await api.listCodexMcpServers({ projectPath: null });
-    expect(invoke).toHaveBeenLastCalledWith("list_codex_mcp_servers", {
-      input: { projectPath: null },
-    });
   });
 
   it("calls preview-only command names with the expected input envelope", async () => {
     const api = await import("./data-api");
-
-    invoke.mockResolvedValueOnce({ assets: [], conflicts: [], steps: [] });
-    await api.previewImport({
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [],
-    });
-    expect(invoke).toHaveBeenLastCalledWith("preview_import", {
-      input: { scope: { kind: "user" }, assetIds: ["skill:review"], conflictResolutions: [] },
-    });
-
-    invoke.mockResolvedValueOnce({
-      asset: {},
-      target: {},
-      steps: [],
-      warnings: [],
-      backupRequired: true,
-      canApply: true,
-    });
-    await api.previewMount({
-      assetId: "skill:review",
-      target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
-    });
-    expect(invoke).toHaveBeenLastCalledWith("preview_mount", {
-      input: {
-        assetId: "skill:review",
-        target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
-      },
-    });
-
-    invoke.mockResolvedValueOnce([]);
-    await api.previewConflicts({ scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] });
-    expect(invoke).toHaveBeenLastCalledWith("preview_conflicts", {
-      input: { scope: { kind: "user" }, assetIds: ["mcp:PostgreSQL"] },
-    });
 
     invoke.mockResolvedValueOnce({
       previewId: "sync-1",
@@ -396,109 +344,6 @@ describe("read-only desktop data api", () => {
     });
   });
 
-  it("calls apply command names with the expected input envelope", async () => {
-    const api = await import("./data-api");
-
-    invoke.mockResolvedValueOnce({
-      mode: "planOnly",
-      ok: true,
-      previewId: "preview-import-1",
-      backup: null,
-      steps: [],
-      warnings: [],
-      errors: [],
-    });
-    await api.importApply({
-      previewId: "preview-import-1",
-      mode: "planOnly",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [],
-      backupBeforeApply: true,
-    });
-    expect(invoke).toHaveBeenLastCalledWith("import_apply", {
-      input: {
-        previewId: "preview-import-1",
-        mode: "planOnly",
-        scope: { kind: "user" },
-        assetIds: ["skill:review"],
-        conflictResolutions: [],
-        backupBeforeApply: true,
-      },
-    });
-
-    invoke.mockResolvedValueOnce({
-      mode: "planOnly",
-      ok: true,
-      previewId: "preview-conflict-1",
-      backup: null,
-      steps: [],
-      warnings: [],
-      errors: [],
-    });
-    await api.conflictApply({
-      previewId: "preview-conflict-1",
-      mode: "planOnly",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [{
-        conflictId: "conflict:skill:review",
-        resolution: "overwrite",
-        renameTo: null,
-      }],
-      backupBeforeApply: true,
-    });
-    expect(invoke).toHaveBeenLastCalledWith("conflict_apply", {
-      input: {
-        previewId: "preview-conflict-1",
-        mode: "planOnly",
-        scope: { kind: "user" },
-        assetIds: ["skill:review"],
-        conflictResolutions: [{
-          conflictId: "conflict:skill:review",
-          resolution: "overwrite",
-          renameTo: null,
-        }],
-        backupBeforeApply: true,
-      },
-    });
-
-    invoke.mockResolvedValueOnce({
-      mode: "planOnly",
-      ok: true,
-      previewId: "preview-mount-1",
-      backup: null,
-      steps: [],
-      warnings: [],
-      errors: [],
-    });
-    await api.mountApply({
-      previewId: "preview-mount-1",
-      mode: "planOnly",
-      assetId: "skill:review",
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
-      },
-      backupBeforeApply: true,
-    });
-    expect(invoke).toHaveBeenLastCalledWith("mount_apply", {
-      input: {
-        previewId: "preview-mount-1",
-        mode: "planOnly",
-        assetId: "skill:review",
-        target: {
-          scope: "project",
-          runtimePath: "~/workspace/project-a/.claude/skills/review",
-          projectPath: "~/workspace/project-a",
-        },
-        backupBeforeApply: true,
-      },
-    });
-
-  });
-
   it("returns safe fallbacks outside Tauri", async () => {
     const api = await import("./data-api");
     isTauriRuntime.mockReturnValue(false);
@@ -515,21 +360,6 @@ describe("read-only desktop data api", () => {
       isRepository: false,
       statusMessage: "Tauri runtime is unavailable.",
     });
-    await expect(api.scanAssets({ scope: { kind: "user" } })).resolves.toMatchObject({
-      counts: { total: 0, skills: 0, commands: 0, mcps: 0 },
-      warnings: ["Tauri runtime is unavailable; scan skipped."],
-    });
-    await expect(api.listCodexSkills()).resolves.toEqual({ skills: [], warnings: [] });
-    await expect(api.listCodexMcpServers()).resolves.toEqual({ servers: [], warnings: [] });
-    await expect(api.previewConflicts({ scope: { kind: "user" }, assetIds: [] })).resolves.toEqual([]);
-    await expect(api.previewMount({
-      assetId: "skill:review",
-      target: { scope: "user", runtimePath: "~/.claude/skills/review", projectPath: null },
-    })).resolves.toBeNull();
-    await expect(api.previewImport({ scope: { kind: "user" }, assetIds: [], conflictResolutions: [] })).resolves.toMatchObject({
-      canApply: false,
-      warnings: ["Tauri runtime is unavailable; import preview skipped."],
-    });
     await expect(api.previewSync({ direction: "push" })).resolves.toMatchObject({
       direction: "push",
       canApply: false,
@@ -540,51 +370,6 @@ describe("read-only desktop data api", () => {
       previewGeneratedAtEpochSeconds: 100,
       request: { direction: "push" },
     })).rejects.toThrow("requires the Tauri runtime");
-    await expect(api.importApply({
-      previewId: "preview-import-1",
-      mode: "apply",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [],
-      backupBeforeApply: true,
-    })).resolves.toMatchObject({
-      ok: false,
-      previewId: "preview-import-1",
-      warnings: ["Tauri runtime is unavailable; import apply skipped."],
-      errors: ["import_apply could not run outside the Tauri runtime."],
-    });
-    await expect(api.conflictApply({
-      previewId: "preview-conflict-1",
-      mode: "apply",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [{
-        conflictId: "conflict:skill:review",
-        resolution: "overwrite",
-        renameTo: null,
-      }],
-      backupBeforeApply: true,
-    })).resolves.toMatchObject({
-      ok: false,
-      previewId: "preview-conflict-1",
-      errors: ["conflict_apply could not run outside the Tauri runtime."],
-    });
-    await expect(api.mountApply({
-      previewId: "preview-mount-1",
-      mode: "apply",
-      assetId: "skill:review",
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
-      },
-      backupBeforeApply: true,
-    })).resolves.toMatchObject({
-      ok: false,
-      previewId: "preview-mount-1",
-      warnings: ["Tauri runtime is unavailable; mount apply skipped."],
-      errors: ["mount_apply could not run outside the Tauri runtime."],
-    });
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -594,8 +379,6 @@ describe("read-only desktop data api", () => {
 
     await expect(api.listAssets()).rejects.toThrow("command unavailable");
     await expect(api.gitStatus()).rejects.toThrow("command unavailable");
-    await expect(api.listCodexSkills()).rejects.toThrow("command unavailable");
-    await expect(api.listCodexMcpServers()).rejects.toThrow("command unavailable");
     await expect(api.settingsSave({ settings: savedSettings })).rejects.toThrow("command unavailable");
   });
 });

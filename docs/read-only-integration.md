@@ -4,6 +4,10 @@
 >
 > The final model uses **one canonical asset center, multiple runtime sources, and multiple compatible mount targets**. Codex-compatible Skills and MCP servers will support discovery, import into the shared canonical asset center, and compatible user/project mounting. Codex Commands, Command targets, and Codex OAuth token management remain prohibited. Final confirmation, backup, Restore, Git, and apply semantics are defined by `docs/final-product-model.md` and `my_agent_assets_final_goal.md`.
 >
+> The prototype `scan_assets`, `list_codex_skills`, and
+> `list_codex_mcp_servers` commands have since been removed. Production source
+> discovery uses shared-core `discover_runtime_sources`.
+>
 > The implementation details below are retained as historical evidence and may describe behavior that later work must replace.
 
 # Read-only And Preview-only Integration

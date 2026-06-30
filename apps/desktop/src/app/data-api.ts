@@ -3,27 +3,12 @@ import { isTauriRuntime } from "../lib/platform";
 import type {
   AssetSummary,
   BackupSummary,
-  ConflictPreview,
-  ConflictApplyInput,
-  CodexDiscoveryInput,
-  CodexMcpListResult,
-  CodexSkillListResult,
   DesktopSettings,
   GitStatus,
   RecoveryStatus,
-  ApplyResult,
-  ImportApplyInput,
-  ImportPreview,
   ListAssetsInput,
-  MountApplyInput,
-  MountPreview,
-  PreviewConflictsInput,
-  PreviewImportInput,
-  PreviewMountInput,
   PreviewSyncInput,
   ProjectSummary,
-  ScanAssetsInput,
-  ScanResult,
   SettingsSaveInput,
   SyncApplyInput,
   SyncApplyResult,
@@ -142,19 +127,6 @@ export async function settingsSave(input: SettingsSaveInput): Promise<DesktopSet
     throw new Error("settings_save returned an invalid response.");
   }
   return settings as DesktopSettings;
-}
-
-export async function scanAssets(input: ScanAssetsInput): Promise<ScanResult> {
-  const fallback = {
-    scope: input.scope,
-    scannedAt: new Date(0).toISOString(),
-    assets: [],
-    counts: { total: 0, skills: 0, commands: 0, mcps: 0 },
-    conflictCount: 0,
-    warnings: ["Tauri runtime is unavailable; scan skipped."],
-  };
-  const result = await invokeRead<unknown>("scan_assets", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.assets) && isRecord(result.counts) ? result as ScanResult : fallback;
 }
 
 export async function discoverRuntimeSources(
@@ -473,54 +445,6 @@ export async function canonicalBatchImportApply(
   return result as BatchImportApplyResult;
 }
 
-export async function listCodexSkills(
-  input: CodexDiscoveryInput = { projectPath: null },
-): Promise<CodexSkillListResult> {
-  const fallback: CodexSkillListResult = { skills: [], warnings: [] };
-  const result = await invokeRead<unknown>("list_codex_skills", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.skills) && Array.isArray(result.warnings)
-    ? result as CodexSkillListResult
-    : fallback;
-}
-
-export async function listCodexMcpServers(
-  input: CodexDiscoveryInput = { projectPath: null },
-): Promise<CodexMcpListResult> {
-  const fallback: CodexMcpListResult = { servers: [], warnings: [] };
-  const result = await invokeRead<unknown>("list_codex_mcp_servers", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.servers) && Array.isArray(result.warnings)
-    ? result as CodexMcpListResult
-    : fallback;
-}
-
-export async function previewImport(input: PreviewImportInput): Promise<ImportPreview> {
-  const fallback: ImportPreview = {
-    previewId: "preview:import:unavailable",
-    scope: input.scope,
-    assets: [],
-    conflicts: [],
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; import preview skipped."],
-    canApply: false,
-  };
-  const result = await invokeOrFallback<unknown>("preview_import", { input }, fallback);
-  return isRecord(result) && typeof result.previewId === "string" && Array.isArray(result.steps) && Array.isArray(result.assets)
-    ? result as ImportPreview
-    : fallback;
-}
-
-export async function previewMount(input: PreviewMountInput): Promise<MountPreview | null> {
-  const result = await invokeOrFallback<unknown>("preview_mount", { input }, null);
-  return isRecord(result) && typeof result.previewId === "string" && isRecord(result.asset) && isRecord(result.target) && Array.isArray(result.steps)
-    ? result as MountPreview
-    : null;
-}
-
-export async function previewConflicts(input: PreviewConflictsInput): Promise<ConflictPreview[]> {
-  const result = await invokeOrFallback<unknown>("preview_conflicts", { input }, []);
-  return Array.isArray(result) ? result as ConflictPreview[] : [];
-}
-
 export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview> {
   const fallback: SyncPreview = {
     previewId: `preview:sync:${input.direction}`,
@@ -553,54 +477,6 @@ export async function syncApply(input: SyncApplyInput): Promise<SyncApplyResult>
     throw new Error("sync_apply returned an invalid response.");
   }
   return result as SyncApplyResult;
-}
-
-export async function importApply(input: ImportApplyInput): Promise<ApplyResult> {
-  const fallback: ApplyResult = {
-    mode: input.mode,
-    ok: false,
-    previewId: input.previewId,
-    backup: null,
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; import apply skipped."],
-    errors: ["import_apply could not run outside the Tauri runtime."],
-  };
-  const result = await invokeOrFallback<unknown>("import_apply", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
-    ? result as ApplyResult
-    : fallback;
-}
-
-export async function conflictApply(input: ConflictApplyInput): Promise<ApplyResult> {
-  const fallback: ApplyResult = {
-    mode: input.mode,
-    ok: false,
-    previewId: input.previewId,
-    backup: null,
-    steps: [],
-    warnings: [],
-    errors: ["conflict_apply could not run outside the Tauri runtime."],
-  };
-  const result = await invokeOrFallback<unknown>("conflict_apply", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
-    ? result as ApplyResult
-    : fallback;
-}
-
-export async function mountApply(input: MountApplyInput): Promise<ApplyResult> {
-  const fallback: ApplyResult = {
-    mode: input.mode,
-    ok: false,
-    previewId: input.previewId,
-    backup: null,
-    steps: [],
-    warnings: ["Tauri runtime is unavailable; mount apply skipped."],
-    errors: ["mount_apply could not run outside the Tauri runtime."],
-  };
-  const result = await invokeOrFallback<unknown>("mount_apply", { input }, fallback);
-  return isRecord(result) && Array.isArray(result.steps) && Array.isArray(result.errors)
-    ? result as ApplyResult
-    : fallback;
 }
 
 async function invokeOrFallback<T>(

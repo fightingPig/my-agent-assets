@@ -1,7 +1,7 @@
 import { Blocks } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listAssets, listCodexMcpServers } from "../app/data-api";
-import type { AssetSummary, CodexMcpServerSummary } from "../app/contracts";
+import { discoverRuntimeSources, listAssets } from "../app/data-api";
+import type { AssetSummary, DiscoveredRuntimeSource } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import type { AssetProvider } from "../app/provider";
 import {
@@ -123,7 +123,9 @@ export function McpServersListPage({
     setItems([]);
     setStateLabel("读取中");
     const request = provider === "codex"
-      ? listCodexMcpServers({ projectPath: null }).then((result) => result.servers.map(toCodexMcpItem))
+      ? discoverRuntimeSources({ kind: "user" }).then((result) => result.sources
+        .filter((source) => source.provider === "codex" && source.assetKind === "mcp")
+        .map(toCodexMcpItem))
       : listAssets({ assetType: "mcp" }).then((assets) => assets.map(toMcpItem));
     request
       .then((assets) => {
@@ -171,42 +173,37 @@ export function McpServersListPage({
   );
 }
 
-function toCodexMcpItem(server: CodexMcpServerSummary): McpItem {
-  const tools = [...server.enabledTools, ...server.disabledTools.map((tool) => `禁用: ${tool}`)];
+function toCodexMcpItem(server: DiscoveredRuntimeSource): McpItem {
+  const features = [
+    server.sourceFormat,
+    server.eligibleImport ? "可导入" : null,
+    server.isManaged ? "已管理" : null,
+  ].filter((value): value is string => Boolean(value));
   const preview = [
-    `[mcp_servers.${server.name}]`,
-    server.command ? `command = ${JSON.stringify(server.command)}` : null,
-    server.args.length > 0 ? `args = ${JSON.stringify(server.args)}` : null,
-    server.url ? `url = ${JSON.stringify(server.url)}` : null,
-    `enabled = ${server.enabled}`,
-    server.approvalMode ? `approval = ${JSON.stringify(server.approvalMode)}` : null,
+    `[mcp_servers.${server.assetName}]`,
+    `# source = ${JSON.stringify(server.configPath ?? server.sourcePath)}`,
+    `# format = ${JSON.stringify(server.sourceFormat)}`,
     ...server.warnings.map((warning) => `# warning: ${warning}`),
   ].filter((line): line is string => Boolean(line)).join("\n");
 
   return {
-    id: `${server.scope}:${server.name}:${server.configPath}`,
-    name: server.name,
-    title: server.name,
+    id: server.sourceId,
+    name: server.assetName,
+    title: server.assetName,
     category: "Codex MCP Server",
     updated: "本地配置",
-    mounts: tools,
-    summary: server.url || server.command || "Codex MCP 配置",
-    status: server.warnings.length > 0 ? "需要检查" : server.enabled ? "已启用" : "未启用",
-    statusTone: server.warnings.length > 0 ? "warning" : server.enabled ? "success" : "neutral",
-    scope: server.scope === "global" ? "全局" : "项目级",
-    path: server.configPath,
+    mounts: features,
+    summary: "Shared core 发现的 Codex MCP 配置",
+    status: server.warnings.length > 0 ? "需要检查" : "已发现",
+    statusTone: server.warnings.length > 0 ? "warning" : "success",
+    scope: server.scope === "user" ? "用户级" : server.scope === "project" ? "项目级" : "自定义",
+    path: server.configPath ?? server.sourcePath,
     icon: Blocks,
-    transport: server.transport === "streamableHttp" ? "streamable HTTP" : server.transport,
-    source: server.scope === "global" ? "全局 Codex 配置" : "项目 Codex 配置",
-    capabilities: tools.length > 0 ? tools : ["未声明工具约束"],
+    transport: server.sourceFormat,
+    source: "Codex 配置",
+    capabilities: features,
     preview,
-    searchTerms: [
-      server.transport,
-      server.command ?? "",
-      server.url ?? "",
-      server.approvalMode ?? "",
-      ...server.warnings,
-    ],
+    searchTerms: [server.sourceFormat, ...server.warnings],
   };
 }
 

@@ -1,5 +1,11 @@
 # Preview-only Workflows v1
 
+> **Superseded transport:** The Desktop-only `preview_import`,
+> `preview_mount`, and `preview_conflicts` commands below have been removed.
+> Production uses shared-core `canonical_import_preview`,
+> `canonical_batch_import_preview`, `canonical_mount_preview`,
+> `preview_adopt`, and `preview_sync`.
+
 This milestone adds registered Tauri commands for safe workflow previews:
 
 - `preview_import`

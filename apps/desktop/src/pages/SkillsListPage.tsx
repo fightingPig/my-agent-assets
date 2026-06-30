@@ -1,7 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listAssets, listCodexSkills } from "../app/data-api";
-import type { AssetSummary, CodexSkillSummary } from "../app/contracts";
+import { discoverRuntimeSources, listAssets } from "../app/data-api";
+import type { AssetSummary, DiscoveredRuntimeSource } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import type { AssetProvider } from "../app/provider";
 import {
@@ -106,7 +106,9 @@ export function SkillsListPage({
     setItems([]);
     setStateLabel("读取中");
     const request = provider === "codex"
-      ? listCodexSkills({ projectPath: null }).then((result) => result.skills.map(toCodexSkillItem))
+      ? discoverRuntimeSources({ kind: "user" }).then((result) => result.sources
+        .filter((source) => source.provider === "codex" && source.assetKind === "skill")
+        .map(toCodexSkillItem))
       : listAssets({ assetType: "skill" }).then((assets) => assets.map(toSkillItem));
     request
       .then((assets) => {
@@ -147,12 +149,11 @@ export function SkillsListPage({
   );
 }
 
-function toCodexSkillItem(skill: CodexSkillSummary): SkillItem {
+function toCodexSkillItem(skill: DiscoveredRuntimeSource): SkillItem {
   const features = [
-    skill.hasScripts ? "scripts/" : null,
-    skill.hasReferences ? "references/" : null,
-    skill.hasAssets ? "assets/" : null,
-    skill.hasOpenaiMetadata ? "agents/openai.yaml" : null,
+    skill.sourceFormat,
+    skill.isSymlink ? "symlink" : null,
+    skill.eligibleImport ? "可导入" : null,
   ].filter((value): value is string => Boolean(value));
   const warningText = skill.warnings.length > 0
     ? `\n\nWarnings:\n${skill.warnings.map((warning) => `- ${warning}`).join("\n")}`
@@ -160,19 +161,19 @@ function toCodexSkillItem(skill: CodexSkillSummary): SkillItem {
   const symlinkText = skill.symlinkTarget ? `\n\nSymlink target: ${skill.symlinkTarget}` : "";
 
   return {
-    id: `${skill.scope}:${skill.name}:${skill.path}`,
-    name: skill.name,
-    title: skill.name,
+    id: skill.sourceId,
+    name: skill.assetName,
+    title: skill.assetName,
     category: "Codex Skill",
-    summary: skill.description || "本地 Codex Skill",
+    summary: "Shared core 发现的本地 Codex Skill",
     status: skill.warnings.length > 0 ? "需要检查" : "已发现",
     statusTone: skill.warnings.length > 0 ? "warning" : "success",
     scope: codexScopeLabel(skill.scope),
-    path: skill.path,
+    path: skill.sourcePath,
     icon: BookOpen,
-    updated: skill.updatedAt ?? "未知",
+    updated: "本地来源",
     mounts: features,
-    preview: `# ${skill.name}\n\n${skill.description || "未提供描述。"}${symlinkText}${warningText}`,
+    preview: `# ${skill.assetName}\n\n来源格式：${skill.sourceFormat}${symlinkText}${warningText}`,
     searchTerms: [skill.scope, ...features, ...skill.warnings],
   };
 }
@@ -222,10 +223,10 @@ function scopeLabel(scope: AssetSummary["scope"]) {
   return "资产中心";
 }
 
-function codexScopeLabel(scope: CodexSkillSummary["scope"]) {
-  if (scope === "global") return "全局";
+function codexScopeLabel(scope: DiscoveredRuntimeSource["scope"]) {
+  if (scope === "user") return "用户级";
   if (scope === "project") return "项目级";
-  return "系统级";
+  return "自定义";
 }
 
 function errorMessage(error: unknown) {

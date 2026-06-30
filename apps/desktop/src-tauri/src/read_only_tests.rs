@@ -1,9 +1,7 @@
-use super::contracts::{
-    AssetStatus, AssetType, ListAssetsInput, RuntimeScope, ScanAssetsInput, ScanScope,
-};
+use super::contracts::{AssetStatus, AssetType, ListAssetsInput};
 use super::read_only::{
     git_status_for_home, list_assets_for_home, list_backups_for_home, list_projects_for_home,
-    scan_assets_for_home, settings_for_home,
+    settings_for_home,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -200,133 +198,6 @@ fn list_assets_derives_symlink_and_mcp_mount_targets() {
             .join("workspace/project-a/.mcp.json")
             .to_string_lossy()]
     );
-}
-
-#[test]
-fn scan_assets_reads_user_runtime_and_top_level_mcp_servers() {
-    let home = TempHome::new("scan-user");
-    home.write(".claude/skills/review.md", "# Review");
-    home.write(
-        ".claude/skills/api-design/SKILL.md",
-        "# API Design\n\nDirectory skill",
-    );
-    home.write(".claude/commands/commit.md", "# Commit");
-    home.write(
-        ".claude.json",
-        r#"{"mcpServers":{"PostgreSQL":{"command":"postgres"},"Redis":{"command":"redis"}}}"#,
-    );
-
-    let result = scan_assets_for_home(
-        home.path(),
-        ScanAssetsInput {
-            scope: ScanScope::User,
-        },
-    );
-
-    assert_eq!(result.counts.total, 5);
-    assert_eq!(result.counts.skills, 2);
-    assert!(result
-        .assets
-        .iter()
-        .any(|asset| asset.id == "skill:review" && asset.scope == Some(RuntimeScope::User)));
-    assert!(result.assets.iter().any(|asset| {
-        asset.id == "skill:api-design" && asset.source_path.ends_with(".claude/skills/api-design")
-    }));
-    assert!(result
-        .assets
-        .iter()
-        .any(|asset| asset.id == "command:commit"));
-    assert!(result
-        .assets
-        .iter()
-        .any(|asset| asset.id == "mcp:PostgreSQL"));
-    assert!(result.assets.iter().any(|asset| asset.id == "mcp:Redis"));
-}
-
-#[test]
-fn scan_assets_reads_project_and_custom_runtime_roots() {
-    let home = TempHome::new("scan-project");
-    home.write(
-        "workspace/project-a/.claude/skills/db-review.md",
-        "# DB Review",
-    );
-    home.write(
-        "workspace/project-a/.claude/skills/react-review/SKILL.md",
-        "# React Review",
-    );
-    home.write("workspace/project-a/.claude/commands/deploy.md", "# Deploy");
-    home.write(
-        "workspace/project-a/.mcp.json",
-        r#"{"mcpServers":{"SQLite":{"command":"sqlite"}}}"#,
-    );
-
-    let project = scan_assets_for_home(
-        home.path(),
-        ScanAssetsInput {
-            scope: ScanScope::Project {
-                project_path: "~/workspace/project-a".into(),
-            },
-        },
-    );
-    let custom = scan_assets_for_home(
-        home.path(),
-        ScanAssetsInput {
-            scope: ScanScope::Custom {
-                path: "~/workspace/project-a".into(),
-            },
-        },
-    );
-
-    assert_eq!(project.counts.total, 4);
-    assert_eq!(custom.counts.total, 4);
-    assert_eq!(project.counts.skills, 2);
-    assert_eq!(custom.counts.skills, 2);
-    assert!(project
-        .assets
-        .iter()
-        .any(|asset| asset.id == "skill:react-review"));
-    assert!(custom
-        .assets
-        .iter()
-        .any(|asset| asset.id == "skill:react-review"));
-    assert!(project.assets.iter().any(|asset| asset.id == "mcp:SQLite"));
-}
-
-#[test]
-fn scan_assets_marks_different_existing_asset_content_as_conflict() {
-    let home = TempHome::new("scan-conflict");
-    home.write(".claude/skills/review.md", "# Incoming Review");
-    home.write(
-        ".my-agent-assets/assets/skills/review.md",
-        "# Existing Review",
-    );
-
-    let result = scan_assets_for_home(
-        home.path(),
-        ScanAssetsInput {
-            scope: ScanScope::User,
-        },
-    );
-
-    assert_eq!(result.conflict_count, 1);
-    assert_eq!(result.assets[0].status, AssetStatus::Conflict);
-}
-
-#[test]
-fn scan_assets_warns_on_invalid_top_level_mcp_json() {
-    let home = TempHome::new("scan-invalid");
-    home.write(".claude.json", "{");
-
-    let result = scan_assets_for_home(
-        home.path(),
-        ScanAssetsInput {
-            scope: ScanScope::User,
-        },
-    );
-
-    assert_eq!(result.counts.total, 0);
-    assert_eq!(result.warnings.len(), 1);
-    assert!(result.warnings[0].contains("Could not parse MCP config"));
 }
 
 #[test]

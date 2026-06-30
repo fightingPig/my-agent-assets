@@ -10,20 +10,8 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const RUNTIME_SCOPES = ["user", "local", "project"] as const;
 export type RuntimeScope = (typeof RUNTIME_SCOPES)[number];
 
-export const CODEX_SCOPES = ["global", "project", "system"] as const;
-export type CodexScope = (typeof CODEX_SCOPES)[number];
-
-export const CODEX_MCP_TRANSPORTS = ["stdio", "streamableHttp", "unknown"] as const;
-export type CodexMcpTransport = (typeof CODEX_MCP_TRANSPORTS)[number];
-
-export const CONFLICT_RESOLUTIONS = ["skip", "rename", "overwrite"] as const;
-export type ConflictResolution = (typeof CONFLICT_RESOLUTIONS)[number];
-
 export const PLAN_STEP_KINDS = ["check", "import", "mount", "compileMcp", "backup", "restore", "git", "settings"] as const;
 export type PlanStepKind = (typeof PLAN_STEP_KINDS)[number];
-
-export const RISK_LEVELS = ["none", "low", "medium", "high"] as const;
-export type RiskLevel = (typeof RISK_LEVELS)[number];
 
 export const APPEARANCE_THEMES = ["system", "light", "dark"] as const;
 export type AppearanceTheme = (typeof APPEARANCE_THEMES)[number];
@@ -84,65 +72,6 @@ export type ProjectSummary = {
   mounts: string[];
 };
 
-export type CodexDiscoveryInput = {
-  projectPath: string | null;
-};
-
-export type CodexSkillSummary = {
-  id: string;
-  name: string;
-  description: string;
-  scope: CodexScope;
-  path: string;
-  status: AssetStatus;
-  hasScripts: boolean;
-  hasReferences: boolean;
-  hasAssets: boolean;
-  hasOpenaiMetadata: boolean;
-  symlinkTarget: string | null;
-  updatedAt: string | null;
-  warnings: string[];
-};
-
-export type CodexSkillListResult = {
-  skills: CodexSkillSummary[];
-  warnings: string[];
-};
-
-export type CodexMcpServerSummary = {
-  id: string;
-  name: string;
-  scope: CodexScope;
-  configPath: string;
-  transport: CodexMcpTransport;
-  command: string | null;
-  args: string[];
-  url: string | null;
-  enabled: boolean;
-  enabledTools: string[];
-  disabledTools: string[];
-  approvalMode: string | null;
-  warnings: string[];
-};
-
-export type CodexMcpListResult = {
-  servers: CodexMcpServerSummary[];
-  warnings: string[];
-};
-
-export type ScanScope =
-  | { kind: "user" }
-  | { kind: "project"; projectPath: string }
-  | { kind: "custom"; path: string };
-
-export type PlanStep = {
-  id: string;
-  kind: PlanStepKind;
-  label: string;
-  description: string;
-  risk: RiskLevel;
-};
-
 export type ApplyStepResult = {
   stepId: string;
   kind: PlanStepKind;
@@ -150,58 +79,6 @@ export type ApplyStepResult = {
   status: ApplyStepStatus;
   message: string;
   affectedPaths: string[];
-};
-
-export type ConflictResolutionChoice = {
-  conflictId: string;
-  resolution: ConflictResolution;
-  renameTo: string | null;
-};
-
-export type ScanResult = {
-  scope: ScanScope;
-  scannedAt: string;
-  assets: AssetSummary[];
-  counts: AssetCounts;
-  conflictCount: number;
-  warnings: string[];
-};
-
-export type ConflictPreview = {
-  id: string;
-  assetId: string;
-  assetType: AssetType;
-  name: string;
-  reason: string;
-  existingContent: string;
-  incomingContent: string;
-  allowedResolutions: ConflictResolution[];
-};
-
-export type ImportPreview = {
-  previewId: string;
-  scope: ScanScope;
-  assets: AssetSummary[];
-  conflicts: ConflictPreview[];
-  steps: PlanStep[];
-  warnings: string[];
-  canApply: boolean;
-};
-
-export type MountTarget = {
-  scope: RuntimeScope;
-  runtimePath: string;
-  projectPath: string | null;
-};
-
-export type MountPreview = {
-  previewId: string;
-  asset: AssetSummary;
-  target: MountTarget;
-  steps: PlanStep[];
-  warnings: string[];
-  backupRequired: boolean;
-  canApply: boolean;
 };
 
 export type BackupSummary = {
@@ -308,15 +185,7 @@ export type DesktopSettings = {
   cliPath: string;
 };
 
-export type ScanAssetsInput = { scope: ScanScope };
-export type PreviewImportInput = {
-  scope: ScanScope;
-  assetIds: string[];
-  conflictResolutions: ConflictResolutionChoice[];
-};
 export type ListAssetsInput = { assetType: AssetType | null };
-export type PreviewMountInput = { assetId: string; target: MountTarget };
-export type PreviewConflictsInput = { scope: ScanScope; assetIds: string[] };
 export type PreviewSyncInput = { direction: SyncDirection };
 export type SyncApplyInput = {
   previewId: string;
@@ -335,30 +204,6 @@ export type SyncApplyResult = {
   journalPath: string;
 };
 export type SettingsSaveInput = { settings: DesktopSettings };
-export type ImportApplyInput = {
-  previewId: string;
-  mode: ApplyMode;
-  scope: ScanScope;
-  assetIds: string[];
-  conflictResolutions: ConflictResolutionChoice[];
-  backupBeforeApply: boolean;
-};
-export type ConflictApplyInput = {
-  previewId: string;
-  mode: ApplyMode;
-  scope: ScanScope;
-  assetIds: string[];
-  conflictResolutions: ConflictResolutionChoice[];
-  backupBeforeApply: boolean;
-};
-export type MountApplyInput = {
-  previewId: string;
-  mode: ApplyMode;
-  assetId: string;
-  target: MountTarget;
-  backupBeforeApply: boolean;
-};
-
 export const RUNTIME_PROVIDERS = ["claude_code", "codex", "custom"] as const;
 export type RuntimeProvider = (typeof RUNTIME_PROVIDERS)[number];
 export const RUNTIME_SOURCE_FORMATS = [

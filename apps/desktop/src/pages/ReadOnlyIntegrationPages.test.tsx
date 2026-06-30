@@ -4,13 +4,9 @@ import type {
   AssetSummary,
   BatchImportPreview,
   CanonicalMountPreview,
-  ConflictPreview,
   DesktopSettings,
   GitStatus,
-  ImportPreview,
-  MountPreview,
   ProjectSummary,
-  ScanResult,
 } from "../app/contracts";
 import { BackupRestorePage } from "./BackupRestorePage";
 import { AssetDetailPage } from "./AssetDetailPage";
@@ -33,17 +29,8 @@ const {
   gitStatus,
   settingsLoad,
   settingsSave,
-  scanAssets,
-  previewImport,
   previewSync,
   syncApply,
-  importApply,
-  conflictApply,
-  previewMount,
-  previewConflicts,
-  listCodexSkills,
-  listCodexMcpServers,
-  mountApply,
   listMountTargets,
   canonicalMountPreview,
   canonicalMountApply,
@@ -59,17 +46,8 @@ const {
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
   settingsSave: vi.fn(),
-  scanAssets: vi.fn(),
-  previewImport: vi.fn(),
   previewSync: vi.fn(),
   syncApply: vi.fn(),
-  importApply: vi.fn(),
-  conflictApply: vi.fn(),
-  previewMount: vi.fn(),
-  previewConflicts: vi.fn(),
-  listCodexSkills: vi.fn(),
-  listCodexMcpServers: vi.fn(),
-  mountApply: vi.fn(),
   listMountTargets: vi.fn(),
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
@@ -87,17 +65,8 @@ vi.mock("../app/data-api", () => ({
   gitStatus,
   settingsLoad,
   settingsSave,
-  scanAssets,
-  previewImport,
   previewSync,
   syncApply,
-  importApply,
-  conflictApply,
-  previewMount,
-  previewConflicts,
-  listCodexSkills,
-  listCodexMcpServers,
-  mountApply,
   listMountTargets,
   canonicalMountPreview,
   canonicalMountApply,
@@ -196,8 +165,6 @@ beforeEach(() => {
   gitStatus.mockResolvedValue(gitStatusFixture());
   settingsLoad.mockResolvedValue(settingsFixture());
   settingsSave.mockImplementation(async ({ settings }) => settings);
-  scanAssets.mockResolvedValue(scanResultFixture([]));
-  previewImport.mockResolvedValue(importPreviewFixture([]));
   previewSync.mockResolvedValue({
     previewId: "preview:sync:push",
     direction: "push",
@@ -219,64 +186,6 @@ beforeEach(() => {
     pulled: false,
     warnings: [],
     journalPath: "/tmp/sync-journal",
-  });
-  importApply.mockResolvedValue({
-    mode: "planOnly",
-    ok: true,
-    previewId: "preview:import:test",
-    backup: null,
-    steps: [
-      {
-        stepId: "plan-import-skill-live-scan",
-        kind: "import",
-        label: "预览导入",
-        status: "skipped",
-        message: "Plan-only mode: 1 asset would be imported.",
-        affectedPaths: ["~/.my-agent-assets/assets/skills/live-scan"],
-      },
-    ],
-    warnings: [],
-    errors: [],
-  });
-  conflictApply.mockResolvedValue({
-    mode: "planOnly",
-    ok: true,
-    previewId: "preview:import:test",
-    backup: null,
-    steps: [
-      {
-        stepId: "plan-conflict-review",
-        kind: "import",
-        label: "预览冲突处理",
-        status: "skipped",
-        message: "Plan-only mode: no files were written.",
-        affectedPaths: [],
-      },
-    ],
-    warnings: [],
-    errors: [],
-  });
-  previewMount.mockResolvedValue(mountPreviewFixture());
-  previewConflicts.mockResolvedValue([]);
-  listCodexSkills.mockResolvedValue({ skills: [], warnings: [] });
-  listCodexMcpServers.mockResolvedValue({ servers: [], warnings: [] });
-  mountApply.mockResolvedValue({
-    mode: "planOnly",
-    ok: true,
-    previewId: "preview:mount:skill-review-project-a",
-    backup: null,
-    steps: [
-      {
-        stepId: "plan-mount-skill-review",
-        kind: "mount",
-        label: "预览挂载",
-        status: "skipped",
-        message: "Plan-only mode: no symlink was created.",
-        affectedPaths: ["~/workspace/project-a/.claude/skills/review"],
-      },
-    ],
-    warnings: [],
-    errors: [],
   });
 });
 
@@ -302,56 +211,49 @@ describe("read-only UI integration", () => {
   });
 
   it("renders real Codex Skills and MCP fields without Claude demo rows", async () => {
-    listCodexSkills.mockResolvedValue({
-      skills: [{
-        id: "global:review",
-        name: "codex-review",
-        description: "Review code with local Codex instructions.",
-        scope: "global",
-        path: "/tmp/home/.agents/skills/codex-review",
-        status: "ready",
-        hasScripts: true,
-        hasReferences: true,
-        hasAssets: false,
-        hasOpenaiMetadata: true,
-        symlinkTarget: null,
-        updatedAt: "2026-06-28T08:00:00Z",
+    discoverRuntimeSources.mockResolvedValue({
+      sources: [{
+        sourceId: "codex:skill:codex-review",
+        provider: "codex",
+        sourcePath: "/tmp/home/.agents/skills/codex-review",
+        assetKind: "skill",
+        assetName: "codex-review",
+        sourceFormat: "skill_directory",
+        scope: "user",
+        isManaged: false,
+        isSymlink: false,
         warnings: [],
-      }],
-      warnings: [],
-    });
-    listCodexMcpServers.mockResolvedValue({
-      servers: [{
-        id: "global:local-files",
-        name: "local-files",
-        scope: "global",
+        eligibleImport: true,
+        eligibleAdopt: true,
+      }, {
+        sourceId: "codex:mcp:local-files",
+        provider: "codex",
+        sourcePath: "/tmp/home/.codex/config.toml",
         configPath: "/tmp/home/.codex/config.toml",
-        transport: "stdio",
-        command: "local-files-mcp",
-        args: ["--readonly"],
-        url: null,
-        enabled: true,
-        enabledTools: ["read_file"],
-        disabledTools: ["write_file"],
-        approvalMode: "on-request",
+        assetKind: "mcp",
+        assetName: "local-files",
+        sourceFormat: "codex_toml",
+        scope: "user",
+        isManaged: false,
+        isSymlink: false,
         warnings: [],
+        eligibleImport: true,
+        eligibleAdopt: false,
       }],
       warnings: [],
     });
 
     const { rerender } = render(<SkillsListPage provider="codex" />);
     expect(await screen.findByRole("option", { name: "codex-review" })).toBeInTheDocument();
-    expect(screen.getByText("scripts/")).toBeInTheDocument();
-    expect(screen.getByText("agents/openai.yaml")).toBeInTheDocument();
+    expect(screen.getByText("skill_directory")).toBeInTheDocument();
+    expect(screen.getByText("可导入")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
-    expect(listCodexSkills).toHaveBeenCalledWith({ projectPath: null });
+    expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" });
 
     rerender(<McpServersListPage provider="codex" />);
     expect(await screen.findByRole("option", { name: "local-files" })).toBeInTheDocument();
-    expect(screen.getAllByText(/local-files-mcp/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("read_file").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("禁用: write_file").length).toBeGreaterThan(0);
-    expect(listCodexMcpServers).toHaveBeenCalledWith({ projectPath: null });
+    expect(screen.getAllByText(/codex_toml/).length).toBeGreaterThan(0);
+    expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" });
   });
 
   it("shows provider-specific empty states for empty Codex discovery", async () => {
@@ -714,9 +616,6 @@ describe("read-only UI integration", () => {
       plannedEffects: ["预览资产来源", "预览目标挂载"],
       warnings: ["Preview mount warning"],
     }));
-    previewConflicts.mockResolvedValue([
-      conflictPreviewFixture("conflict:skill:review", "review", "skill"),
-    ]);
     const { rerender } = render(<MountManagerPage />);
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
@@ -842,8 +741,6 @@ describe("read-only UI integration", () => {
       },
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    expect(conflictApply).not.toHaveBeenCalled();
-    expect(previewImport).not.toHaveBeenCalled();
   });
 
   it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {
@@ -891,8 +788,6 @@ describe("read-only UI integration", () => {
     }));
     await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
     expect(await screen.findByText("/tmp/home/.claude/skills/real-review.md")).toBeInTheDocument();
-    expect(previewMount).not.toHaveBeenCalled();
-    expect(mountApply).not.toHaveBeenCalled();
   });
 
   it("uses selected real project data for project mount preview, apply, and refresh", async () => {
@@ -942,8 +837,6 @@ describe("read-only UI integration", () => {
       },
     }));
     await waitFor(() => expect(listProjects).toHaveBeenCalled());
-    expect(previewMount).not.toHaveBeenCalled();
-    expect(mountApply).not.toHaveBeenCalled();
   });
 
   it("does not call apply command wrappers from Scan Import preview", async () => {
@@ -951,7 +844,6 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
     expect(canonicalBatchImportPreview).not.toHaveBeenCalled();
     expect(canonicalBatchImportApply).not.toHaveBeenCalled();
-    expect(mountApply).not.toHaveBeenCalled();
   });
 });
 
@@ -1023,36 +915,6 @@ function settingsFixture(overrides: Partial<DesktopSettings> = {}): DesktopSetti
   };
 }
 
-function scanResultFixture(assets: AssetSummary[]): ScanResult {
-  return {
-    scope: { kind: "user" },
-    scannedAt: "2026-06-25T08:00:00Z",
-    assets,
-    counts: {
-      total: assets.length,
-      skills: assets.filter((asset) => asset.assetType === "skill").length,
-      commands: assets.filter((asset) => asset.assetType === "command").length,
-      mcps: assets.filter((asset) => asset.assetType === "mcp").length,
-    },
-    conflictCount: 0,
-    warnings: [],
-  };
-}
-
-function importPreviewFixture(assets: AssetSummary[]): ImportPreview {
-  return {
-    previewId: "preview:import:test",
-    scope: { kind: "user" },
-    assets,
-    conflicts: [],
-    steps: [
-      { id: "preview-import", kind: "import", label: "预览导入选择", description: "No write", risk: "low" },
-    ],
-    warnings: ["Preview only: no files will be written."],
-    canApply: true,
-  };
-}
-
 function discoveryFixture(sourceId: string, name: string) {
   return {
     sources: [{
@@ -1106,21 +968,6 @@ function batchImportPreviewFixture(
   };
 }
 
-function mountPreviewFixture(overrides: Partial<MountPreview> = {}): MountPreview {
-  return {
-    previewId: "preview:mount:skill-review-project-a",
-    asset: assetFixture("skill:review", "review", "skill"),
-    target: { scope: "project", runtimePath: "~/workspace/project-a/.claude/skills/review", projectPath: "~/workspace/project-a" },
-    steps: [
-      { id: "preview-mount", kind: "mount", label: "预览挂载计划", description: "No write", risk: "medium" },
-    ],
-    warnings: ["Preview only: no runtime path will be changed."],
-    backupRequired: true,
-    canApply: true,
-    ...overrides,
-  };
-}
-
 function canonicalMountPreviewFixture(
   overrides: Partial<CanonicalMountPreview> = {},
 ): CanonicalMountPreview {
@@ -1140,18 +987,5 @@ function canonicalMountPreviewFixture(
     generatedAtEpochSeconds: 100,
     expiresAtEpochSeconds: 400,
     ...overrides,
-  };
-}
-
-function conflictPreviewFixture(id: string, name: string, assetType: ConflictPreview["assetType"]): ConflictPreview {
-  return {
-    id,
-    assetId: `${assetType}:${name}`,
-    assetType,
-    name,
-    reason: "同名资产预览冲突",
-    existingContent: `Existing preview content for ${name}`,
-    incomingContent: `Incoming preview content for ${name}`,
-    allowedResolutions: ["skip", "rename", "overwrite"],
   };
 }

@@ -51,27 +51,39 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Future consumer:** Dashboard system status.
 - **Status:** Implemented and registered. Its existing JSON shape is unchanged.
 
-### `scan_assets`
+### `discover_runtime_sources`
 
-- **Purpose:** Read the selected runtime scope and return discovered asset summaries without importing them.
-- **Input:** `ScanAssetsInput { scope: ScanScope }`.
-- **Output:** `ScanResult { scope, scannedAt, assets, counts, conflictCount, warnings }`.
+- **Purpose:** Discover Claude Code, Codex, or approved custom runtime sources without importing them.
+- **Input:** Shared-core `DiscoveryScope`.
+- **Output:** Shared-core `DiscoveryResult { sources, warnings }`.
 - **Side effect:** Read-only.
-- **Future consumer:** Scan Import.
-- **Status:** Implemented and registered as read-only.
+- **Consumers:** Scan Import and provider-filtered Asset Center views.
+- **Status:** Implemented in shared core and registered.
 
-The read-only implementation scans Markdown Skills and Commands from the selected runtime root. MCP discovery reads the relevant JSON config file and parses its top-level `mcpServers` object; `.mcpServers` is not a path.
+The shared discovery service scans canonical source formats for both Claude Code
+and Codex. MCP discovery parses Claude JSON `mcpServers` or Codex TOML
+`mcp_servers`; provider-specific parsing is not implemented in React or the
+Tauri transport.
 
-### `preview_import`
+### `canonical_import_preview` / `canonical_import_apply`
 
-- **Purpose:** Build an import plan for explicitly selected assets and conflict decisions.
-- **Input:** `PreviewImportInput { scope, assetIds, conflictResolutions }`.
-- **Output:** `ImportPreview { previewId, scope, assets, conflicts, steps, warnings, canApply }`.
-- **Side effect:** Preview-only.
-- **Future consumer:** Scan Import and Conflict Resolver.
-- **Status:** Implemented and registered as preview-only.
+- **Purpose:** Preview and apply one source-ID-bound canonical import.
+- **Preview input:** `{ scope, sourceId, resolution }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** Shared-core `ImportPreview` / `ImportApplyResult`.
+- **Side effect:** Preview-only / explicit write.
+- **Consumers:** Shared adapters and single-item workflows.
+- **Status:** Implemented in shared core and registered.
 
-`PreviewImportInput` is self-contained. The backend will rebuild the preview from `scope`, `assetIds`, and `conflictResolutions`; it must not require a prior scan session. `previewId` is generated from those inputs and later validated by `import_apply`.
+### `canonical_batch_import_preview` / `canonical_batch_import_apply`
+
+- **Purpose:** Preview and atomically apply multiple imports and explicit
+  skip/rename/overwrite conflict resolutions.
+- **Input:** A scope plus source-ID-bound selections.
+- **Output:** Shared-core `BatchImportPreview` / `BatchImportApplyResult`.
+- **Side effect:** Preview-only / explicit transactional write.
+- **Consumers:** Scan Import and Conflict Resolver.
+- **Status:** Implemented in shared core and registered.
 
 ### `list_assets`
 
@@ -90,17 +102,6 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 - **Side effect:** Read-only.
 - **Future consumer:** Projects and Project Detail.
 - **Status:** Implemented and registered as read-only.
-
-### `preview_mount`
-
-- **Purpose:** Legacy mount preview contract retained temporarily for old transport tests.
-- **Input:** Legacy `PreviewMountInput`.
-- **Output:** Legacy `MountPreview`.
-- **Side effect:** Preview-only.
-- **Consumer:** None in the production GUI.
-- **Status:** Superseded by `canonical_mount_preview`.
-
-Production pages must not provide a runtime path to this contract.
 
 ### Target Registry commands
 
@@ -150,15 +151,6 @@ path. React does not construct a runtime path.
 
 Apply resolves the path and adapter from `targets.yaml`; it never accepts
 `runtimePath` from the frontend.
-
-### `preview_conflicts`
-
-- **Purpose:** Recompute conflicts for selected assets in a scan scope.
-- **Input:** `PreviewConflictsInput { scope, assetIds }`.
-- **Output:** `ConflictPreview[]`.
-- **Side effect:** Preview-only.
-- **Future consumer:** Conflict Resolver and Scan Import.
-- **Status:** Implemented and registered as preview-only.
 
 ### `list_backups`
 
@@ -261,7 +253,7 @@ manual diagnosis.
 
 Current behavior:
 
-- Settings are stored as JSON at `~/.my-agent-assets/config.json`.
+- Settings are stored as YAML at `~/.my-agent-assets/config.yaml`.
 - Missing config files are not created by `settings_load`.
 - `assetCenterPath` is normalized to the fixed `~/.my-agent-assets` V1 location and is read-only in the GUI.
 - Save failures reject the Tauri invocation instead of returning successful-looking defaults.
@@ -269,46 +261,10 @@ Current behavior:
 - Numeric settings are clamped to supported ranges.
 - The GUI Settings page can call `settings_save`; this writes only local desktop configuration and does not touch Claude runtime files.
 
-### `import_apply`
-
-- **Purpose:** Apply a previously previewed import selection by copying selected runtime assets into the asset center.
-- **Input:** `ImportApplyInput { previewId, mode, scope, assetIds, conflictResolutions, backupBeforeApply }`.
-- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
-- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
-- **Future consumer:** Scan Import and Conflict Resolver.
-- **Status:** Implemented and registered for Skill, Command, and MCP import.
-
-Current behavior:
-
-- Skill imports support `.claude/skills/<name>/` directories and `.claude/skills/<name>.md` files.
-- Command imports support `.claude/commands/<name>.md` files.
-- MCP imports read the selected top-level `mcpServers.<name>` JSON object from `.claude.json` or `.mcp.json`, then write it to `assets/mcps/<name>.json`.
-- Runtime Claude files are not deleted or modified.
-- Existing asset-center destinations are backed up before replacement when `backupBeforeApply` is true.
-
-### `mount_apply`
-
-- **Status:** Legacy registered contract, no longer consumed by production GUI.
-- **Replacement:** `canonical_mount_preview` / `canonical_mount_apply`.
-- **Migration boundary:** Remove after the remaining legacy transport tests and
-  duplicate Desktop implementation are deleted.
-
-### `conflict_apply`
-
-- **Purpose:** Apply previewed per-asset conflict decisions.
-- **Input:** `ConflictApplyInput { previewId, mode, scope, assetIds, conflictResolutions, backupBeforeApply }`.
-- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
-- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
-- **Consumer:** Conflict Resolver.
-- **Status:** Implemented and registered.
-
-Current behavior:
-
-- Uses the `preview_import` identity generated from the same scope, selected assets, and conflict decisions.
-- Requires exactly one `skip`, `rename`, or `overwrite` decision for every selected asset.
-- Rename targets are validated as a single safe path component and must not already exist.
-- Overwrite uses import backup-before-replacement behavior.
-- MCP conflict previews read and display the exact existing asset JSON and incoming top-level `mcpServers.<name>` object.
+The former Desktop-only `scan_assets`, `preview_import`, `preview_mount`,
+`preview_conflicts`, `import_apply`, `mount_apply`, and `conflict_apply`
+commands have been removed. They accepted frontend-built paths or duplicated
+shared-core behavior and are not compatibility aliases.
 
 ### Future write commands
 

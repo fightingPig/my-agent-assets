@@ -1,20 +1,11 @@
-mod apply;
-mod codex;
 mod contracts;
 mod path_utils;
-mod preview;
 mod read_only;
 mod settings;
 mod shared_core;
-#[cfg(test)]
-mod sync_apply;
 
 use contracts::{
-    AppInfo, ApplyResult, AssetSummary, CodexDiscoveryInput, CodexMcpListResult,
-    CodexSkillListResult, ConflictApplyInput, ConflictPreview, DesktopSettings, ImportApplyInput,
-    ImportPreview, ListAssetsInput, MountApplyInput, MountPreview, PreviewConflictsInput,
-    PreviewImportInput, PreviewMountInput, ProjectSummary, ScanAssetsInput, ScanResult,
-    SettingsSaveInput,
+    AppInfo, AssetSummary, DesktopSettings, ListAssetsInput, ProjectSummary, SettingsSaveInput,
 };
 
 #[tauri::command]
@@ -64,36 +55,6 @@ fn list_backups() -> Result<Vec<my_agent_assets_core::backup_history::BackupHist
 }
 
 #[tauri::command]
-fn list_codex_skills(input: CodexDiscoveryInput) -> CodexSkillListResult {
-    codex::list_codex_skills_command(input)
-}
-
-#[tauri::command]
-fn list_codex_mcp_servers(input: CodexDiscoveryInput) -> CodexMcpListResult {
-    codex::list_codex_mcp_servers_command(input)
-}
-
-#[tauri::command]
-fn scan_assets(input: ScanAssetsInput) -> ScanResult {
-    read_only::scan_assets_command(input)
-}
-
-#[tauri::command]
-fn preview_import(input: PreviewImportInput) -> ImportPreview {
-    preview::preview_import_command(input)
-}
-
-#[tauri::command]
-fn preview_mount(input: PreviewMountInput) -> MountPreview {
-    preview::preview_mount_command(input)
-}
-
-#[tauri::command]
-fn preview_conflicts(input: PreviewConflictsInput) -> Vec<ConflictPreview> {
-    preview::preview_conflicts_command(input)
-}
-
-#[tauri::command]
 fn preview_sync(
     input: my_agent_assets_core::git_sync::SyncPreviewRequest,
 ) -> Result<my_agent_assets_core::git_sync::SyncPreview, String> {
@@ -105,21 +66,6 @@ fn sync_apply(
     input: my_agent_assets_core::git_sync::SyncApplyRequest,
 ) -> Result<my_agent_assets_core::git_sync::SyncApplyResult, String> {
     shared_core::sync_apply_command(input)
-}
-
-#[tauri::command]
-fn import_apply(input: ImportApplyInput) -> ApplyResult {
-    apply::import_apply_command(input)
-}
-
-#[tauri::command]
-fn conflict_apply(input: ConflictApplyInput) -> ApplyResult {
-    apply::conflict_apply_command(input)
-}
-
-#[tauri::command]
-fn mount_apply(input: MountApplyInput) -> ApplyResult {
-    apply::mount_apply_command(input)
 }
 
 #[tauri::command]
@@ -261,17 +207,8 @@ pub fn run() {
             list_assets,
             list_projects,
             list_backups,
-            list_codex_skills,
-            list_codex_mcp_servers,
-            scan_assets,
-            preview_import,
-            preview_mount,
-            preview_conflicts,
             preview_sync,
             sync_apply,
-            import_apply,
-            conflict_apply,
-            mount_apply,
             discover_runtime_sources,
             canonical_import_preview,
             canonical_import_apply,
@@ -311,19 +248,4 @@ mod tests {
 mod read_only_tests;
 
 #[cfg(test)]
-mod preview_tests;
-
-#[cfg(test)]
-mod apply_tests;
-
-#[cfg(test)]
-mod conflict_apply_tests;
-
-#[cfg(test)]
 mod settings_tests;
-
-#[cfg(test)]
-mod write_safety_e2e_tests;
-
-#[cfg(test)]
-mod codex_tests;

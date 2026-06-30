@@ -1,5 +1,10 @@
 # Write Safety Contract
 
+> Desktop-only `import_apply`, `conflict_apply`, and `mount_apply` have been
+> removed. Production uses shared-core `canonical_import_apply`,
+> `canonical_batch_import_apply`, `canonical_mount_apply`, and `adopt_apply`.
+> Legacy names later in this document describe the removed prototype.
+
 This document defines the safety boundary for write/apply commands. Canonical
 Import, Adopt, Mount, Unmount, Delete, Target Registry, Git Sync, and local
 settings writes are implemented. Historical automatic Restore commands have

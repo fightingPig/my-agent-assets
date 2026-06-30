@@ -2,18 +2,17 @@
 use crate::contracts::{AppearanceTheme, DensityPreference, DesktopSettings, LogLevel};
 use crate::contracts::{
     AssetCounts, AssetStatus, AssetSummary, AssetType, ListAssetsInput, ProjectStatus,
-    ProjectSummary, RuntimeScope, ScanAssetsInput, ScanResult, ScanScope,
+    ProjectSummary, RuntimeScope,
 };
 #[cfg(test)]
 use crate::contracts::{BackupSummary, GitStatus};
-use crate::path_utils::{display_path, expand_tilde, home_dir, modified_time_iso};
+use crate::path_utils::{display_path, home_dir, modified_time_iso};
 #[cfg(test)]
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::SystemTime;
 
 pub fn list_assets_command(input: ListAssetsInput) -> Vec<AssetSummary> {
     match home_dir() {
@@ -26,16 +25,6 @@ pub fn list_projects_command() -> Vec<ProjectSummary> {
     match home_dir() {
         Some(home) => list_projects_for_home(&home),
         None => vec![],
-    }
-}
-
-pub fn scan_assets_command(input: ScanAssetsInput) -> ScanResult {
-    match home_dir() {
-        Some(home) => scan_assets_for_home(&home, input),
-        None => empty_scan_result(
-            input.scope,
-            vec!["HOME is unavailable; scan skipped.".into()],
-        ),
     }
 }
 
@@ -103,74 +92,6 @@ pub fn list_assets_for_home(home: &Path, input: ListAssetsInput) -> Vec<AssetSum
     }
     assets.sort_by(|left, right| left.id.cmp(&right.id));
     assets
-}
-
-pub fn scan_assets_for_home(home: &Path, input: ScanAssetsInput) -> ScanResult {
-    let mut warnings = Vec::new();
-    let mut assets = Vec::new();
-
-    match &input.scope {
-        ScanScope::User => {
-            let claude_root = home.join(".claude");
-            assets.extend(read_runtime_skill_assets(
-                &claude_root.join("skills"),
-                RuntimeScope::User,
-                "user runtime",
-            ));
-            assets.extend(read_runtime_markdown_assets(
-                &claude_root.join("commands"),
-                AssetType::Command,
-                RuntimeScope::User,
-                "user runtime",
-                "Command",
-            ));
-            assets.extend(read_mcp_config_file(
-                &home.join(".claude.json"),
-                RuntimeScope::User,
-                &mut warnings,
-            ));
-        }
-        ScanScope::Project { project_path } => {
-            let root = expand_tilde(project_path, home);
-            assets.extend(scan_runtime_root(
-                &root,
-                RuntimeScope::Project,
-                &mut warnings,
-            ));
-        }
-        ScanScope::Custom { path } => {
-            let root = expand_tilde(path, home);
-            assets.extend(scan_runtime_root(
-                &root,
-                RuntimeScope::Project,
-                &mut warnings,
-            ));
-        }
-    }
-
-    let mut conflict_count = 0;
-    for asset in &mut assets {
-        match crate::preview::real_conflict_from_id(home, &input.scope, &asset.id) {
-            Ok(Some(_)) => {
-                asset.status = AssetStatus::Conflict;
-                conflict_count += 1;
-            }
-            Ok(None) => {}
-            Err(error) => warnings.push(format!(
-                "Could not compare {} with the asset center: {}",
-                asset.id, error
-            )),
-        }
-    }
-
-    ScanResult {
-        scope: input.scope,
-        scanned_at: now_iso(),
-        counts: count_assets(&assets),
-        assets,
-        conflict_count,
-        warnings,
-    }
 }
 
 pub fn list_projects_for_home(home: &Path) -> Vec<ProjectSummary> {
@@ -742,22 +663,6 @@ fn count_assets(assets: &[AssetSummary]) -> AssetCounts {
     }
 }
 
-fn empty_scan_result(scope: ScanScope, warnings: Vec<String>) -> ScanResult {
-    ScanResult {
-        scope,
-        scanned_at: now_iso(),
-        assets: vec![],
-        counts: AssetCounts {
-            total: 0,
-            skills: 0,
-            commands: 0,
-            mcps: 0,
-        },
-        conflict_count: 0,
-        warnings,
-    }
-}
-
 #[cfg(test)]
 fn safe_git_status(repository_path: String, message: &str) -> GitStatus {
     GitStatus {
@@ -882,8 +787,4 @@ fn has_extension(path: &Path, expected: &str) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case(expected))
-}
-
-fn now_iso() -> String {
-    modified_time_iso(SystemTime::now())
 }

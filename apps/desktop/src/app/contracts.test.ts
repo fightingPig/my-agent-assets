@@ -5,26 +5,18 @@ import {
   APPLY_STEP_STATUSES,
   ASSET_STATUSES,
   ASSET_TYPES,
-  CONFLICT_RESOLUTIONS,
-  CODEX_MCP_TRANSPORTS,
-  CODEX_SCOPES,
   DENSITY_PREFERENCES,
   LOG_LEVELS,
   PLAN_STEP_KINDS,
   PROJECT_STATUSES,
-  RISK_LEVELS,
   RUNTIME_SCOPES,
   SYNC_DIRECTIONS,
   RUNTIME_PROVIDERS,
   RUNTIME_SOURCE_FORMATS,
   RUNTIME_SOURCE_SCOPES,
   CANONICAL_IMPORT_DISPOSITIONS,
-  type PreviewImportInput,
-  type ScanScope,
   type GitStatus,
-  type ImportApplyInput,
   type ApplyResult,
-  type ConflictApplyInput,
   type PreviewSyncInput,
   type SyncApplyInput,
   type SyncPreview,
@@ -37,11 +29,7 @@ describe("Tauri command contracts", () => {
     expect(ASSET_STATUSES).toEqual(["ready", "mounted", "unmounted", "conflict", "invalid"]);
     expect(PROJECT_STATUSES).toEqual(["ready", "changed", "needsSync", "invalid"]);
     expect(RUNTIME_SCOPES).toEqual(["user", "local", "project"]);
-    expect(CODEX_SCOPES).toEqual(["global", "project", "system"]);
-    expect(CODEX_MCP_TRANSPORTS).toEqual(["stdio", "streamableHttp", "unknown"]);
-    expect(CONFLICT_RESOLUTIONS).toEqual(["skip", "rename", "overwrite"]);
     expect(PLAN_STEP_KINDS).toEqual(["check", "import", "mount", "compileMcp", "backup", "restore", "git", "settings"]);
-    expect(RISK_LEVELS).toEqual(["none", "low", "medium", "high"]);
     expect(APPEARANCE_THEMES).toEqual(["system", "light", "dark"]);
     expect(DENSITY_PREFERENCES).toEqual(["compact", "comfortable"]);
     expect(LOG_LEVELS).toEqual(["error", "warn", "info", "debug"]);
@@ -103,32 +91,6 @@ describe("Tauri command contracts", () => {
     expectTypeOf(preview).toMatchTypeOf<SyncPreview>();
   });
 
-  it("keeps ScanScope discriminated and PreviewImportInput self-contained", () => {
-    const scopes = [
-      { kind: "user" },
-      { kind: "project", projectPath: "~/workspace/project-a" },
-      { kind: "custom", path: "~/code" },
-    ] satisfies ScanScope[];
-    const projectScope = { kind: "project", projectPath: "~/workspace/project-a" } satisfies ScanScope;
-    const input = {
-      scope: projectScope,
-      assetIds: ["skill:review", "mcp:PostgreSQL"],
-      conflictResolutions: [
-        { conflictId: "mcp:PostgreSQL", resolution: "rename", renameTo: "PostgreSQL-local" },
-      ],
-    } satisfies PreviewImportInput;
-
-    expect(scopes).toEqual([
-      { kind: "user" },
-      { kind: "project", projectPath: "~/workspace/project-a" },
-      { kind: "custom", path: "~/code" },
-    ]);
-    expect(input.scope).toEqual(scopes[1]);
-    expect(input).not.toHaveProperty("scanId");
-    expect(input).not.toHaveProperty("sessionId");
-    expectTypeOf(input).toMatchTypeOf<PreviewImportInput>();
-  });
-
   it("keeps GitStatus read-only repository fields explicit", () => {
     const status = {
       repositoryPath: "~/.my-agent-assets",
@@ -150,23 +112,6 @@ describe("Tauri command contracts", () => {
     expectTypeOf(status).toMatchTypeOf<GitStatus>();
   });
 
-  it("keeps apply inputs tied to a preview and explicit mode", () => {
-    const input = {
-      previewId: "preview-import-1",
-      mode: "planOnly",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [],
-      backupBeforeApply: true,
-    } satisfies ImportApplyInput;
-
-    expect(input.previewId).toBe("preview-import-1");
-    expect(input.mode).toBe("planOnly");
-    expect(input.backupBeforeApply).toBe(true);
-    expect(input).not.toHaveProperty("runtimePath");
-    expectTypeOf(input).toMatchTypeOf<ImportApplyInput>();
-  });
-
   it("keeps Sync apply tied to a timestamped preview request", () => {
     const input = {
       previewId: "preview:sync:push",
@@ -177,24 +122,6 @@ describe("Tauri command contracts", () => {
     expect(input.previewId).toBe("preview:sync:push");
     expect(input.request.direction).toBe("push");
     expectTypeOf(input).toMatchTypeOf<SyncApplyInput>();
-  });
-
-  it("keeps conflict apply tied to previewed per-asset decisions", () => {
-    const input = {
-      previewId: "preview:import:conflicts",
-      mode: "apply",
-      scope: { kind: "user" },
-      assetIds: ["skill:review"],
-      conflictResolutions: [{
-        conflictId: "conflict:skill:review",
-        resolution: "rename",
-        renameTo: "review-imported",
-      }],
-      backupBeforeApply: true,
-    } satisfies ConflictApplyInput;
-
-    expect(input.conflictResolutions[0].resolution).toBe("rename");
-    expectTypeOf(input).toMatchTypeOf<ConflictApplyInput>();
   });
 
   it("keeps ApplyResult explicit about backup, step outcomes, warnings, and errors", () => {
