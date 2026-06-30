@@ -26,6 +26,11 @@ use my_agent_assets_core::mount::{
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
     UnmountPreview, UnmountPreviewRequest,
 };
+use my_agent_assets_core::target_management::{
+    apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
+    TargetChangePreview, TargetChangeResult, TargetRegistrationApplyRequest,
+    TargetRegistrationPreviewRequest, TargetRemoveApplyRequest, TargetRemovePreviewRequest,
+};
 use my_agent_assets_core::targets::{load as load_targets, MountTarget};
 
 pub fn discover_runtime_sources_command(scope: DiscoveryScope) -> Result<DiscoveryResult, String> {
@@ -55,6 +60,38 @@ pub fn list_mount_targets_command() -> Result<Vec<MountTarget>, String> {
     Ok(load_targets(&home)
         .map_err(|error| error.to_string())?
         .targets)
+}
+
+pub fn target_registration_preview_command(
+    input: TargetRegistrationPreviewRequest,
+) -> Result<TargetChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; target registration preview skipped.".to_string())?;
+    preview_register_target(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn target_registration_apply_command(
+    input: TargetRegistrationApplyRequest,
+) -> Result<TargetChangeResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; target registration apply blocked.".to_string())?;
+    apply_register_target(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn target_removal_preview_command(
+    input: TargetRemovePreviewRequest,
+) -> Result<TargetChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; target removal preview skipped.".to_string())?;
+    preview_remove_target(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn target_removal_apply_command(
+    input: TargetRemoveApplyRequest,
+) -> Result<TargetChangeResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; target removal apply blocked.".to_string())?;
+    apply_remove_target(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn list_backup_history_command() -> Result<Vec<BackupHistoryEntry>, String> {

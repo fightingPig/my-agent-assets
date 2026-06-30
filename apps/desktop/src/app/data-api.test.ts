@@ -240,6 +240,66 @@ describe("read-only desktop data api", () => {
     });
     expect(applyRequest.request).not.toHaveProperty("runtimePath");
 
+    const registrationRequest = {
+      id: "project-a-skills",
+      kind: "claude_project_skills",
+      location: "~/workspace/project-a",
+    } as const;
+    invoke.mockResolvedValueOnce({
+      previewId: "target-add-1",
+      target: { id: registrationRequest.id },
+      affectedPaths: ["/tmp/targets.yaml"],
+    });
+    await api.targetRegistrationPreview(registrationRequest);
+    expect(invoke).toHaveBeenLastCalledWith("target_registration_preview", {
+      input: registrationRequest,
+    });
+
+    const registrationApplyRequest = {
+      previewId: "target-add-1",
+      previewGeneratedAtEpochSeconds: 125,
+      request: registrationRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "target-add-1",
+      operation: "add",
+      targetId: registrationRequest.id,
+      registryPath: "/tmp/targets.yaml",
+      backupPath: "/tmp/backup/targets.yaml",
+    });
+    await api.targetRegistrationApply(registrationApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("target_registration_apply", {
+      input: registrationApplyRequest,
+    });
+
+    const removalRequest = { targetId: registrationRequest.id };
+    invoke.mockResolvedValueOnce({
+      previewId: "target-remove-1",
+      target: { id: registrationRequest.id },
+      affectedPaths: ["/tmp/targets.yaml"],
+    });
+    await api.targetRemovalPreview(removalRequest);
+    expect(invoke).toHaveBeenLastCalledWith("target_removal_preview", {
+      input: removalRequest,
+    });
+
+    const removalApplyRequest = {
+      previewId: "target-remove-1",
+      previewGeneratedAtEpochSeconds: 126,
+      request: removalRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "target-remove-1",
+      operation: "remove",
+      targetId: registrationRequest.id,
+      registryPath: "/tmp/targets.yaml",
+      backupPath: "/tmp/backup/targets.yaml",
+    });
+    await api.targetRemovalApply(removalApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("target_removal_apply", {
+      input: removalApplyRequest,
+    });
+
     const unmountPreviewRequest = {
       assetId: "skill:review",
       targetId: "claude-user-skills",

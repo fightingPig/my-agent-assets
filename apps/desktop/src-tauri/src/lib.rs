@@ -144,6 +144,34 @@ fn list_mount_targets() -> Result<Vec<my_agent_assets_core::targets::MountTarget
 }
 
 #[tauri::command]
+fn target_registration_preview(
+    input: my_agent_assets_core::target_management::TargetRegistrationPreviewRequest,
+) -> Result<my_agent_assets_core::target_management::TargetChangePreview, String> {
+    shared_core::target_registration_preview_command(input)
+}
+
+#[tauri::command]
+fn target_registration_apply(
+    input: my_agent_assets_core::target_management::TargetRegistrationApplyRequest,
+) -> Result<my_agent_assets_core::target_management::TargetChangeResult, String> {
+    shared_core::target_registration_apply_command(input)
+}
+
+#[tauri::command]
+fn target_removal_preview(
+    input: my_agent_assets_core::target_management::TargetRemovePreviewRequest,
+) -> Result<my_agent_assets_core::target_management::TargetChangePreview, String> {
+    shared_core::target_removal_preview_command(input)
+}
+
+#[tauri::command]
+fn target_removal_apply(
+    input: my_agent_assets_core::target_management::TargetRemoveApplyRequest,
+) -> Result<my_agent_assets_core::target_management::TargetChangeResult, String> {
+    shared_core::target_removal_apply_command(input)
+}
+
+#[tauri::command]
 fn canonical_mount_preview(
     input: my_agent_assets_core::mount::MountPreviewRequest,
 ) -> Result<my_agent_assets_core::mount::MountPreview, String> {
@@ -239,6 +267,10 @@ pub fn run() {
             canonical_import_preview,
             canonical_import_apply,
             list_mount_targets,
+            target_registration_preview,
+            target_registration_apply,
+            target_removal_preview,
+            target_removal_apply,
             canonical_mount_preview,
             canonical_mount_apply,
             canonical_unmount_preview,

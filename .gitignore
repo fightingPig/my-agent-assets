@@ -7,3 +7,4 @@
 /apps/desktop/dist/
 /apps/desktop/artifacts/visual-qa/
 /apps/desktop/src-tauri/gen/
+/.codegraph/

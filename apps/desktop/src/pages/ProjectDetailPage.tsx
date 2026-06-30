@@ -1,7 +1,20 @@
 import { Activity, Blocks, BookOpen, FolderKanban, Link2, TerminalSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { listAssets, listProjects, mountApply, previewMount } from "../app/data-api";
-import type { ApplyResult, AssetSummary, MountPreview, PreviewMountInput, ProjectSummary } from "../app/contracts";
+import {
+  canonicalMountApply,
+  canonicalMountPreview,
+  listAssets,
+  listMountTargets,
+  listProjects,
+} from "../app/data-api";
+import type {
+  ApplyResult,
+  AssetSummary,
+  CanonicalMountPreview,
+  CanonicalMountPreviewRequest,
+  ProjectSummary,
+  RegisteredMountTarget,
+} from "../app/contracts";
 import type { ProjectDetailContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
@@ -19,12 +32,10 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
   const initialDetail = detailProp ?? (demoMode ? fallbackProject : null);
   const [detail, setDetail] = useState<ProjectDetailContext | null>(initialDetail);
   const [selectedAsset, setSelectedAsset] = useState<AssetSummary | null>(null);
-  const [preview, setPreview] = useState<MountPreview | null>(null);
-  const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [target, setTarget] = useState<RegisteredMountTarget | null>(null);
+  const [preview, setPreview] = useState<CanonicalMountPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
-  const [confirmationValue, setConfirmationValue] = useState("");
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -38,14 +49,22 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
       setSelectedAsset(null);
       return undefined;
     }
-    listAssets()
-      .then((assets) => {
+    Promise.all([listAssets(), listMountTargets()])
+      .then(([assets, targets]) => {
         if (cancelled) return;
-        setSelectedAsset(
+        const asset = (
           assets.find((asset) => detail.mounts.includes(asset.name))
             ?? assets[0]
-            ?? null,
+            ?? null
         );
+        setSelectedAsset(asset);
+        setTarget(asset
+          ? targets.find((candidate) =>
+            candidate.projectPath === detail.path &&
+            candidate.accepts.includes(asset.assetType) &&
+            candidate.status === "ready"
+          ) ?? null
+          : null);
       })
       .catch((error) => {
         if (!cancelled) setOperationError(errorMessage(error));
@@ -56,19 +75,20 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
   }, [detail, refreshKey]);
 
   const previewInput = useMemo(
-    () => detail && selectedAsset ? projectMountInput(detail, selectedAsset) : null,
-    [detail, selectedAsset],
+    () => selectedAsset && target
+      ? { assetId: selectedAsset.id, targetId: target.id } satisfies CanonicalMountPreviewRequest
+      : null,
+    [selectedAsset, target],
   );
 
   useEffect(() => {
     let cancelled = false;
-    setPlanResult(null);
     setOperationError(null);
     if (!previewInput) {
       setPreview(null);
       return undefined;
     }
-    previewMount(previewInput)
+    canonicalMountPreview(previewInput)
       .then((result) => {
         if (!cancelled) setPreview(result);
       })
@@ -82,48 +102,25 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
     };
   }, [previewInput, refreshKey]);
 
-  const canApply = Boolean(planResult?.ok && preview?.previewId && previewInput);
-
-  const handlePlanMount = async () => {
-    if (!preview?.previewId || !previewInput) return;
-    setIsPlanning(true);
-    setOperationError(null);
-    try {
-      setPlanResult(await mountApply({
-        previewId: preview.previewId,
-        mode: "planOnly",
-        assetId: previewInput.assetId,
-        target: previewInput.target,
-        backupBeforeApply: preview.backupRequired,
-      }));
-    } catch (error) {
-      setPlanResult(null);
-      setOperationError(errorMessage(error));
-    } finally {
-      setIsPlanning(false);
-    }
-  };
+  const canApply = Boolean(preview?.canApply && preview?.previewId && previewInput);
 
   const handleApplyMount = async () => {
     if (!canApply || !preview?.previewId || !previewInput || !detail) return;
     setIsApplying(true);
     setOperationError(null);
     try {
-      const result = await mountApply({
+      const result = await canonicalMountApply({
         previewId: preview.previewId,
-        mode: "apply",
-        assetId: previewInput.assetId,
-        target: previewInput.target,
-        backupBeforeApply: preview.backupRequired,
+        previewGeneratedAtEpochSeconds: preview.generatedAtEpochSeconds,
+        request: previewInput,
       });
-      setApplyResult(result);
-      if (result.ok) {
+      setApplyResult(toApplyResult(result));
+      if (result.mounted) {
         const projects = await listProjects();
         const refreshed = projects.find(
           (project) => project.id === detail.id || project.path === detail.path,
         );
         if (refreshed) setDetail(toProjectDetail(refreshed));
-        setConfirmationValue("");
         setRefreshKey((current) => current + 1);
       }
     } catch (error) {
@@ -166,30 +163,11 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
 
         <div className="detail-column">
           <section className="panel detail-section"><div className="section-heading"><div><h3>已挂载资产</h3><p>按资产类型分组</p></div></div><div className="mounted-groups"><div><h4><BookOpen size={14} />Skills</h4>{renderMounts(skillMounts)}</div><div><h4><TerminalSquare size={14} />Commands</h4>{renderMounts(commandMounts)}</div><div><h4><Blocks size={14} />MCP Servers</h4>{renderMounts(mcpMounts)}</div></div></section>
-          <section className="panel detail-section mount-plan-card"><div className="section-heading"><div><h3>挂载计划预览</h3><p>{selectedAsset ? `目标资产：${selectedAsset.name}` : "资产中心暂无可挂载资产"}</p></div><Link2 size={17} /></div><div className="plan-lines"><span>验证 {detail.assets} 项项目资产</span><span>保持 {Math.max(detail.assets - detail.mcps, 0)} 个现有软链接</span><span>编译 {detail.mcps} 项项目 MCP 配置</span><span>执行前创建本地备份</span></div><button className="asset-business-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button><ApplyConfirmationPanel actionLabel="确认项目挂载" canApply={canApply} confirmationValue={confirmationValue} description={previewInput ? `将 ${previewInput.assetId} 挂载到 ${previewInput.target.runtimePath}。` : "需要先在资产中心准备可挂载资产。"} isApplying={isApplying} onApply={handleApplyMount} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行项目挂载" /></section>
+          <section className="panel detail-section mount-plan-card"><div className="section-heading"><div><h3>挂载计划预览</h3><p>{selectedAsset ? `目标资产：${selectedAsset.name}` : "资产中心暂无可挂载资产"}</p></div><Link2 size={17} /></div><div className="plan-lines"><span>验证 {detail.assets} 项项目资产</span><span>保持 {Math.max(detail.assets - detail.mcps, 0)} 个现有软链接</span><span>编译 {detail.mcps} 项项目 MCP 配置</span><span>执行前创建本地备份</span></div><button className="asset-business-action" data-no-drag="true" disabled={!previewInput} onClick={() => setRefreshKey((current) => current + 1)} style={NO_DRAG_REGION_STYLE} type="button">刷新挂载预览</button><ApplyConfirmationPanel actionLabel="确认项目挂载" canApply={canApply} description={target ? `将 ${previewInput?.assetId ?? "资产"} 挂载到已授权项目目标 ${target.id}（${preview?.affectedTargetPath ?? target.path}）。` : "当前项目没有与所选资产兼容的已授权目标，请先在设置中注册。"} isApplying={isApplying} onApply={handleApplyMount} operationError={operationError} result={applyResult} title="执行项目挂载" /></section>
         </div>
       </div>
     </div>
   );
-}
-
-function projectMountInput(
-  project: ProjectDetailContext,
-  asset: AssetSummary,
-): PreviewMountInput {
-  const runtimePath = asset.assetType === "mcp"
-    ? `${project.path}/.mcp.json`
-    : asset.assetType === "command"
-      ? `${project.path}/.claude/commands/${asset.name}.md`
-      : `${project.path}/.claude/skills/${asset.name}${asset.sourcePath.endsWith(".md") ? ".md" : ""}`;
-  return {
-    assetId: asset.id,
-    target: {
-      scope: "project",
-      runtimePath,
-      projectPath: project.path,
-    },
-  };
 }
 
 function toProjectDetail(project: ProjectSummary): ProjectDetailContext {
@@ -211,6 +189,27 @@ function toProjectDetail(project: ProjectSummary): ProjectDetailContext {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "无法调用项目挂载操作。";
+}
+
+function toApplyResult(
+  result: Awaited<ReturnType<typeof canonicalMountApply>>,
+): ApplyResult {
+  return {
+    mode: "apply",
+    ok: result.mounted,
+    previewId: result.previewId,
+    backup: null,
+    steps: [{
+      stepId: "canonical-project-mount",
+      kind: "mount",
+      label: "挂载项目资产",
+      status: result.mounted ? "success" : "failed",
+      message: result.mounted ? "项目目标已更新并登记挂载关系。" : "项目挂载未完成。",
+      affectedPaths: result.affectedPaths,
+    }],
+    warnings: result.warnings,
+    errors: result.mounted ? [] : ["项目挂载未完成。"],
+  };
 }
 
 function renderMounts(mounts: readonly string[]) {

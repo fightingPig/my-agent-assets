@@ -34,6 +34,12 @@ import type {
   CanonicalImportApplyRequest,
   CanonicalImportApplyResult,
   RegisteredMountTarget,
+  TargetRegistrationPreviewRequest,
+  TargetRegistrationApplyRequest,
+  TargetRemovalPreviewRequest,
+  TargetRemovalApplyRequest,
+  TargetChangePreview,
+  TargetChangeResult,
   CanonicalMountPreviewRequest,
   CanonicalMountPreview,
   CanonicalMountApplyRequest,
@@ -203,6 +209,30 @@ export async function canonicalImportApply(
 export async function listMountTargets(): Promise<RegisteredMountTarget[]> {
   const result = await invokeRead<unknown>("list_mount_targets", undefined, []);
   return Array.isArray(result) ? (result as RegisteredMountTarget[]) : [];
+}
+
+export async function targetRegistrationPreview(
+  input: TargetRegistrationPreviewRequest,
+): Promise<TargetChangePreview> {
+  return invokeTargetPreview("target_registration_preview", input);
+}
+
+export async function targetRegistrationApply(
+  input: TargetRegistrationApplyRequest,
+): Promise<TargetChangeResult> {
+  return invokeTargetApply("target_registration_apply", input);
+}
+
+export async function targetRemovalPreview(
+  input: TargetRemovalPreviewRequest,
+): Promise<TargetChangePreview> {
+  return invokeTargetPreview("target_removal_preview", input);
+}
+
+export async function targetRemovalApply(
+  input: TargetRemovalApplyRequest,
+): Promise<TargetChangeResult> {
+  return invokeTargetApply("target_removal_apply", input);
 }
 
 export async function canonicalMountPreview(
@@ -577,6 +607,44 @@ async function invokeRead<T>(
 ): Promise<T> {
   if (!isTauriRuntime()) return browserFallback;
   return args === undefined ? invoke<T>(command) : invoke<T>(command, args);
+}
+
+async function invokeTargetPreview(
+  command: "target_registration_preview" | "target_removal_preview",
+  input: TargetRegistrationPreviewRequest | TargetRemovalPreviewRequest,
+): Promise<TargetChangePreview> {
+  if (!isTauriRuntime()) {
+    throw new Error(`${command} requires the Tauri runtime.`);
+  }
+  const result = await invoke<unknown>(command, { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !isRecord(result.target) ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error(`${command} returned an invalid response.`);
+  }
+  return result as TargetChangePreview;
+}
+
+async function invokeTargetApply(
+  command: "target_registration_apply" | "target_removal_apply",
+  input: TargetRegistrationApplyRequest | TargetRemovalApplyRequest,
+): Promise<TargetChangeResult> {
+  if (!isTauriRuntime()) {
+    throw new Error(`${command} requires the Tauri runtime.`);
+  }
+  const result = await invoke<unknown>(command, { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.targetId !== "string" ||
+    typeof result.registryPath !== "string"
+  ) {
+    throw new Error(`${command} returned an invalid response.`);
+  }
+  return result as TargetChangeResult;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

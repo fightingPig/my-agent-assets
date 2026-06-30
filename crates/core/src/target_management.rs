@@ -1,6 +1,8 @@
 use crate::mount_registry::load as load_mounts;
 use crate::operation::OperationLock;
-use crate::targets::{load as load_targets, registry_path, save as save_targets, MountTarget};
+use crate::targets::{
+    load as load_targets, registry_path, save as save_targets, MountTarget, MountTargetKind,
+};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
@@ -17,6 +19,14 @@ static OPERATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[serde(rename_all = "camelCase")]
 pub struct TargetAddPreviewRequest {
     pub target: MountTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetRegistrationPreviewRequest {
+    pub id: String,
+    pub kind: MountTargetKind,
+    pub location: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +59,14 @@ pub struct TargetAddApplyRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TargetRegistrationApplyRequest {
+    pub preview_id: String,
+    pub preview_generated_at_epoch_seconds: u64,
+    pub request: TargetRegistrationPreviewRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TargetRemoveApplyRequest {
     pub preview_id: String,
     pub preview_generated_at_epoch_seconds: u64,
@@ -70,6 +88,16 @@ pub fn preview_add_target(
     request: &TargetAddPreviewRequest,
 ) -> Result<TargetChangePreview> {
     preview_add_target_at(home, request, epoch_seconds())
+}
+
+pub fn preview_register_target(
+    home: &Path,
+    request: &TargetRegistrationPreviewRequest,
+) -> Result<TargetChangePreview> {
+    let request = TargetAddPreviewRequest {
+        target: build_registered_target(home, request)?,
+    };
+    preview_add_target(home, &request)
 }
 
 pub fn preview_remove_target(
@@ -104,6 +132,22 @@ pub fn apply_add_target(
         registry_path: registry_path(home),
         backup_path,
     })
+}
+
+pub fn apply_register_target(
+    home: &Path,
+    request: &TargetRegistrationApplyRequest,
+) -> Result<TargetChangeResult> {
+    apply_add_target(
+        home,
+        &TargetAddApplyRequest {
+            preview_id: request.preview_id.clone(),
+            preview_generated_at_epoch_seconds: request.preview_generated_at_epoch_seconds,
+            request: TargetAddPreviewRequest {
+                target: build_registered_target(home, &request.request)?,
+            },
+        },
+    )
 }
 
 pub fn apply_remove_target(
@@ -256,6 +300,51 @@ fn validate_preview_time(generated_at: u64) -> Result<()> {
     Ok(())
 }
 
+fn build_registered_target(
+    home: &Path,
+    request: &TargetRegistrationPreviewRequest,
+) -> Result<MountTarget> {
+    let location = expand_home(home, &request.location);
+    if is_project_kind(request.kind) {
+        let canonical = fs::canonicalize(&location).map_err(|error| {
+            MaaError::new(format!(
+                "project path must be an existing directory ({}): {error}",
+                location.display()
+            ))
+        })?;
+        if !canonical.is_dir() {
+            return Err(MaaError::new(format!(
+                "project path is not a directory: {}",
+                canonical.display()
+            )));
+        }
+        MountTarget::project(request.id.clone(), request.kind, canonical)
+    } else {
+        MountTarget::custom(request.id.clone(), request.kind, location)
+    }
+}
+
+fn expand_home(home: &Path, path: &Path) -> PathBuf {
+    if path == Path::new("~") {
+        home.to_path_buf()
+    } else if let Ok(relative) = path.strip_prefix("~") {
+        home.join(relative)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+fn is_project_kind(kind: MountTargetKind) -> bool {
+    matches!(
+        kind,
+        MountTargetKind::ClaudeProjectSkills
+            | MountTargetKind::CodexProjectSkills
+            | MountTargetKind::ClaudeProjectCommands
+            | MountTargetKind::ClaudeProjectMcpJson
+            | MountTargetKind::CodexProjectMcpToml
+    )
+}
+
 fn backup_registry(home: &Path) -> Result<PathBuf> {
     let id = format!(
         "target-registry-{}-{}",
@@ -342,6 +431,71 @@ mod tests {
             .unwrap()
             .resolve("project-a-claude-skills")
             .is_ok());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn registration_request_derives_project_target_and_expands_home() {
+        let home = home("register-project");
+        let project = home.join("workspace/project-a");
+        fs::create_dir_all(&project).unwrap();
+        let request = TargetRegistrationPreviewRequest {
+            id: "project-a-codex-mcp".into(),
+            kind: MountTargetKind::CodexProjectMcpToml,
+            location: PathBuf::from("~/workspace/project-a"),
+        };
+        let preview = preview_register_target(&home, &request).unwrap();
+        assert_eq!(
+            preview.target.path,
+            project.canonicalize().unwrap().join(".codex/config.toml")
+        );
+        let result = apply_register_target(
+            &home,
+            &TargetRegistrationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
+        assert_eq!(result.target_id, "project-a-codex-mcp");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn registration_request_derives_custom_target_without_creating_it() {
+        let home = home("register-custom");
+        let location = PathBuf::from("~/custom/skills");
+        let request = TargetRegistrationPreviewRequest {
+            id: "custom-skills".into(),
+            kind: MountTargetKind::CustomSkillDirectory,
+            location,
+        };
+        let preview = preview_register_target(&home, &request).unwrap();
+        assert_eq!(preview.target.path, home.join("custom/skills"));
+        assert!(!preview.target.path.exists());
+        assert!(preview.can_apply);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn project_registration_rejects_missing_directory_without_writes() {
+        let home = home("register-missing");
+        let registry_before = fs::read(home.join(".my-agent-assets/targets.yaml")).unwrap();
+        let error = preview_register_target(
+            &home,
+            &TargetRegistrationPreviewRequest {
+                id: "missing-project".into(),
+                kind: MountTargetKind::ClaudeProjectSkills,
+                location: PathBuf::from("~/workspace/missing"),
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("existing directory"));
+        assert_eq!(
+            fs::read(home.join(".my-agent-assets/targets.yaml")).unwrap(),
+            registry_before
+        );
         let _ = fs::remove_dir_all(home);
     }
 

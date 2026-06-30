@@ -19,13 +19,11 @@ use my_agent_assets_core::mount::{
 use my_agent_assets_core::mount_registry::load as load_mounts;
 use my_agent_assets_core::operation::incomplete_journals;
 use my_agent_assets_core::target_management::{
-    apply_add_target, apply_remove_target, preview_add_target, preview_remove_target,
-    TargetAddApplyRequest, TargetAddPreviewRequest, TargetRemoveApplyRequest,
+    apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
+    TargetRegistrationApplyRequest, TargetRegistrationPreviewRequest, TargetRemoveApplyRequest,
     TargetRemovePreviewRequest,
 };
-use my_agent_assets_core::targets::{
-    load as load_targets, AssetKind, MountTarget, MountTargetKind,
-};
+use my_agent_assets_core::targets::{load as load_targets, AssetKind, MountTargetKind};
 use my_agent_assets_core::{doctor, init_apply, init_plan, Context, MaaError, Result};
 use serde::Serialize;
 use serde_json::json;
@@ -287,23 +285,18 @@ fn handle_target(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()>
         "add" => {
             let kind = parse_target_kind(&next_arg(args, "target kind")?)?;
             let id = next_arg(args, "target ID")?;
-            let target = if is_project_kind(kind) {
-                let project = canonical_existing_directory(
-                    home,
-                    PathBuf::from(required_option(args, "--project")?),
-                )?;
-                MountTarget::project(id, kind, project)?
+            let location = if is_project_kind(kind) {
+                PathBuf::from(required_option(args, "--project")?)
             } else {
-                let path = expand_home(home, &required_option(args, "--path")?);
-                MountTarget::custom(id, kind, path)?
+                PathBuf::from(required_option(args, "--path")?)
             };
-            let request = TargetAddPreviewRequest { target };
-            let preview = preview_add_target(home, &request)?;
+            let request = TargetRegistrationPreviewRequest { id, kind, location };
+            let preview = preview_register_target(home, &request)?;
             if apply {
                 ensure_can_apply(preview.can_apply, &preview.warnings)?;
-                print_json(&apply_add_target(
+                print_json(&apply_register_target(
                     home,
-                    &TargetAddApplyRequest {
+                    &TargetRegistrationApplyRequest {
                         preview_id: preview.preview_id.clone(),
                         preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
                         request,

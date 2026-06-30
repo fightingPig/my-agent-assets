@@ -29,9 +29,9 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `preview_import`
 - `preview_mount`
 - `preview_conflicts`
-- `preview_restore`
 
-Preview-only commands synthesize deterministic DTOs from their input or read existing manifests for preview. They do not write files, create directories, create symlinks, modify MCP JSON, restore backups, or perform apply operations.
+Historical Restore preview is not registered. Backup History exposes manifests,
+affected paths, and manual restore guidance only.
 
 ## HOME Resolution
 
@@ -144,6 +144,8 @@ The preview workflow pages now consume preview-only data through the wrapper lay
   backend-composed Adopt.
 - Mount Manager: Target Registry enumeration and targetId-only Mount
   preview/apply.
+- Settings: Target Registry registration/removal preview and apply. Rust derives
+  the final runtime path and adapter from `{ id, kind, location }`.
 - Conflict Resolver: canonical Batch Import preview/apply with exact
   existing/incoming content and explicit skip/rename/overwrite.
 - Backup History: read-only portable/local manifests and manual restore guide;
@@ -155,7 +157,12 @@ Preview data controls plan text, warnings, affected paths, conflicts, and
 whether the confirmation button is enabled. Apply revalidates the preview in
 the Rust backend.
 
-Asset Detail and Project Detail consume the selected list context rather than replacing it with a fixed entity. They use `preview_mount` and `mount_apply` for their existing mount workflow. After a successful apply, Asset Detail reloads `list_assets` and Project Detail reloads `list_projects`, so derived mount targets and project counts reflect the backend state.
+Asset Detail and Project Detail consume the selected list context rather than
+replacing it with a fixed entity. They enumerate authorized targets and use
+`canonical_mount_preview` / `canonical_mount_apply` with `{ assetId, targetId }`.
+React does not derive runtime paths. After a successful apply, Asset Detail
+reloads `list_assets` and Project Detail reloads `list_projects`, so derived
+mount targets and project counts reflect the backend state.
 
 ## Non-goals
 

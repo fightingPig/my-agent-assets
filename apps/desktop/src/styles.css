@@ -1299,3 +1299,20 @@ h1 {
   .master-detail-workspace { grid-template-columns: minmax(280px, .7fr) minmax(0, 1.3fr); gap: 10px; }
   .settings-workspace { gap: 10px; }
 }
+
+.target-registry-settings {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--subtle-border);
+  display: grid;
+  gap: 12px;
+}
+
+.target-registry-settings .reference-list > div {
+  display: grid;
+  grid-template-columns: auto minmax(100px, .65fr) minmax(180px, 1fr) auto;
+}
+
+.target-registry-settings .reference-list .icon-button {
+  justify-self: end;
+}

@@ -849,14 +849,11 @@ describe("read-only UI integration", () => {
   it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {
     const asset = assetFixture("skill:real-review", "real-review", "skill");
     listAssets.mockResolvedValue([{ ...asset, mountTargets: ["/tmp/home/.claude/skills/real-review.md"] }]);
-    previewMount.mockResolvedValue(mountPreviewFixture({
+    canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture({
       previewId: "preview:mount:real-review",
-      asset,
-      target: {
-        scope: "user",
-        runtimePath: "~/.claude/skills/real-review.md",
-        projectPath: null,
-      },
+      assetId: asset.id,
+      targetId: "claude-user-skills",
+      affectedTargetPath: "/tmp/home/.claude/skills/real-review",
     }));
 
     render(<AssetDetailPage detail={{
@@ -878,21 +875,24 @@ describe("read-only UI integration", () => {
     }} />);
 
     expect(screen.getByText("Real selected asset")).toBeInTheDocument();
-    await waitFor(() => expect(previewMount).toHaveBeenCalledWith({
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
       assetId: "skill:real-review",
-      target: {
-        scope: "user",
-        runtimePath: "~/.claude/skills/real-review.md",
-        projectPath: null,
-      },
+      targetId: "claude-user-skills",
     }));
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "确认挂载" }));
-    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
+    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
+      previewId: "preview:mount:real-review",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        assetId: "skill:real-review",
+        targetId: "claude-user-skills",
+      },
+    }));
     await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
     expect(await screen.findByText("/tmp/home/.claude/skills/real-review.md")).toBeInTheDocument();
+    expect(previewMount).not.toHaveBeenCalled();
+    expect(mountApply).not.toHaveBeenCalled();
   });
 
   it("uses selected real project data for project mount preview, apply, and refresh", async () => {
@@ -906,32 +906,44 @@ describe("read-only UI integration", () => {
       mounts: ["review"],
       assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
     })]);
-    previewMount.mockResolvedValue(mountPreviewFixture({
+    listMountTargets.mockResolvedValue([{
+      id: "project-a-skills",
+      kind: "claude_project_skills",
+      provider: "claude_code",
+      accepts: ["skill"],
+      adapter: "symlink_directory",
+      scope: "project",
+      path: "~/workspace/project-a/.claude/skills",
+      projectPath: "~/workspace/project-a",
+      providerState: "initialized",
+      status: "ready",
+    }]);
+    canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture({
       previewId: "preview:mount:project-detail",
-      asset,
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
-      },
+      assetId: asset.id,
+      targetId: "project-a-skills",
+      affectedTargetPath: "~/workspace/project-a/.claude/skills/review",
     }));
 
     render(<ProjectDetailPage detail={project} />);
 
-    await waitFor(() => expect(previewMount).toHaveBeenCalledWith({
+    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
       assetId: "skill:review",
-      target: {
-        scope: "project",
-        runtimePath: "~/workspace/project-a/.claude/skills/review",
-        projectPath: "~/workspace/project-a",
-      },
+      targetId: "project-a-skills",
     }));
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-    await waitFor(() => expect(mountApply).toHaveBeenCalledWith(expect.objectContaining({ mode: "planOnly" })));
     expect(screen.getByRole("button", { name: "确认项目挂载" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
-    await waitFor(() => expect(mountApply).toHaveBeenLastCalledWith(expect.objectContaining({ mode: "apply" })));
+    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
+      previewId: "preview:mount:project-detail",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        assetId: "skill:review",
+        targetId: "project-a-skills",
+      },
+    }));
     await waitFor(() => expect(listProjects).toHaveBeenCalled());
+    expect(previewMount).not.toHaveBeenCalled();
+    expect(mountApply).not.toHaveBeenCalled();
   });
 
   it("does not call apply command wrappers from Scan Import preview", async () => {

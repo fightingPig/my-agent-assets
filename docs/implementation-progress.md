@@ -54,8 +54,8 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 82 tests and desktop 84 tests passed
-- frontend: 82 tests passed
+- Rust workspace: core 85 tests and desktop 84 tests passed
+- frontend: 84 tests passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
@@ -113,18 +113,25 @@ Implemented:
 - Push blocks public/internal/unknown/unverifiable remotes, non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity
 - Push never uses force, stash, merge, rebase, or reset; failed Push restores only the app-created branch ref
 - migrated Tauri, CLI, and Sync UI to the shared Git service
+- added shared target registration requests that expand `~`, canonicalize
+  existing project roots, derive provider/adapter/runtime paths, and preserve
+  preview/apply stale-state validation
+- registered Target Registry add/remove commands in Tauri and added typed
+  frontend wrappers
+- added Settings target registration/removal UI with preview plus ordinary
+  confirmation; user-level built-in targets remain non-removable in the GUI
+- migrated Asset Detail and Project Detail from frontend-built `runtimePath`
+  requests to authorized targetId-only canonical Mount
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
-- Tauri target add/remove adapters and GUI target registration
-- remaining Asset/Project detail mount migration
 - automatic startup recovery for incomplete operation journals
 - shared SHA-256 fingerprint migration for non-Git operations
+- removal of remaining legacy Desktop transport/test implementations
 
 Next:
-- add Tauri target add/remove adapters and GUI target registration
-- migrate remaining detail pages away from legacy runtimePath commands
-- remove legacy runtimePath, duplicate provider discovery, and historical Restore implementations
+- remove legacy runtimePath, duplicate provider discovery, and historical Restore test implementations
+- implement automatic startup recovery for incomplete operation journals
 
 ## Progress Update Template
 

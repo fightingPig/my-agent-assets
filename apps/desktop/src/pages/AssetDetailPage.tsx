@@ -1,7 +1,18 @@
 import { BookOpen, FolderKanban, Link2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { listAssets, mountApply, previewMount } from "../app/data-api";
-import type { ApplyResult, AssetSummary, MountPreview, PreviewMountInput } from "../app/contracts";
+import {
+  canonicalMountApply,
+  canonicalMountPreview,
+  listAssets,
+  listMountTargets,
+} from "../app/data-api";
+import type {
+  ApplyResult,
+  AssetSummary,
+  CanonicalMountPreview,
+  CanonicalMountPreviewRequest,
+  RegisteredMountTarget,
+} from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { StaticActionButton } from "../components/ui/StaticActionButton";
@@ -41,15 +52,16 @@ type AssetDetailPageProps = {
 export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetDetailPageProps) {
   const initialDetail = detailProp ?? (demoMode ? fallbackDetail : null);
   const [detail, setDetail] = useState<AssetDetailContext | null>(initialDetail);
-  const [preview, setPreview] = useState<MountPreview | null>(null);
-  const [planResult, setPlanResult] = useState<ApplyResult | null>(null);
+  const [target, setTarget] = useState<RegisteredMountTarget | null>(null);
+  const [preview, setPreview] = useState<CanonicalMountPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
-  const [confirmationValue, setConfirmationValue] = useState("");
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const previewInput = useMemo(() => detail ? assetMountInput(detail) : null, [detail]);
+  const previewInput = useMemo<CanonicalMountPreviewRequest | null>(
+    () => detail && target ? { assetId: detail.assetId, targetId: target.id } : null,
+    [detail, target],
+  );
 
   useEffect(() => {
     setDetail(detailProp ?? (demoMode ? fallbackDetail : null));
@@ -57,13 +69,38 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
 
   useEffect(() => {
     let cancelled = false;
-    setPlanResult(null);
+    if (!detail) {
+      setTarget(null);
+      return undefined;
+    }
+    listMountTargets()
+      .then((targets) => {
+        if (cancelled) return;
+        const compatible = targets.filter((candidate) =>
+          candidate.accepts.includes(detail.assetType) && candidate.status === "ready"
+        );
+        setTarget(
+          compatible.find((candidate) => candidate.scope === "user")
+            ?? compatible[0]
+            ?? null,
+        );
+      })
+      .catch((error) => {
+        if (!cancelled) setOperationError(errorMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  useEffect(() => {
+    let cancelled = false;
     setOperationError(null);
     if (!previewInput) {
       setPreview(null);
       return undefined;
     }
-    previewMount(previewInput)
+    canonicalMountPreview(previewInput)
       .then((result) => {
         if (!cancelled) setPreview(result);
       })
@@ -77,46 +114,23 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
     };
   }, [previewInput, refreshKey]);
 
-  const canApply = Boolean(planResult?.ok && preview?.previewId);
-
-  const handlePlanMount = async () => {
-    if (!preview?.previewId || !previewInput) return;
-    setIsPlanning(true);
-    setOperationError(null);
-    try {
-      setPlanResult(await mountApply({
-        previewId: preview.previewId,
-        mode: "planOnly",
-        assetId: previewInput.assetId,
-        target: previewInput.target,
-        backupBeforeApply: preview.backupRequired,
-      }));
-    } catch (error) {
-      setPlanResult(null);
-      setOperationError(errorMessage(error));
-    } finally {
-      setIsPlanning(false);
-    }
-  };
+  const canApply = Boolean(preview?.canApply && preview?.previewId);
 
   const handleApplyMount = async () => {
     if (!canApply || !preview?.previewId || !previewInput || !detail) return;
     setIsApplying(true);
     setOperationError(null);
     try {
-      const result = await mountApply({
+      const result = await canonicalMountApply({
         previewId: preview.previewId,
-        mode: "apply",
-        assetId: previewInput.assetId,
-        target: previewInput.target,
-        backupBeforeApply: preview.backupRequired,
+        previewGeneratedAtEpochSeconds: preview.generatedAtEpochSeconds,
+        request: previewInput,
       });
-      setApplyResult(result);
-      if (result.ok) {
+      setApplyResult(toApplyResult(result));
+      if (result.mounted) {
         const refreshed = await listAssets({ assetType: detail.assetType });
         const asset = refreshed.find((item) => item.id === detail.assetId);
         if (asset) setDetail((current) => current ? mergeAssetSummary(current, asset) : current);
-        setConfirmationValue("");
         setRefreshKey((current) => current + 1);
       }
     } catch (error) {
@@ -127,7 +141,7 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
     }
   };
 
-  if (!detail || !previewInput) {
+  if (!detail) {
     return (
       <section className="panel detail-section">
         <div className="asset-empty-state">
@@ -150,26 +164,10 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
           <section className="panel detail-section"><div className="section-heading"><div><h3>资产信息</h3><p>{detail.typeLabel} · {detail.category}</p></div></div><dl className="entity-field-list"><div><dt>来源路径</dt><dd>{detail.sourcePath}</dd></div><div><dt>作用域</dt><dd>{detail.scope}</dd></div><div><dt>最近更新</dt><dd>{detail.updated}</dd></div><div><dt>使用引用</dt><dd>{detail.mountTargets.length} 个运行目标</dd></div></dl></section>
           <section className="panel detail-section"><div className="section-heading"><div><h3>挂载目标</h3><p>当前引用关系</p></div><Link2 size={16} /></div><div className="reference-list">{detail.mountTargets.length > 0 ? detail.mountTargets.map((target) => <div key={target}><FolderKanban size={15} /><span>{target.includes("project") ? "项目级 Claude Runtime" : "用户级 Claude Runtime"}</span><small>{target}</small></div>) : <div><FolderKanban size={15} /><span>暂无挂载目标</span><small>资产中心</small></div>}</div></section>
         </div>
-        <section className="panel detail-section content-preview-panel"><div className="section-heading"><div><h3>{detail.previewLabel}</h3><p>只读内容</p></div></div><pre><code>{detail.preview}</code></pre><div className="detail-actions"><StaticActionButton className="asset-secondary-action">查看引用</StaticActionButton><button className="asset-business-action" data-no-drag="true" disabled={isPlanning || !preview?.previewId} onClick={handlePlanMount} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成挂载计划"}</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} confirmationValue={confirmationValue} description={`将挂载到 ${previewInput.target.runtimePath}；执行前校验 previewId，并在替换现有目标前创建备份。`} isApplying={isApplying} onApply={handleApplyMount} onConfirmationChange={setConfirmationValue} operationError={operationError} result={applyResult} title="执行资产挂载" /></section>
+        <section className="panel detail-section content-preview-panel"><div className="section-heading"><div><h3>{detail.previewLabel}</h3><p>只读内容</p></div></div><pre><code>{detail.preview}</code></pre><div className="detail-actions"><StaticActionButton className="asset-secondary-action">查看引用</StaticActionButton><button className="asset-business-action" data-no-drag="true" disabled={!previewInput} onClick={() => setRefreshKey((current) => current + 1)} style={NO_DRAG_REGION_STYLE} type="button">刷新挂载预览</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} description={target ? `将挂载到已授权目标 ${target.id}（${preview?.affectedTargetPath ?? target.path}）；执行前校验 previewId，并在替换现有目标前创建备份。` : "没有兼容的已授权目标，请先在设置中注册目标。"} isApplying={isApplying} onApply={handleApplyMount} operationError={operationError} result={applyResult} title="执行资产挂载" /></section>
       </div>
     </div>
   );
-}
-
-function assetMountInput(detail: AssetDetailContext): PreviewMountInput {
-  const runtimePath = detail.assetType === "mcp"
-    ? "~/.claude.json"
-    : detail.assetType === "command"
-      ? `~/.claude/commands/${detail.name}.md`
-      : `~/.claude/skills/${detail.name}${detail.sourcePath.endsWith(".md") ? ".md" : ""}`;
-  return {
-    assetId: detail.assetId,
-    target: {
-      scope: "user",
-      runtimePath,
-      projectPath: null,
-    },
-  };
 }
 
 function mergeAssetSummary(detail: AssetDetailContext, asset: AssetSummary): AssetDetailContext {
@@ -181,6 +179,27 @@ function mergeAssetSummary(detail: AssetDetailContext, asset: AssetSummary): Ass
     scope: asset.scope === "user" ? "用户级" : asset.scope === "project" ? "项目级" : "资产中心",
     updated: asset.updatedAt ?? detail.updated,
     mountTargets: asset.mountTargets,
+  };
+}
+
+function toApplyResult(
+  result: Awaited<ReturnType<typeof canonicalMountApply>>,
+): ApplyResult {
+  return {
+    mode: "apply",
+    ok: result.mounted,
+    previewId: result.previewId,
+    backup: null,
+    steps: [{
+      stepId: "canonical-mount",
+      kind: "mount",
+      label: "挂载资产",
+      status: result.mounted ? "success" : "failed",
+      message: result.mounted ? "目标已更新并登记本机挂载关系。" : "挂载未完成。",
+      affectedPaths: result.affectedPaths,
+    }],
+    warnings: result.warnings,
+    errors: result.mounted ? [] : ["挂载未完成。"],
   };
 }
 

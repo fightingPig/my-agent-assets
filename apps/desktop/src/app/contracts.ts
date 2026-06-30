@@ -481,6 +481,48 @@ export type RegisteredMountTarget = {
   status: "ready" | "blocked" | "invalid";
 };
 
+export type TargetRegistrationPreviewRequest = {
+  id: string;
+  kind: MountTargetKind;
+  location: string;
+};
+
+export type TargetRemovalPreviewRequest = {
+  targetId: string;
+};
+
+export type TargetChangePreview = {
+  previewId: string;
+  operation: "add" | "remove";
+  target: RegisteredMountTarget;
+  affectedPaths: string[];
+  blockingBindings: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type TargetRegistrationApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: TargetRegistrationPreviewRequest;
+};
+
+export type TargetRemovalApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: TargetRemovalPreviewRequest;
+};
+
+export type TargetChangeResult = {
+  previewId: string;
+  operation: "add" | "remove";
+  targetId: string;
+  registryPath: string;
+  backupPath: string;
+};
+
 export type CanonicalMountPreviewRequest = {
   assetId: string;
   targetId: string;

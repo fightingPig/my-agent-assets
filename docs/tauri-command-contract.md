@@ -93,14 +93,63 @@ The read-only implementation scans Markdown Skills and Commands from the selecte
 
 ### `preview_mount`
 
-- **Purpose:** Build a mount or MCP compile plan for one asset and runtime target.
-- **Input:** `PreviewMountInput { assetId, target }`, where `target` is `MountTarget { scope, runtimePath, projectPath }`.
-- **Output:** `MountPreview { previewId, asset, target, steps, warnings, backupRequired, canApply }`.
+- **Purpose:** Legacy mount preview contract retained temporarily for old transport tests.
+- **Input:** Legacy `PreviewMountInput`.
+- **Output:** Legacy `MountPreview`.
 - **Side effect:** Preview-only.
-- **Future consumer:** Mount Manager, Asset Detail, and Project Detail.
-- **Status:** Implemented and registered as preview-only.
+- **Consumer:** None in the production GUI.
+- **Status:** Superseded by `canonical_mount_preview`.
 
-`previewId` is generated from `assetId` and `target` and later validated by `mount_apply`.
+Production pages must not provide a runtime path to this contract.
+
+### Target Registry commands
+
+#### `list_mount_targets`
+
+- **Purpose:** Enumerate machine-local, already-authorized mount targets.
+- **Input:** None.
+- **Output:** `RegisteredMountTarget[]`.
+- **Side effect:** Read-only.
+- **Consumers:** Mount Manager, Asset Detail, Project Detail, and Settings.
+- **Status:** Implemented in shared core and registered.
+
+#### `target_registration_preview` / `target_registration_apply`
+
+- **Purpose:** Register a project or custom target after an explicit preview.
+- **Preview input:** `{ id, kind, location }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `TargetChangePreview` / `TargetChangeResult`.
+- **Side effect:** Preview-only / explicit write.
+- **Consumer:** Settings path section.
+- **Status:** Implemented in shared core and registered.
+
+`location` is a project root for project target kinds and the authorized live
+path for custom target kinds. Rust expands `~`, requires project roots to
+exist, and derives provider, adapter, accepted asset kind, and final runtime
+path. React does not construct a runtime path.
+
+#### `target_removal_preview` / `target_removal_apply`
+
+- **Purpose:** Remove an authorized non-user target after verifying that no mount bindings remain.
+- **Preview input:** `{ targetId }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `TargetChangePreview` / `TargetChangeResult`.
+- **Side effect:** Preview-only / explicit write.
+- **Consumer:** Settings path section.
+- **Status:** Implemented in shared core and registered.
+
+#### `canonical_mount_preview` / `canonical_mount_apply`
+
+- **Purpose:** Preview and apply Skill/Command links or MCP compilation using an authorized target.
+- **Preview input:** `{ assetId, targetId }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `CanonicalMountPreview` / `CanonicalMountApplyResult`.
+- **Side effect:** Preview-only / explicit write.
+- **Consumers:** Mount Manager, Asset Detail, and Project Detail.
+- **Status:** Implemented in shared core and registered.
+
+Apply resolves the path and adapter from `targets.yaml`; it never accepts
+`runtimePath` from the frontend.
 
 ### `preview_conflicts`
 
@@ -221,21 +270,10 @@ Current behavior:
 
 ### `mount_apply`
 
-- **Purpose:** Apply a previously previewed mount by creating a Skill/Command runtime symlink or compiling an MCP server into runtime JSON.
-- **Input:** `MountApplyInput { previewId, mode, assetId, target, backupBeforeApply }`.
-- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
-- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
-- **Future consumer:** Mount Manager, Asset Detail, and Project Detail.
-- **Status:** Implemented and registered for Skill/Command symlink mounts and MCP compile.
-
-Current behavior:
-
-- Skill sources are resolved from `assets/skills/<name>/` or `assets/skills/<name>.md`.
-- Command sources are resolved from `assets/commands/<name>.md`.
-- MCP sources are resolved from `assets/mcps/<name>.json`.
-- The runtime target path is expanded from `~` and must stay under the resolved HOME.
-- Existing target paths are backed up before replacement when `backupBeforeApply` is true.
-- MCP compile writes the selected server into the target file's top-level `mcpServers.<name>` field while preserving existing JSON object fields and other MCP servers.
+- **Status:** Legacy registered contract, no longer consumed by production GUI.
+- **Replacement:** `canonical_mount_preview` / `canonical_mount_apply`.
+- **Migration boundary:** Remove after the remaining legacy transport tests and
+  duplicate Desktop implementation are deleted.
 
 ### `conflict_apply`
 
@@ -253,24 +291,6 @@ Current behavior:
 - Rename targets are validated as a single safe path component and must not already exist.
 - Overwrite uses import backup-before-replacement behavior.
 - MCP conflict previews read and display the exact existing asset JSON and incoming top-level `mcpServers.<name>` object.
-
-### `restore_apply`
-
-- **Purpose:** Restore paths from a backup manifest and optionally back up current state before replacement.
-- **Input:** `RestoreApplyInput { previewId, mode, backupId, backupBeforeRestore }`.
-- **Output:** `ApplyResult { mode, ok, previewId, backup, steps, warnings, errors }`.
-- **Side effect:** Write when `mode` is `apply`; no writes when `mode` is `planOnly`.
-- **Future consumer:** Backup Restore.
-- **Status:** Implemented and registered for file, directory, and symlink backup entries.
-
-Current behavior:
-
-- The backend loads `~/.my-agent-assets/backups/<backupId>/manifest.json`.
-- Restore targets must stay under the resolved HOME.
-- Backup entry paths must stay under the selected backup directory.
-- Current state is backed up before restore when `backupBeforeRestore` is true.
-- `planOnly` reads the manifest and returns skipped restore steps without writing files.
-- `previewId` must match the deterministic preview identity for the apply input; mismatches fail before any write.
 
 ### Future write commands
 
@@ -333,4 +353,8 @@ The authoritative field types are defined in:
 
 ## Implementation Boundary
 
-The DTO module contains no filesystem, Git, scan, mount, backup, restore, or settings implementation. The first read-only integration registers `scan_assets`, `list_assets`, `list_projects`, `git_status`, and `settings_load`; the preview-only workflow integration registers `preview_import`, `preview_mount`, `preview_conflicts`, and `preview_restore`; the write integration now registers `import_apply`, `conflict_apply`, `mount_apply`, `restore_apply`, `sync_apply`, and `settings_save`. Future command handlers should translate between these transport DTOs and `my-agent-assets-core` types.
+The production desktop now delegates canonical discovery, Import, Mount,
+Unmount, Delete, Target Registry, Backup History, and Git Sync behavior to
+`my-agent-assets-core`. Historical automatic Restore is not registered or
+exposed. Legacy transport DTOs remain only while their old test-only
+implementations are removed.

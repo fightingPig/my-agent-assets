@@ -256,6 +256,8 @@ src/
 │   │   ├── MacOverlayDragArea.tsx
 │   │   ├── Sidebar.tsx
 │   │   └── PageHeader.tsx
+│   ├── targets/
+│   │   └── TargetRegistryPanel.tsx
 │   └── ui/
 │       ├── ApplyConfirmationPanel.tsx
 │       └── StaticActionButton.tsx
@@ -298,6 +300,9 @@ src/
 `app/detail-context.ts` defines the local frontend context passed from list inspectors into hidden detail pages.
 
 Shell components own the frozen window layout and navigation frame.
+
+`components/targets/TargetRegistryPanel.tsx` owns project/custom target
+registration and removal through shared-core preview/apply commands.
 
 Page components use real Tauri data in production and may use local static fixtures only in tests, Visual QA, or explicit demo mode.
 
