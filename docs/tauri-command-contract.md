@@ -51,6 +51,24 @@ These values are part of the public JSON contract and must not be inferred only 
 - **Future consumer:** Dashboard system status.
 - **Status:** Implemented and registered. Its existing JSON shape is unchanged.
 
+### `initialization_preview` / `initialization_apply`
+
+- **Purpose:** Explicitly create the fixed `~/.my-agent-assets` asset center and
+  initialize its local Git repository on branch `main`.
+- **Preview input:** None.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds }`.
+- **Output:** Shared-core `InitializationPreview` /
+  `InitializationApplyResult`.
+- **Side effect:** Read-only preview / explicit write.
+- **Consumer:** Dashboard empty-environment initialization panel and `maa init`.
+- **Status:** Implemented in shared core and registered.
+
+Preview never creates the asset center. Apply builds the complete structure in
+a sibling staging directory, flushes it, initializes Git, and publishes it
+with one same-directory rename. An already valid asset center is an idempotent
+no-op. An existing partial, symlinked, malformed, or schema-incompatible asset
+center is blocked and preserved for diagnosis.
+
 ### `discover_runtime_sources`
 
 - **Purpose:** Discover Claude Code, Codex, or approved custom runtime sources without importing them.

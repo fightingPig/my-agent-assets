@@ -1316,3 +1316,50 @@ h1 {
 .target-registry-settings .reference-list .icon-button {
   justify-self: end;
 }
+
+.initialization-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #ddd8ff;
+  border-radius: 8px;
+  background: #f8f7ff;
+}
+
+.initialization-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4a3fc0;
+}
+
+.initialization-copy div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.initialization-copy span,
+.initialization-preview p,
+.initialization-message {
+  margin: 0;
+  color: #666779;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.initialization-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.initialization-warning {
+  color: #9a5a11 !important;
+}
+
+.initialization-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

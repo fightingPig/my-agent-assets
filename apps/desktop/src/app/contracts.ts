@@ -157,6 +157,29 @@ export type RecoveryStatus = {
   message: string;
 };
 
+export type InitializationPreview = {
+  previewId: string;
+  assetCenterPath: string;
+  plannedPaths: string[];
+  warnings: string[];
+  alreadyInitialized: boolean;
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type InitializationApplyInput = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+};
+
+export type InitializationApplyResult = {
+  previewId: string;
+  assetCenterPath: string;
+  created: boolean;
+  createdPaths: string[];
+};
+
 export type SyncPreview = {
   previewId: string;
   direction: SyncDirection;

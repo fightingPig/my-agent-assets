@@ -21,6 +21,10 @@ use my_agent_assets_core::import::{
     apply_import, preview_import, ImportApplyRequest, ImportApplyResult, ImportPreview,
     ImportPreviewRequest,
 };
+use my_agent_assets_core::initialization::{
+    apply_initialization, preview_initialization, InitializationApplyRequest,
+    InitializationApplyResult, InitializationPreview,
+};
 use my_agent_assets_core::mount::{
     apply_mount, apply_unmount, preview_mount, preview_unmount, MountApplyRequest,
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
@@ -39,6 +43,20 @@ use my_agent_assets_core::target_management::{
 };
 use my_agent_assets_core::targets::{load as load_targets, MountTarget};
 use std::path::Path;
+
+pub fn initialization_preview_command() -> Result<InitializationPreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; initialization preview skipped.".to_string())?;
+    preview_initialization(&home).map_err(|error| error.to_string())
+}
+
+pub fn initialization_apply_command(
+    input: InitializationApplyRequest,
+) -> Result<InitializationApplyResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; initialization apply blocked.".to_string())?;
+    apply_initialization(&home, &input).map_err(|error| error.to_string())
+}
 
 pub fn discover_runtime_sources_command(scope: DiscoveryScope) -> Result<DiscoveryResult, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; discovery skipped.".to_string())?;
@@ -293,13 +311,15 @@ mod tests {
     }
 
     fn initialize(home: &Path) {
-        let root = home.join(".my-agent-assets");
-        fs::create_dir_all(root.join("assets/skills")).unwrap();
-        fs::create_dir_all(root.join("assets/commands")).unwrap();
-        fs::create_dir_all(root.join("assets/mcps")).unwrap();
-        fs::create_dir_all(root.join("backups/portable")).unwrap();
-        fs::write(root.join("assets.yaml"), "schemaVersion: 1\nassets: {}\n").unwrap();
-        fs::write(root.join("mounts.yaml"), "schemaVersion: 1\nbindings: {}\n").unwrap();
+        let preview = preview_initialization(home).unwrap();
+        apply_initialization(
+            home,
+            &InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
     }
 
     fn test_home(name: &str) -> PathBuf {
@@ -311,6 +331,7 @@ mod tests {
                 .as_nanos()
         ));
         let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
         path
     }
 }

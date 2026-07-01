@@ -37,6 +37,19 @@ fn recovery_status() -> Result<my_agent_assets_core::operation::RecoveryStatus, 
 }
 
 #[tauri::command]
+fn initialization_preview(
+) -> Result<my_agent_assets_core::initialization::InitializationPreview, String> {
+    shared_core::initialization_preview_command()
+}
+
+#[tauri::command]
+fn initialization_apply(
+    input: my_agent_assets_core::initialization::InitializationApplyRequest,
+) -> Result<my_agent_assets_core::initialization::InitializationApplyResult, String> {
+    shared_core::initialization_apply_command(input)
+}
+
+#[tauri::command]
 fn list_assets(
     input: my_agent_assets_core::query::AssetQueryRequest,
 ) -> Result<Vec<my_agent_assets_core::query::AssetSummary>, String> {
@@ -203,6 +216,8 @@ pub fn run() {
             settings_save,
             git_status,
             recovery_status,
+            initialization_preview,
+            initialization_apply,
             list_assets,
             list_projects,
             list_backups,

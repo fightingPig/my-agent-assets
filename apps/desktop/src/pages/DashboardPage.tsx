@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   Blocks,
   BookOpen,
   CircleCheck,
@@ -9,14 +10,23 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, listAssets, listProjects, recoveryStatus } from "../app/data-api";
+import {
+  gitStatus,
+  initializationApply,
+  initializationPreview,
+  listAssets,
+  listProjects,
+  recoveryStatus,
+} from "../app/data-api";
 import type {
   AppInfo,
   AssetSummary,
   GitStatus,
+  InitializationPreview,
   ProjectSummary,
   RecoveryStatus,
 } from "../app/contracts";
+import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import {
   projects as demoProjects,
   recentActivity as demoRecentActivity,
@@ -65,6 +75,11 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
   const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
+  const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
+  const [showInitializationPreview, setShowInitializationPreview] = useState(false);
+  const [initializationMessage, setInitializationMessage] = useState("");
+  const [initializationBusy, setInitializationBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [stateLabel, setStateLabel] = useState(demoMode ? "Visual QA 示例数据" : "读取中");
 
   useEffect(() => {
@@ -75,13 +90,20 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
 
     let cancelled = false;
     setStateLabel("读取中");
-    Promise.all([listAssets({ assetType: null }), listProjects(), gitStatus(), recoveryStatus()])
-      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery]) => {
+    Promise.all([
+      listAssets({ assetType: null }),
+      listProjects(),
+      gitStatus(),
+      recoveryStatus(),
+      initializationPreview(),
+    ])
+      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedInitialization]) => {
         if (cancelled) return;
         setAssets(loadedAssets);
         setProjects(loadedProjects);
         setRepository(loadedRepository);
         setRecovery(loadedRecovery);
+        setInitialization(loadedInitialization);
         setStateLabel("只读真实数据");
       })
       .catch((error) => {
@@ -90,12 +112,48 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         setProjects([]);
         setRepository(emptyGitStatus);
         setRecovery(healthyRecoveryStatus);
+        setInitialization(null);
         setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
     };
-  }, [demoMode]);
+  }, [demoMode, reloadKey]);
+
+  const handleInitializationPreview = async () => {
+    setInitializationBusy(true);
+    setInitializationMessage("");
+    try {
+      const preview = await initializationPreview();
+      setInitialization(preview);
+      setShowInitializationPreview(true);
+    } catch (error) {
+      setInitializationMessage(`初始化预览失败：${errorMessage(error)}`);
+    } finally {
+      setInitializationBusy(false);
+    }
+  };
+
+  const handleInitializationApply = async () => {
+    if (!initialization?.canApply || initialization.alreadyInitialized) return;
+    setInitializationBusy(true);
+    setInitializationMessage("");
+    try {
+      const result = await initializationApply({
+        previewId: initialization.previewId,
+        previewGeneratedAtEpochSeconds: initialization.generatedAtEpochSeconds,
+      });
+      setInitializationMessage(
+        result.created ? "资产中心初始化完成。" : "资产中心已初始化，无需重复创建。",
+      );
+      setShowInitializationPreview(false);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setInitializationMessage(`初始化失败：${errorMessage(error)}`);
+    } finally {
+      setInitializationBusy(false);
+    }
+  };
 
   const stats = demoMode ? demoStats : realStats(assets, projects);
   const visibleProjects = demoMode
@@ -204,6 +262,62 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
             <strong>{appInfo.backendReady ? "已连接" : "浏览器预览"}</strong>
             <code>{appInfo.platform} · {appInfo.arch} · v{appInfo.version}</code>
           </div>
+          {!demoMode && initialization && !initialization.alreadyInitialized && (
+            <section className="initialization-panel" aria-label="资产中心初始化">
+              <div className="initialization-copy">
+                <AlertTriangle size={17} />
+                <div>
+                  <strong>资产中心尚未初始化</strong>
+                  <span>{initialization.assetCenterPath}</span>
+                </div>
+              </div>
+              {!showInitializationPreview ? (
+                <button
+                  className="asset-secondary-action"
+                  data-no-drag="true"
+                  disabled={initializationBusy}
+                  onClick={handleInitializationPreview}
+                  style={NO_DRAG_REGION_STYLE}
+                  type="button"
+                >
+                  {initializationBusy ? "正在检查…" : "预览初始化"}
+                </button>
+              ) : (
+                <div className="initialization-preview">
+                  <p>将创建 {initialization.plannedPaths.length} 个目录或文件，并初始化本地 Git main 分支。</p>
+                  {initialization.warnings.map((warning) => (
+                    <p className="initialization-warning" key={warning}>{warning}</p>
+                  ))}
+                  <div className="initialization-actions">
+                    <button
+                      className="asset-secondary-action"
+                      data-no-drag="true"
+                      disabled={initializationBusy}
+                      onClick={() => setShowInitializationPreview(false)}
+                      style={NO_DRAG_REGION_STYLE}
+                      type="button"
+                    >
+                      取消
+                    </button>
+                    <button
+                      className="asset-business-action"
+                      data-no-drag="true"
+                      disabled={initializationBusy || !initialization.canApply}
+                      onClick={handleInitializationApply}
+                      style={NO_DRAG_REGION_STYLE}
+                      type="button"
+                    >
+                      {initializationBusy ? "正在初始化…" : "确认初始化"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {initializationMessage && <p className="initialization-message">{initializationMessage}</p>}
+            </section>
+          )}
+          {!demoMode && initializationMessage && initialization?.alreadyInitialized && (
+            <p className="initialization-message">{initializationMessage}</p>
+          )}
         </section>
       </div>
     </>

@@ -54,9 +54,9 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: CLI 6 tests, core 92 tests, and desktop 16 tests passed
+- Rust workspace: CLI 6 tests, core 95 tests, and desktop 16 tests passed
 - Rust workspace Clippy passed with warnings denied
-- frontend: 81 tests passed
+- frontend: 82 tests passed
 - frontend TypeScript and renderer production build passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
@@ -98,6 +98,15 @@ Implemented:
 - removed frontend runtime-path construction from the primary Mount workflow
 - initialization now creates portable/local backup roots, schema-versioned state files, standard targets, local-state Git exclusions, and a `main` Git branch
 - initialization idempotency and fake-HOME isolation are covered by regression tests
+- replaced legacy direct initialization with shared-core
+  `initialization_preview` / `initialization_apply`; CLI and Dashboard use the
+  same ten-minute SHA-256-bound preview
+- initialization is zero-write during preview and publishes a fully flushed
+  sibling staging tree with one rename; existing valid centers are idempotent,
+  while partial, symlinked, malformed, or incompatible centers are preserved
+  and blocked
+- fake-HOME regression coverage proves startup recovery checks plus
+  initialization preview leave an empty first-run HOME untouched
 - added preview/apply Target Registry add/remove operations with local registry backups and active-binding removal protection
 - migrated the CLI to sourceId-based discovery/import/adopt and targetId-only mount/unmount/delete
 - added CLI project/custom target registration with derived provider paths and explicit authorization

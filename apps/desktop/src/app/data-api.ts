@@ -46,6 +46,9 @@ import type {
   BatchImportPreview,
   BatchImportApplyRequest,
   BatchImportApplyResult,
+  InitializationPreview,
+  InitializationApplyInput,
+  InitializationApplyResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -113,6 +116,48 @@ export async function recoveryStatus(): Promise<RecoveryStatus> {
     Array.isArray(status.recentRecoveries)
     ? status as RecoveryStatus
     : fallback;
+}
+
+export async function initializationPreview(): Promise<InitializationPreview> {
+  const fallback: InitializationPreview = {
+    previewId: "initialization-unavailable",
+    assetCenterPath: "~/.my-agent-assets",
+    plannedPaths: [],
+    warnings: ["Tauri runtime is unavailable; initialization preview skipped."],
+    alreadyInitialized: false,
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
+  const result = await invokeRead<unknown>(
+    "initialization_preview",
+    undefined,
+    fallback,
+  );
+  return isRecord(result) &&
+    typeof result.previewId === "string" &&
+    Array.isArray(result.plannedPaths) &&
+    Array.isArray(result.warnings)
+    ? result as InitializationPreview
+    : fallback;
+}
+
+export async function initializationApply(
+  input: InitializationApplyInput,
+): Promise<InitializationApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("initialization_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("initialization_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.assetCenterPath !== "string" ||
+    !Array.isArray(result.createdPaths)
+  ) {
+    throw new Error("initialization_apply returned an invalid response.");
+  }
+  return result as InitializationApplyResult;
 }
 
 export async function settingsLoad(): Promise<DesktopSettings> {

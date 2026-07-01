@@ -60,6 +60,32 @@ describe("read-only desktop data api", () => {
     await api.recoveryStatus();
     expect(invoke).toHaveBeenLastCalledWith("recovery_status");
 
+    invoke.mockResolvedValueOnce({
+      previewId: "init-1",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: [],
+    });
+    await api.initializationPreview();
+    expect(invoke).toHaveBeenLastCalledWith("initialization_preview");
+
+    invoke.mockResolvedValueOnce({
+      previewId: "init-1",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      created: true,
+      createdPaths: [],
+    });
+    await api.initializationApply({
+      previewId: "init-1",
+      previewGeneratedAtEpochSeconds: 100,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("initialization_apply", {
+      input: {
+        previewId: "init-1",
+        previewGeneratedAtEpochSeconds: 100,
+      },
+    });
+
     invoke.mockResolvedValueOnce({ assetCenterPath: "~/.my-agent-assets" });
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");

@@ -220,13 +220,7 @@ pub fn save(home: &Path, settings: &Settings) -> Result<Settings, SettingsError>
         source,
     })?;
 
-    let yaml =
-        serde_yaml::to_string(&SettingsFile::from_settings(&normalized)).map_err(|error| {
-            SettingsError::InvalidYaml {
-                path: path.clone(),
-                message: error.to_string(),
-            }
-        })?;
+    let yaml = to_yaml(home, &normalized)?;
     write_atomic(&path, yaml.as_bytes()).map_err(|source| SettingsError::Io {
         path: path.clone(),
         source,
@@ -235,6 +229,16 @@ pub fn save(home: &Path, settings: &Settings) -> Result<Settings, SettingsError>
     // Reload what reached disk. This verifies serialization and guarantees the
     // returned value matches the persisted, normalized representation.
     load(home)
+}
+
+pub fn to_yaml(home: &Path, settings: &Settings) -> Result<String, SettingsError> {
+    let normalized = normalize_settings(home, settings.clone());
+    serde_yaml::to_string(&SettingsFile::from_settings(&normalized)).map_err(|error| {
+        SettingsError::InvalidYaml {
+            path: settings_path(home),
+            message: error.to_string(),
+        }
+    })
 }
 
 pub fn save_transactional(home: &Path, settings: &Settings) -> CoreResult<Settings> {

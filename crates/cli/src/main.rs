@@ -12,6 +12,9 @@ use my_agent_assets_core::git_sync::{
 use my_agent_assets_core::import::{
     apply_import, preview_import, ImportApplyRequest, ImportPreviewRequest, ImportResolution,
 };
+use my_agent_assets_core::initialization::{
+    apply_initialization, preview_initialization, InitializationApplyRequest,
+};
 use my_agent_assets_core::mount::{
     apply_mount, apply_unmount, preview_mount, preview_unmount, MountApplyRequest,
     MountPreviewRequest, UnmountApplyRequest, UnmountPreviewRequest,
@@ -25,7 +28,7 @@ use my_agent_assets_core::target_management::{
     TargetRemovePreviewRequest,
 };
 use my_agent_assets_core::targets::{load as load_targets, AssetKind, MountTargetKind};
-use my_agent_assets_core::{doctor, init_apply, init_plan, Context, MaaError, Result};
+use my_agent_assets_core::{doctor, Context, MaaError, Result};
 use serde::Serialize;
 use serde_json::json;
 use std::env;
@@ -82,13 +85,18 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
 
     match command.as_str() {
         "init" => {
-            let plan = if apply {
-                init_apply(&context)?
+            let preview = preview_initialization(&home)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_initialization(
+                    &home,
+                    &InitializationApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    },
+                )?)?;
             } else {
-                init_plan(&context)
-            };
-            println!("{}", plan.render());
-            if !apply {
+                print_json(&preview)?;
                 println!("Run with --apply to create the asset center.");
             }
         }
