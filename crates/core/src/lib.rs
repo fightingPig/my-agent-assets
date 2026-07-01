@@ -10,6 +10,7 @@ pub mod git_sync;
 pub mod import;
 pub mod initialization;
 pub mod mcp;
+pub mod mcp_management;
 pub mod mount;
 pub mod mount_registry;
 pub mod operation;

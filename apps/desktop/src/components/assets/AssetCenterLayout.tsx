@@ -30,6 +30,7 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   usageLabel?: string;
   usageCountLabel?: string;
   onOpenDetail?: (item: T) => void;
+  renderActions?: (item: T) => ReactNode;
   renderInspector: (item: T) => ReactNode;
 };
 
@@ -65,6 +66,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   usageLabel = "挂载 / 使用摘要",
   usageCountLabel = "个挂载",
   onOpenDetail,
+  renderActions,
   renderInspector,
 }: AssetCenterLayoutProps<T>) {
   const [query, setQuery] = useState("");
@@ -177,9 +179,10 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
               </InspectorSection>
               {renderInspector(selectedItem)}
             </div>
-            {onOpenDetail ? (
+            {onOpenDetail || renderActions ? (
               <div className="asset-inspector-actions">
-                <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenDetail(selectedItem)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button>
+                {onOpenDetail ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenDetail(selectedItem)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button> : null}
+                {renderActions?.(selectedItem)}
               </div>
             ) : null}
           </>

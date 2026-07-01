@@ -169,6 +169,15 @@ React does not derive runtime paths. After a successful apply, Asset Detail
 reloads `list_assets` and Project Detail reloads `list_projects`, so derived
 mount targets and project counts reflect the backend state.
 
+The MCP Servers page now consumes one unified canonical asset center regardless
+of the selected runtime provider. `canonical_mcp_get` loads structured
+canonical data and local binding status. New/edit uses
+`canonical_mcp_save_preview` followed by explicit confirmation and
+`canonical_mcp_save_apply`. That save never patches Claude Code or Codex live
+configuration. Existing bindings are marked `out_of_sync`; each target must be
+explicitly synchronized through the existing targetId-only Mount
+Preview/Apply renderer flow.
+
 ## Non-goals
 
 The read-only UI milestone still does not:

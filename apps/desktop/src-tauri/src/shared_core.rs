@@ -28,6 +28,10 @@ use my_agent_assets_core::initialization::{
     apply_initialization, preview_initialization, InitializationApplyRequest,
     InitializationApplyResult, InitializationPreview,
 };
+use my_agent_assets_core::mcp_management::{
+    apply_mcp_save, load_mcp_asset, preview_mcp_save, McpAssetDefinition, McpSaveApplyRequest,
+    McpSaveApplyResult, McpSavePreview, McpSavePreviewRequest,
+};
 use my_agent_assets_core::mount::{
     apply_mount, apply_unmount, preview_mount, preview_unmount, MountApplyRequest,
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
@@ -234,6 +238,28 @@ pub fn canonical_mount_preview_command(input: MountPreviewRequest) -> Result<Mou
 pub fn canonical_mount_apply_command(input: MountApplyRequest) -> Result<MountApplyResult, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; mount apply blocked.".to_string())?;
     apply_mount(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_mcp_save_preview_command(
+    input: McpSavePreviewRequest,
+) -> Result<McpSavePreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; MCP save preview skipped.".to_string())?;
+    preview_mcp_save(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn canonical_mcp_get_command(asset_id: String) -> Result<McpAssetDefinition, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; MCP asset lookup skipped.".to_string())?;
+    load_mcp_asset(&home, &asset_id).map_err(|error| error.to_string())
+}
+
+pub fn canonical_mcp_save_apply_command(
+    input: McpSaveApplyRequest,
+) -> Result<McpSaveApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; MCP save apply blocked.".to_string())?;
+    apply_mcp_save(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn canonical_unmount_preview_command(

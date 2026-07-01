@@ -467,6 +467,84 @@ export type CanonicalMountApplyResult = {
   warnings: string[];
 };
 
+export type McpTransport = "stdio" | "http" | "sse";
+
+export type CanonicalMcpSpec = {
+  type?: McpTransport;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  headers?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+export type CanonicalMcp = {
+  schemaVersion: 1;
+  name: string;
+  spec: CanonicalMcpSpec;
+  providerExtensions: Record<string, unknown>;
+};
+
+export type McpSavePreviewRequest = {
+  assetId?: string;
+  canonical: CanonicalMcp;
+  title?: string;
+  description?: string;
+};
+
+export type McpTargetCompatibility = {
+  targetId: string;
+  compatible: boolean;
+  warnings: string[];
+  blockedReason?: string;
+};
+
+export type McpSavePreview = {
+  previewId: string;
+  operation: "create" | "edit";
+  assetId: string;
+  canonicalPath: string;
+  registryPath: string;
+  outOfSyncTargetIds: string[];
+  targetCompatibility: McpTargetCompatibility[];
+  plannedEffects: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type McpSaveApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: McpSavePreviewRequest;
+};
+
+export type McpSaveApplyResult = {
+  previewId: string;
+  operation: "create" | "edit";
+  assetId: string;
+  canonicalPath: string;
+  outOfSyncTargetIds: string[];
+  affectedPaths: string[];
+};
+
+export type McpBindingStatus = "mounted" | "out_of_sync" | "orphaned";
+
+export type McpAssetDefinition = {
+  assetId: string;
+  canonical: CanonicalMcp;
+  title?: string;
+  description?: string;
+  bindings: {
+    targetId: string;
+    status: McpBindingStatus;
+    lastSyncedAt?: string;
+  }[];
+};
+
 export type CanonicalUnmountPreviewRequest = {
   assetId: string;
   targetId: string;

@@ -4,7 +4,8 @@ mod settings;
 mod shared_core;
 
 use contracts::{
-    AppInfo, BackupRevealInput, BackupRevealResult, DesktopSettings, SettingsSaveInput,
+    AppInfo, BackupRevealInput, BackupRevealResult, CanonicalMcpGetInput, DesktopSettings,
+    SettingsSaveInput,
 };
 
 #[tauri::command]
@@ -156,6 +157,27 @@ fn canonical_mount_apply(
 }
 
 #[tauri::command]
+fn canonical_mcp_save_preview(
+    input: my_agent_assets_core::mcp_management::McpSavePreviewRequest,
+) -> Result<my_agent_assets_core::mcp_management::McpSavePreview, String> {
+    shared_core::canonical_mcp_save_preview_command(input)
+}
+
+#[tauri::command]
+fn canonical_mcp_get(
+    input: CanonicalMcpGetInput,
+) -> Result<my_agent_assets_core::mcp_management::McpAssetDefinition, String> {
+    shared_core::canonical_mcp_get_command(input.asset_id)
+}
+
+#[tauri::command]
+fn canonical_mcp_save_apply(
+    input: my_agent_assets_core::mcp_management::McpSaveApplyRequest,
+) -> Result<my_agent_assets_core::mcp_management::McpSaveApplyResult, String> {
+    shared_core::canonical_mcp_save_apply_command(input)
+}
+
+#[tauri::command]
 fn canonical_unmount_preview(
     input: my_agent_assets_core::mount::UnmountPreviewRequest,
 ) -> Result<my_agent_assets_core::mount::UnmountPreview, String> {
@@ -241,6 +263,9 @@ pub fn run() {
             target_removal_apply,
             canonical_mount_preview,
             canonical_mount_apply,
+            canonical_mcp_get,
+            canonical_mcp_save_preview,
+            canonical_mcp_save_apply,
             canonical_unmount_preview,
             canonical_unmount_apply,
             canonical_delete_preview,

@@ -230,6 +230,54 @@ describe("read-only desktop data api", () => {
     });
     expect(applyRequest.request).not.toHaveProperty("runtimePath");
 
+    invoke.mockResolvedValueOnce({
+      assetId: "mcp:filesystem",
+      canonical: {
+        schemaVersion: 1,
+        name: "filesystem",
+        spec: { type: "stdio", command: "npx" },
+        providerExtensions: {},
+      },
+      bindings: [],
+    });
+    await api.canonicalMcpGet("mcp:filesystem");
+    expect(invoke).toHaveBeenLastCalledWith("canonical_mcp_get", {
+      input: { assetId: "mcp:filesystem" },
+    });
+
+    const mcpSaveRequest = {
+      canonical: {
+        schemaVersion: 1 as const,
+        name: "filesystem",
+        spec: { type: "stdio" as const, command: "npx" },
+        providerExtensions: {},
+      },
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "mcp-save-1",
+      assetId: "mcp:filesystem",
+      plannedEffects: [],
+    });
+    await api.canonicalMcpSavePreview(mcpSaveRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_mcp_save_preview", {
+      input: mcpSaveRequest,
+    });
+
+    const mcpSaveApplyRequest = {
+      previewId: "mcp-save-1",
+      previewGeneratedAtEpochSeconds: 123,
+      request: mcpSaveRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "mcp-save-1",
+      assetId: "mcp:filesystem",
+      affectedPaths: [],
+    });
+    await api.canonicalMcpSaveApply(mcpSaveApplyRequest);
+    expect(invoke).toHaveBeenLastCalledWith("canonical_mcp_save_apply", {
+      input: mcpSaveApplyRequest,
+    });
+
     const registrationRequest = {
       id: "project-a-skills",
       kind: "claude_project_skills",

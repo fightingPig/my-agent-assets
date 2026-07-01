@@ -216,7 +216,7 @@ describe("read-only UI integration", () => {
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
   });
 
-  it("renders real Codex Skills and MCP fields without Claude demo rows", async () => {
+  it("renders real Codex Skills while MCP remains one canonical asset center", async () => {
     discoverRuntimeSources.mockResolvedValue({
       sources: [{
         sourceId: "codex:skill:codex-review",
@@ -256,10 +256,11 @@ describe("read-only UI integration", () => {
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
     expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" });
 
+    listAssets.mockResolvedValue([assetFixture("mcp:canonical-files", "canonical-files", "mcp")]);
     rerender(<McpServersListPage provider="codex" />);
-    expect(await screen.findByRole("option", { name: "local-files" })).toBeInTheDocument();
-    expect(screen.getAllByText(/codex_toml/).length).toBeGreaterThan(0);
-    expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" });
+    expect(await screen.findByRole("option", { name: "canonical-files" })).toBeInTheDocument();
+    expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
+    expect(screen.getByText(/统一模型是唯一真实配置/)).toBeInTheDocument();
   });
 
   it("shows provider-specific empty states for empty Codex discovery", async () => {
@@ -267,8 +268,9 @@ describe("read-only UI integration", () => {
     expect(await screen.findByText("未发现 Codex Skills")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
+    listAssets.mockResolvedValue([]);
     rerender(<McpServersListPage provider="codex" />);
-    expect(await screen.findByText("未发现 Codex MCP Servers")).toBeInTheDocument();
+    expect(await screen.findByText("未发现 MCP Servers")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
   });
 

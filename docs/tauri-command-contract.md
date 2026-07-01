@@ -177,6 +177,30 @@ path. React does not construct a runtime path.
 Apply resolves the path and adapter from `targets.yaml`; it never accepts
 `runtimePath` from the frontend.
 
+#### `canonical_mcp_get`
+
+- **Purpose:** Read one canonical MCP definition plus its machine-local target binding states.
+- **Input:** `{ assetId }`.
+- **Output:** `McpAssetDefinition`.
+- **Side effect:** Read-only.
+- **Consumer:** MCP Servers structured editor.
+- **Status:** Implemented in shared core and registered.
+
+#### `canonical_mcp_save_preview` / `canonical_mcp_save_apply`
+
+- **Purpose:** Create or edit a canonical MCP definition without writing any Claude Code or Codex live config.
+- **Preview input:** `{ assetId?, canonical, title?, description? }`; `assetId` is required for edit and the existing name is immutable.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `McpSavePreview` / `McpSaveApplyResult`.
+- **Side effect:** Preview-only / explicit canonical write.
+- **Consumer:** MCP Servers structured editor.
+- **Status:** Implemented in shared core and registered.
+
+Preview validates the canonical schema and every existing target renderer.
+Apply writes only `assets/mcps/<name>.json`, `assets.yaml`, and `mounts.yaml`.
+Existing bindings become `out_of_sync`; live configs are updated only by a
+separate explicit `canonical_mount_preview` / `canonical_mount_apply` Sync.
+
 ### `list_backups`
 
 - **Purpose:** List local backup manifests without reading backup contents into the UI.

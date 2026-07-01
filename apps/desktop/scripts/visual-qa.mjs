@@ -200,7 +200,6 @@ async function main() {
       "--disable-default-apps",
       "--disable-extensions",
       "--disable-features=Translate",
-      "--disable-gpu",
       "--disable-sync",
       "--disable-threaded-animation",
       "--disable-threaded-scrolling",

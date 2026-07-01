@@ -333,15 +333,15 @@ pub(crate) fn apply_mount_locked(
         }
     };
     let result = (|| -> Result<()> {
+        let mut binding = MountBinding::new(
+            request.request.asset_id.clone(),
+            request.request.target_id.clone(),
+            BindingStatus::Mounted,
+        )
+        .map_err(|error| MaaError::new(error.to_string()))?;
+        binding.last_synced_at = Some(humantime::format_rfc3339(SystemTime::now()).to_string());
         mounts
-            .upsert(
-                MountBinding::new(
-                    request.request.asset_id.clone(),
-                    request.request.target_id.clone(),
-                    BindingStatus::Mounted,
-                )
-                .map_err(|error| MaaError::new(error.to_string()))?,
-            )
+            .upsert(binding)
             .map_err(|error| MaaError::new(error.to_string()))?;
         save_mounts(home, &mounts).map_err(|error| MaaError::new(error.to_string()))
     })();
@@ -639,6 +639,19 @@ fn render_mcp_preview(
         }
         _ => Err(MaaError::new("target does not use an MCP renderer")),
     }
+}
+
+pub(crate) fn validate_mcp_target_preview(
+    target: &MountTarget,
+    canonical: &CanonicalMcp,
+) -> Result<Vec<String>> {
+    let compatibility = target.compatibility(crate::targets::AssetKind::Mcp);
+    if !compatibility.compatible {
+        return Err(MaaError::new(compatibility.reason.unwrap_or_else(|| {
+            "target is incompatible with MCP assets".into()
+        })));
+    }
+    render_mcp_preview(&target.path, target, canonical)
 }
 
 fn render_mcp_content(

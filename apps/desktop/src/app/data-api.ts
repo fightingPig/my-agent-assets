@@ -51,6 +51,11 @@ import type {
   InitializationPreview,
   InitializationApplyInput,
   InitializationApplyResult,
+  McpSavePreviewRequest,
+  McpSavePreview,
+  McpSaveApplyRequest,
+  McpSaveApplyResult,
+  McpAssetDefinition,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -253,6 +258,58 @@ export async function canonicalImportApply(
     throw new Error("canonical_import_apply returned an invalid response.");
   }
   return result as CanonicalImportApplyResult;
+}
+
+export async function canonicalMcpSavePreview(
+  input: McpSavePreviewRequest,
+): Promise<McpSavePreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_mcp_save_preview requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_mcp_save_preview", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.assetId !== "string" ||
+    !Array.isArray(result.plannedEffects)
+  ) {
+    throw new Error("canonical_mcp_save_preview returned an invalid response.");
+  }
+  return result as McpSavePreview;
+}
+
+export async function canonicalMcpGet(assetId: string): Promise<McpAssetDefinition> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_mcp_get requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_mcp_get", { input: { assetId } });
+  if (
+    !isRecord(result) ||
+    typeof result.assetId !== "string" ||
+    !isRecord(result.canonical) ||
+    !Array.isArray(result.bindings)
+  ) {
+    throw new Error("canonical_mcp_get returned an invalid response.");
+  }
+  return result as McpAssetDefinition;
+}
+
+export async function canonicalMcpSaveApply(
+  input: McpSaveApplyRequest,
+): Promise<McpSaveApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_mcp_save_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_mcp_save_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.assetId !== "string" ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("canonical_mcp_save_apply returned an invalid response.");
+  }
+  return result as McpSaveApplyResult;
 }
 
 export async function listMountTargets(): Promise<RegisteredMountTarget[]> {

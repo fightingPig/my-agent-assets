@@ -81,6 +81,15 @@ Implemented:
 - implemented sourceId-based canonical Import preview/apply with five-minute expiry, source/registry/content fingerprints, explicit skip/overwrite/rename, rollback, and Git-portable backups
 - canonical Import supports Claude/Codex Skills, Claude Commands, Claude JSON MCP, and Codex TOML MCP without modifying source live configs
 - MCP overwrite marks existing local bindings `outOfSync` without reverse-synchronizing live configs
+- implemented structured canonical MCP create/edit with SHA-256-bound
+  Preview/Apply, immutable existing asset identity, schema and bound-target
+  renderer validation, and operation-journal rollback
+- canonical MCP save updates only the canonical JSON, `assets.yaml`, and
+  `mounts.yaml`; existing bindings become `outOfSync` and require explicit
+  target Sync through the Mount renderer
+- MCP Servers production UI now provides stdio/http/sse structured fields,
+  advanced JSON preview, ordinary save confirmation, and per-target explicit
+  Sync confirmation
 - implemented strict local `mounts.yaml` bindings with mounted/outOfSync/orphaned states
 - implemented targetId-only Mount preview/apply for Skill links, Command links, Claude JSON MCP, and Codex TOML MCP
 - implemented targetId-only Unmount preview/apply with precise MCP entry removal and protection against deleting user-replaced runtime content
