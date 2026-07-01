@@ -1,6 +1,7 @@
 use crate::asset_registry::{
     canonical_path, load as load_assets, parse_asset_id, registry_path as asset_registry_path,
 };
+use crate::fingerprint::PreviewFingerprint;
 use crate::mcp::{
     patch_claude_json, patch_codex_toml, remove_from_claude_json, remove_from_codex_toml,
     CanonicalMcp, ClaudeScope, CodexScope,
@@ -16,7 +17,7 @@ use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -983,25 +984,22 @@ fn mount_fingerprint(
     target: &Path,
     generated_at: u64,
 ) -> Result<String> {
-    let mut hash = Fnv64::new();
-    hash.write(
-        serde_json::to_string(request)
-            .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+    let mut fingerprint = PreviewFingerprint::new("mount");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
-    hash.write(&generated_at.to_le_bytes());
-    fingerprint_path(canonical, &mut hash)?;
-    if target.exists() || fs::symlink_metadata(target).is_ok() {
-        fingerprint_path(target, &mut hash)?;
-    }
+    fingerprint.add_u64("generated-at", generated_at);
+    fingerprint.add_path("canonical", canonical)?;
+    fingerprint.add_path_if_present("target", target)?;
     for path in [
         asset_registry_path(home),
         crate::targets::registry_path(home),
         mount_registry_path(home),
     ] {
-        fingerprint_path(&path, &mut hash)?;
+        fingerprint.add_path("registry", &path)?;
     }
-    Ok(format!("mount-{:016x}", hash.finish()))
+    Ok(fingerprint.finish("mount"))
 }
 
 fn unmount_fingerprint(
@@ -1011,51 +1009,21 @@ fn unmount_fingerprint(
     target: &Path,
     generated_at: u64,
 ) -> Result<String> {
-    let mut hash = Fnv64::new();
-    hash.write(
-        serde_json::to_string(request)
-            .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+    let mut fingerprint = PreviewFingerprint::new("unmount");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
-    hash.write(&generated_at.to_le_bytes());
-    if canonical.exists() {
-        fingerprint_path(canonical, &mut hash)?;
-    }
-    if target.exists() || fs::symlink_metadata(target).is_ok() {
-        fingerprint_path(target, &mut hash)?;
-    }
+    fingerprint.add_u64("generated-at", generated_at);
+    fingerprint.add_path_if_present("canonical", canonical)?;
+    fingerprint.add_path_if_present("target", target)?;
     for path in [
         crate::targets::registry_path(home),
         mount_registry_path(home),
     ] {
-        fingerprint_path(&path, &mut hash)?;
+        fingerprint.add_path("registry", &path)?;
     }
-    Ok(format!("unmount-{:016x}", hash.finish()))
-}
-
-fn fingerprint_path(path: &Path, hash: &mut Fnv64) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    hash.write(path.to_string_lossy().as_bytes());
-    if metadata.file_type().is_symlink() {
-        hash.write(fs::read_link(path)?.to_string_lossy().as_bytes());
-    } else if metadata.is_dir() {
-        let mut entries = fs::read_dir(path)?.collect::<std::result::Result<Vec<_>, _>>()?;
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
-            fingerprint_path(&entry.path(), hash)?;
-        }
-    } else {
-        let mut file = fs::File::open(path)?;
-        let mut buffer = [0_u8; 8192];
-        loop {
-            let read = file.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            hash.write(&buffer[..read]);
-        }
-    }
-    Ok(())
+    Ok(fingerprint.finish("unmount"))
 }
 
 pub(crate) fn copy_any(source: &Path, destination: &Path) -> Result<()> {
@@ -1115,23 +1083,6 @@ fn epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-struct Fnv64(u64);
-
-impl Fnv64 {
-    fn new() -> Self {
-        Self(0xcbf29ce484222325)
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.0 ^= u64::from(*byte);
-            self.0 = self.0.wrapping_mul(0x100000001b3);
-        }
-    }
-    fn finish(self) -> u64 {
-        self.0
-    }
 }
 
 #[cfg(test)]
@@ -1296,6 +1247,7 @@ mod tests {
         request: MountPreviewRequest,
         preview: MountPreview,
     ) -> Result<MountApplyResult> {
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "mount-");
         apply_mount(
             home,
             &MountApplyRequest {
@@ -1311,6 +1263,7 @@ mod tests {
         request: UnmountPreviewRequest,
         preview: UnmountPreview,
     ) -> Result<UnmountApplyResult> {
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "unmount-");
         apply_unmount(
             home,
             &UnmountApplyRequest {

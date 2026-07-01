@@ -1,5 +1,6 @@
 use crate::asset_registry::registry_path as asset_registry_path;
 use crate::discovery::{AssetKind, DiscoveredSource, DiscoveryScope};
+use crate::fingerprint::PreviewFingerprint;
 use crate::import::{
     apply_import_locked, find_source, preview_import_at, ImportApplyRequest, ImportApplyStatus,
     ImportPreview, ImportPreviewRequest, ImportResolution,
@@ -462,17 +463,16 @@ fn adopt_fingerprint(
     items: &[AdoptItemPreview],
     generated_at: u64,
 ) -> Result<String> {
-    let mut hash = Fnv64::new();
-    hash.write(
-        serde_json::to_string(request)
-            .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+    let mut fingerprint = PreviewFingerprint::new("adopt");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
-    hash.write(&generated_at.to_le_bytes());
+    fingerprint.add_u64("generated-at", generated_at);
     for item in items {
-        hash.write(item.import_plan.preview_id.as_bytes());
+        fingerprint.add_bytes("import-preview-id", item.import_plan.preview_id.as_bytes());
         if let Some(target_id) = &item.target_id {
-            hash.write(target_id.as_bytes());
+            fingerprint.add_bytes("target-id", target_id.as_bytes());
         }
     }
     for path in [
@@ -480,9 +480,9 @@ fn adopt_fingerprint(
         mount_registry_path(home),
         crate::targets::registry_path(home),
     ] {
-        hash.write(&fs::read(path)?);
+        fingerprint.add_path("registry", &path)?;
     }
-    Ok(format!("adopt-{:016x}", hash.finish()))
+    Ok(fingerprint.finish("adopt"))
 }
 
 fn operation_id() -> String {
@@ -499,22 +499,6 @@ fn epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-struct Fnv64(u64);
-impl Fnv64 {
-    fn new() -> Self {
-        Self(0xcbf29ce484222325)
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.0 ^= u64::from(*byte);
-            self.0 = self.0.wrapping_mul(0x100000001b3);
-        }
-    }
-    fn finish(self) -> u64 {
-        self.0
-    }
 }
 
 #[cfg(test)]
@@ -546,6 +530,7 @@ mod tests {
             selections,
         };
         let preview = preview_adopt(&home, &request).unwrap();
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "adopt-");
         assert!(preview.can_apply, "{:?}", preview.warnings);
         assert_eq!(preview.items.len(), 5);
         let result = apply_adopt(

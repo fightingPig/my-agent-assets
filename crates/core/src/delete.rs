@@ -2,6 +2,7 @@ use crate::asset_registry::{
     canonical_path, load as load_assets, parse_asset_id, registry_path as asset_registry_path,
     save as save_assets,
 };
+use crate::fingerprint::PreviewFingerprint;
 use crate::mount::{
     copy_any, discard_runtime_snapshot, guard_target_path, preview_unmount, remove_path_if_present,
     remove_runtime_mount, restore_runtime_snapshot, snapshot_runtime_path, RuntimeSnapshot,
@@ -17,7 +18,6 @@ use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -409,52 +409,24 @@ fn delete_fingerprint(
     impacts: &[DeleteBindingImpact],
     generated_at: u64,
 ) -> Result<String> {
-    let mut hash = Fnv64::new();
-    hash.write(
-        serde_json::to_string(request)
-            .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+    let mut fingerprint = PreviewFingerprint::new("delete");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
-    hash.write(&generated_at.to_le_bytes());
-    fingerprint_path(canonical, &mut hash)?;
+    fingerprint.add_u64("generated-at", generated_at);
+    fingerprint.add_path("canonical", canonical)?;
     for impact in impacts {
-        if fs::symlink_metadata(&impact.target_path).is_ok() {
-            fingerprint_path(&impact.target_path, &mut hash)?;
-        }
+        fingerprint.add_path_if_present("target", &impact.target_path)?;
     }
     for path in [
         asset_registry_path(home),
         mount_registry_path(home),
         crate::targets::registry_path(home),
     ] {
-        fingerprint_path(&path, &mut hash)?;
+        fingerprint.add_path("registry", &path)?;
     }
-    Ok(format!("delete-{:016x}", hash.finish()))
-}
-
-fn fingerprint_path(path: &Path, hash: &mut Fnv64) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    hash.write(path.to_string_lossy().as_bytes());
-    if metadata.file_type().is_symlink() {
-        hash.write(fs::read_link(path)?.to_string_lossy().as_bytes());
-    } else if metadata.is_dir() {
-        let mut entries = fs::read_dir(path)?.collect::<std::result::Result<Vec<_>, _>>()?;
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
-            fingerprint_path(&entry.path(), hash)?;
-        }
-    } else {
-        let mut file = fs::File::open(path)?;
-        let mut buffer = [0_u8; 8192];
-        loop {
-            let read = file.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            hash.write(&buffer[..read]);
-        }
-    }
-    Ok(())
+    Ok(fingerprint.finish("delete"))
 }
 
 fn operation_id() -> String {
@@ -471,23 +443,6 @@ fn epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-struct Fnv64(u64);
-
-impl Fnv64 {
-    fn new() -> Self {
-        Self(0xcbf29ce484222325)
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.0 ^= u64::from(*byte);
-            self.0 = self.0.wrapping_mul(0x100000001b3);
-        }
-    }
-    fn finish(self) -> u64 {
-        self.0
-    }
 }
 
 #[cfg(test)]
@@ -558,6 +513,7 @@ mod tests {
             mode: DeleteMode::UnmountAll,
         };
         let preview = preview_delete(&home, &request).unwrap();
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "delete-");
         let error = apply_delete_inner(
             &home,
             &DeleteApplyRequest {

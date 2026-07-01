@@ -5,6 +5,7 @@ use crate::asset_registry::{
 use crate::discovery::{
     discover, load_mcp_source, AssetKind, DiscoveredSource, DiscoveryScope, SourceFormat,
 };
+use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
@@ -552,51 +553,24 @@ fn preview_fingerprint(
     registry: &AssetRegistry,
     generated_at_epoch_seconds: u64,
 ) -> Result<String> {
-    let mut hash = Fnv64::new();
-    hash.write(
-        serde_json::to_string(request)
-            .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+    let mut fingerprint = PreviewFingerprint::new("import");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
-    hash.write(source.source_id.as_bytes());
-    hash.write(destination_name.as_bytes());
-    hash.write(&generated_at_epoch_seconds.to_le_bytes());
-    fingerprint_path(&source.source_path, &mut hash)?;
-    hash.write(
-        serde_yaml::to_string(registry)
+    fingerprint.add_bytes("source-id", source.source_id.as_bytes());
+    fingerprint.add_bytes("destination-name", destination_name.as_bytes());
+    fingerprint.add_u64("generated-at", generated_at_epoch_seconds);
+    fingerprint.add_path("source", &source.source_path)?;
+    fingerprint.add_bytes(
+        "asset-registry",
+        &serde_yaml::to_string(registry)
             .map_err(|error| MaaError::new(error.to_string()))?
-            .as_bytes(),
+            .into_bytes(),
     );
     let destination = canonical_path(home, source.asset_kind, destination_name);
-    if destination.exists() {
-        fingerprint_path(&destination, &mut hash)?;
-    }
-    Ok(format!("import-{:016x}", hash.finish()))
-}
-
-fn fingerprint_path(path: &Path, hash: &mut Fnv64) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)?;
-    hash.write(path.to_string_lossy().as_bytes());
-    if metadata.file_type().is_symlink() {
-        hash.write(fs::read_link(path)?.to_string_lossy().as_bytes());
-    } else if metadata.is_dir() {
-        let mut entries = fs::read_dir(path)?.collect::<std::result::Result<Vec<_>, _>>()?;
-        entries.sort_by_key(|entry| entry.file_name());
-        for entry in entries {
-            fingerprint_path(&entry.path(), hash)?;
-        }
-    } else {
-        let mut file = fs::File::open(path)?;
-        let mut buffer = [0_u8; 8192];
-        loop {
-            let read = file.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            hash.write(&buffer[..read]);
-        }
-    }
-    Ok(())
+    fingerprint.add_path_if_present("destination", &destination)?;
+    Ok(fingerprint.finish("import"))
 }
 
 fn copy_any(source: &Path, destination: &Path) -> Result<()> {
@@ -647,25 +621,6 @@ fn epoch_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
-}
-
-struct Fnv64(u64);
-
-impl Fnv64 {
-    fn new() -> Self {
-        Self(0xcbf29ce484222325)
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for byte in bytes {
-            self.0 ^= u64::from(*byte);
-            self.0 = self.0.wrapping_mul(0x100000001b3);
-        }
-    }
-
-    fn finish(self) -> u64 {
-        self.0
-    }
 }
 
 #[cfg(test)]
@@ -791,6 +746,7 @@ mod tests {
             },
         )
         .unwrap();
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "import-");
         assert_eq!(preview.disposition, ImportDisposition::Conflict);
         assert!(!preview.can_apply);
         let _ = fs::remove_dir_all(home);

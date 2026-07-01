@@ -54,8 +54,10 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: core 84 tests and desktop 71 tests passed
-- frontend: 85 tests passed
+- Rust workspace: CLI 6 tests, core 92 tests, and desktop 16 tests passed
+- Rust workspace Clippy passed with warnings denied
+- frontend: 81 tests passed
+- frontend TypeScript and renderer production build passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
@@ -144,10 +146,18 @@ Implemented:
 - unified project discovery on `config.yaml.scan_roots` and configurable
   `max_depth` (default 5), including nested projects, fixed skip rules, and no
   directory-symlink traversal
+- migrated Import, Batch Import, Adopt, Mount, Unmount, Delete, and Target
+  Registry preview fingerprints from FNV/DefaultHasher to one domain-separated
+  SHA-256 implementation that includes normalized request data, timestamp, and
+  present/missing state plus content for every affected path
+- added regression assertions that preview IDs use their stable operation
+  prefix followed by exactly 64 lowercase SHA-256 hexadecimal characters
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
+- `scripts/e2e_fake_runtime.sh`: passed after the SHA-256 migration without
+  touching the real HOME
 
 Not implemented:
-- shared SHA-256 fingerprint migration for non-Git operations
+- exhaustive process-crash injection at every journal step
 
 Next:
 - add crash-point integration coverage to each remaining write workflow

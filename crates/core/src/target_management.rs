@@ -1,3 +1,4 @@
+use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::targets::{
@@ -5,9 +6,7 @@ use crate::targets::{
 };
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -287,14 +286,15 @@ fn build_preview(
     can_apply: bool,
     generated_at: u64,
 ) -> Result<TargetChangePreview> {
-    let registry_text = fs::read_to_string(registry_path(home))?;
-    let request_text = serde_json::to_string(&(operation, &target, &blocking_bindings))
-        .map_err(|error| MaaError::new(error.to_string()))?;
-    let mut hasher = DefaultHasher::new();
-    registry_text.hash(&mut hasher);
-    request_text.hash(&mut hasher);
-    generated_at.hash(&mut hasher);
-    let preview_id = format!("target-{operation}-{:016x}", hasher.finish());
+    let mut fingerprint = PreviewFingerprint::new("target-change");
+    fingerprint.add_bytes(
+        "request",
+        &serde_json::to_vec(&(operation, &target, &blocking_bindings))
+            .map_err(|error| MaaError::new(error.to_string()))?,
+    );
+    fingerprint.add_u64("generated-at", generated_at);
+    fingerprint.add_path("target-registry", &registry_path(home))?;
+    let preview_id = fingerprint.finish(&format!("target-{operation}"));
     Ok(TargetChangePreview {
         preview_id,
         operation: operation.into(),
@@ -454,6 +454,7 @@ mod tests {
         .unwrap();
         let request = TargetAddPreviewRequest { target };
         let preview = preview_add_target(&home, &request).unwrap();
+        crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "target-add-");
         assert!(preview.can_apply);
         let result = apply_add_target(
             &home,

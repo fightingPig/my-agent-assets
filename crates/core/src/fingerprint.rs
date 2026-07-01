@@ -30,6 +30,7 @@ impl PreviewFingerprint {
 
     pub fn add_path(&mut self, label: &str, path: &Path) -> Result<()> {
         self.add_bytes(label, path.to_string_lossy().as_bytes());
+        self.add_bytes("path-state", b"present");
         self.add_path_content(path)
     }
 
@@ -37,7 +38,8 @@ impl PreviewFingerprint {
         if fs::symlink_metadata(path).is_ok() {
             self.add_path(label, path)
         } else {
-            self.add_bytes(label, b"missing");
+            self.add_bytes(label, path.to_string_lossy().as_bytes());
+            self.add_bytes("path-state", b"missing");
             Ok(())
         }
     }
@@ -91,6 +93,17 @@ impl PreviewFingerprint {
 }
 
 #[cfg(test)]
+pub(crate) fn assert_sha256_preview_id(preview_id: &str, prefix: &str) {
+    let digest = preview_id
+        .strip_prefix(prefix)
+        .expect("preview id should use the expected prefix");
+    assert_eq!(digest.len(), 64);
+    assert!(digest
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -111,10 +124,7 @@ mod tests {
         let mut first = PreviewFingerprint::new("import");
         first.add_path("source", &path).unwrap();
         let first = first.finish("import");
-        assert_eq!(first.len(), "import-".len() + 64);
-        assert!(first["import-".len()..]
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit()));
+        assert_sha256_preview_id(&first, "import-");
 
         fs::write(&path, "two").unwrap();
         let mut second = PreviewFingerprint::new("import");
