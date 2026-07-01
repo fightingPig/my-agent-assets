@@ -8,11 +8,9 @@ describe("ApplyConfirmationPanel", () => {
       <ApplyConfirmationPanel
         actionLabel="确认导入"
         canApply
-        confirmationValue=""
         description="将覆盖已存在的 runtime 内容。"
         isApplying={false}
         onApply={vi.fn()}
-        onConfirmationChange={vi.fn()}
         result={null}
         title="高风险操作"
       />,
@@ -29,11 +27,9 @@ describe("ApplyConfirmationPanel", () => {
       <ApplyConfirmationPanel
         actionLabel="确认导入"
         canApply={false}
-        confirmationValue="APPLY"
         description="执行说明"
         isApplying={false}
         onApply={vi.fn()}
-        onConfirmationChange={vi.fn()}
         result={null}
         title="执行导入"
       />,
@@ -47,11 +43,9 @@ describe("ApplyConfirmationPanel", () => {
       <ApplyConfirmationPanel
         actionLabel="确认导入"
         canApply
-        confirmationValue=""
         description="执行说明"
         isApplying={false}
         onApply={vi.fn()}
-        onConfirmationChange={vi.fn()}
         result={{
           mode: "apply",
           ok: true,
@@ -91,11 +85,9 @@ describe("ApplyConfirmationPanel", () => {
       <ApplyConfirmationPanel
         actionLabel="确认导入"
         canApply
-        confirmationValue=""
         description="执行说明"
         isApplying={false}
         onApply={vi.fn()}
-        onConfirmationChange={vi.fn()}
         operationError="后端暂时不可用"
         result={null}
         title="执行导入"

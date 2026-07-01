@@ -6,6 +6,7 @@ import {
   canonicalMcpSavePreview,
   canonicalMountApply,
   canonicalMountPreview,
+  canonicalAssetContent,
   listAssets,
 } from "../app/data-api";
 import type {
@@ -175,7 +176,19 @@ export function McpServersListPage({
     }
     setItems([]);
     setStateLabel("读取中");
-    const request = listAssets({ assetType: "mcp" }).then((assets) => assets.map(toMcpItem));
+    const request = listAssets({ assetType: "mcp" }).then((assets) =>
+      Promise.all(assets.map(async (asset) => {
+        try {
+          const content = await canonicalAssetContent(asset.id);
+          return toMcpItem(
+            asset,
+            content.truncated ? `${content.content}\n\n[预览已截断]` : content.content,
+          );
+        } catch (error) {
+          return toMcpItem(asset, `无法读取 canonical 内容：${errorMessage(error)}`);
+        }
+      })),
+    );
     request
       .then((assets) => {
         if (cancelled) return;
@@ -596,7 +609,7 @@ function toAssetDetail(server: McpItem, typeLabel: string, previewLabel: string)
   };
 }
 
-function toMcpItem(asset: AssetSummary): McpItem {
+function toMcpItem(asset: AssetSummary, preview: string): McpItem {
   return {
     id: asset.id,
     name: asset.name,
@@ -613,7 +626,7 @@ function toMcpItem(asset: AssetSummary): McpItem {
     transport: "本地配置",
     source: asset.category || "资产中心",
     capabilities: [asset.assetType, asset.status],
-    preview: `{\n  "name": "${asset.name}",\n  "sourcePath": "${asset.sourcePath}"\n}`,
+    preview,
     searchTerms: [asset.assetType, asset.status],
   };
 }

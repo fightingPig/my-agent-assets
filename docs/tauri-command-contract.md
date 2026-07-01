@@ -210,6 +210,33 @@ separate explicit `canonical_mount_preview` / `canonical_mount_apply` Sync.
 - **Consumer:** Backup History.
 - **Status:** Implemented and registered as read-only.
 
+### `canonical_asset_content`
+
+- **Purpose:** Read the real canonical preview content for one registered Skill, Command, or MCP asset.
+- **Input:** `{ assetId }`.
+- **Output:** `CanonicalAssetContent { assetId, assetType, canonicalPath, contentPath, content, truncated }`.
+- **Side effect:** Read-only.
+- **Consumers:** Skills, Commands, MCP Servers, and Asset Detail.
+- **Status:** Implemented in shared core and registered.
+
+The shared core resolves the canonical path from `assets.yaml`, rejects
+unregistered IDs and symlink traversal, and caps UI preview content at 256 KiB.
+React never supplies a filesystem path.
+
+### `canonical_asset_open`
+
+- **Purpose:** Reveal a Skill `SKILL.md` in the file manager or open a Command Markdown file with the system application.
+- **Input:** `{ assetId, action }`, where action is `reveal | open_external`.
+- **Output:** `{ assetId, path }`.
+- **Side effect:** Local system UI action; no file write.
+- **Consumer:** Asset Detail.
+- **Status:** Implemented in shared core and registered.
+
+Actions are kind-restricted: Skill supports only `reveal`, Command supports
+only `open_external`, and MCP is rejected because MCP uses the structured
+editor. The platform process is invoked with an argument array and never a
+shell command string.
+
 ### `reveal_backup_manifest`
 
 - **Purpose:** Reveal one listed backup manifest in the native file manager.

@@ -4,8 +4,8 @@ mod settings;
 mod shared_core;
 
 use contracts::{
-    AppInfo, BackupRevealInput, BackupRevealResult, CanonicalMcpGetInput, DesktopSettings,
-    SettingsSaveInput,
+    AppInfo, AssetOpenResult, BackupRevealInput, BackupRevealResult, CanonicalAssetContentInput,
+    CanonicalMcpGetInput, DesktopSettings, SettingsSaveInput,
 };
 
 #[tauri::command]
@@ -57,6 +57,20 @@ fn list_assets(
     input: my_agent_assets_core::query::AssetQueryRequest,
 ) -> Result<Vec<my_agent_assets_core::query::AssetSummary>, String> {
     shared_core::list_assets_command(input)
+}
+
+#[tauri::command]
+fn canonical_asset_content(
+    input: CanonicalAssetContentInput,
+) -> Result<my_agent_assets_core::asset_access::CanonicalAssetContent, String> {
+    shared_core::canonical_asset_content_command(input.asset_id)
+}
+
+#[tauri::command]
+fn canonical_asset_open(
+    input: my_agent_assets_core::asset_access::AssetOpenRequest,
+) -> Result<AssetOpenResult, String> {
+    shared_core::canonical_asset_open_command(input)
 }
 
 #[tauri::command]
@@ -248,6 +262,8 @@ pub fn run() {
             initialization_preview,
             initialization_apply,
             list_assets,
+            canonical_asset_content,
+            canonical_asset_open,
             list_projects,
             list_backups,
             reveal_backup_manifest,

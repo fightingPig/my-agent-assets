@@ -120,9 +120,9 @@ export const PAGE_REGISTRY: readonly PageMetadata[] = [
   },
   {
     id: "backups",
-    sidebarLabel: "备份恢复",
-    title: "备份恢复",
-    subtitle: "查看备份记录，并预览恢复影响范围。",
+    sidebarLabel: "备份历史",
+    title: "备份历史",
+    subtitle: "查看备份记录、定位文件并阅读手动恢复指南。",
     group: "运行",
     enabled: true,
     sidebarVisible: true,

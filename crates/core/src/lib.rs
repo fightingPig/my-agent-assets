@@ -1,4 +1,5 @@
 pub mod adopt;
+pub mod asset_access;
 pub mod asset_registry;
 pub mod backup_history;
 pub mod batch_import;

@@ -4,13 +4,6 @@ import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 export type ApplyConfirmationPanelProps = {
   title: string;
   description: string;
-  /**
-   * Retained temporarily so existing write-flow pages can migrate without a
-   * coordinated layout change. Confirmation text is no longer rendered or
-   * used as an execution gate.
-   */
-  confirmationValue?: string;
-  onConfirmationChange?: (value: string) => void;
   onApply: () => void;
   canApply: boolean;
   isApplying: boolean;

@@ -40,6 +40,34 @@ describe("read-only desktop data api", () => {
     await api.listAssets({ assetType: "skill" });
     expect(invoke).toHaveBeenLastCalledWith("list_assets", { input: { assetType: "skill" } });
 
+    invoke.mockResolvedValueOnce({
+      assetId: "skill:review",
+      assetType: "skill",
+      canonicalPath: "/tmp/assets/skills/review",
+      contentPath: "/tmp/assets/skills/review/SKILL.md",
+      content: "# Review",
+      truncated: false,
+    });
+    await api.canonicalAssetContent("skill:review");
+    expect(invoke).toHaveBeenLastCalledWith("canonical_asset_content", {
+      input: { assetId: "skill:review" },
+    });
+
+    invoke.mockResolvedValueOnce({
+      assetId: "command:commit",
+      path: "/tmp/assets/commands/commit.md",
+    });
+    await api.canonicalAssetOpen({
+      assetId: "command:commit",
+      action: "open_external",
+    });
+    expect(invoke).toHaveBeenLastCalledWith("canonical_asset_open", {
+      input: {
+        assetId: "command:commit",
+        action: "open_external",
+      },
+    });
+
     invoke.mockResolvedValueOnce([]);
     await api.listProjects();
     expect(invoke).toHaveBeenLastCalledWith("list_projects");

@@ -13,7 +13,7 @@ Current V1 scope:
 - Scan
 - Mount
 - Conflict
-- Backup
+- Backup History
 - Sync
 - Settings
 
@@ -200,7 +200,7 @@ Pages to implement:
 8. 扫描导入
 9. 挂载管理
 10. 冲突处理
-11. 备份恢复
+11. 备份历史
 12. 同步
 13. 设置
 
@@ -305,9 +305,9 @@ registration and removal through shared-core preview/apply commands.
 
 Page components use real Tauri data in production and may use local static fixtures only in tests, Visual QA, or explicit demo mode.
 
-`ApplyConfirmationPanel.tsx` is legacy UI that must be replaced or simplified
-as write workflows move to preview plus button confirmation. It must not
-require typed confirmation and must not expose historical Restore actions.
+`ApplyConfirmationPanel.tsx` owns ordinary preview-bound button confirmation.
+It must not require typed confirmation and must not expose historical Restore
+actions.
 
 `visual-qa/` contains reusable static GUI screenshot and layout diagnostics tooling.
 

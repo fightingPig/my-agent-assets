@@ -60,6 +60,25 @@ export type AssetSummary = {
   mountTargets: string[];
 };
 
+export type CanonicalAssetContent = {
+  assetId: string;
+  assetType: AssetType;
+  canonicalPath: string;
+  contentPath: string;
+  content: string;
+  truncated: boolean;
+};
+
+export type AssetOpenInput = {
+  assetId: string;
+  action: "reveal" | "open_external";
+};
+
+export type AssetOpenResult = {
+  assetId: string;
+  path: string;
+};
+
 export type ProjectSummary = {
   id: string;
   name: string;

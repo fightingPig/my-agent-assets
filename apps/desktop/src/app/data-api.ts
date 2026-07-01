@@ -56,6 +56,9 @@ import type {
   McpSaveApplyRequest,
   McpSaveApplyResult,
   McpAssetDefinition,
+  CanonicalAssetContent,
+  AssetOpenInput,
+  AssetOpenResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -92,6 +95,39 @@ const fallbackGitStatus: GitStatus = {
 export async function listAssets(input: ListAssetsInput = { assetType: null }): Promise<AssetSummary[]> {
   const assets = await invokeRead<unknown>("list_assets", { input }, []);
   return Array.isArray(assets) ? assets as AssetSummary[] : [];
+}
+
+export async function canonicalAssetContent(assetId: string): Promise<CanonicalAssetContent> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_asset_content requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_asset_content", {
+    input: { assetId },
+  });
+  if (
+    !isRecord(result) ||
+    typeof result.assetId !== "string" ||
+    typeof result.content !== "string" ||
+    typeof result.truncated !== "boolean"
+  ) {
+    throw new Error("canonical_asset_content returned an invalid response.");
+  }
+  return result as CanonicalAssetContent;
+}
+
+export async function canonicalAssetOpen(input: AssetOpenInput): Promise<AssetOpenResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("canonical_asset_open requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("canonical_asset_open", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.assetId !== "string" ||
+    typeof result.path !== "string"
+  ) {
+    throw new Error("canonical_asset_open returned an invalid response.");
+  }
+  return result as AssetOpenResult;
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {

@@ -4,6 +4,7 @@ import { McpServersListPage } from "./McpServersListPage";
 
 const {
   listAssets,
+  canonicalAssetContent,
   canonicalMcpGet,
   canonicalMcpSavePreview,
   canonicalMcpSaveApply,
@@ -11,6 +12,7 @@ const {
   canonicalMountApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
+  canonicalAssetContent: vi.fn(),
   canonicalMcpGet: vi.fn(),
   canonicalMcpSavePreview: vi.fn(),
   canonicalMcpSaveApply: vi.fn(),
@@ -20,6 +22,7 @@ const {
 
 vi.mock("../app/data-api", () => ({
   listAssets,
+  canonicalAssetContent,
   canonicalMcpGet,
   canonicalMcpSavePreview,
   canonicalMcpSaveApply,
@@ -45,6 +48,14 @@ describe("MCP canonical management", () => {
       updatedAt: "2026-07-01T10:00:00Z",
       mountTargets: ["/tmp/home/.claude.json"],
     }]);
+    canonicalAssetContent.mockResolvedValue({
+      assetId: "mcp:filesystem",
+      assetType: "mcp",
+      canonicalPath: "/tmp/filesystem.json",
+      contentPath: "/tmp/filesystem.json",
+      content: "{\"schemaVersion\":1}",
+      truncated: false,
+    });
     canonicalMcpGet.mockResolvedValue({
       assetId: "mcp:filesystem",
       title: "Filesystem",

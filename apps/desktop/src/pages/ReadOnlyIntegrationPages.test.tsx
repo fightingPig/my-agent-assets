@@ -24,6 +24,8 @@ import { SyncPage } from "./SyncPage";
 
 const {
   listAssets,
+  canonicalAssetContent,
+  canonicalAssetOpen,
   listProjects,
   listBackups,
   revealBackupManifest,
@@ -42,6 +44,8 @@ const {
   adoptApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
+  canonicalAssetContent: vi.fn(),
+  canonicalAssetOpen: vi.fn(),
   listProjects: vi.fn(),
   listBackups: vi.fn(),
   revealBackupManifest: vi.fn(),
@@ -62,6 +66,8 @@ const {
 
 vi.mock("../app/data-api", () => ({
   listAssets,
+  canonicalAssetContent,
+  canonicalAssetOpen,
   listProjects,
   listBackups,
   revealBackupManifest,
@@ -87,6 +93,18 @@ afterEach(() => {
 
 beforeEach(() => {
   listAssets.mockResolvedValue([assetFixture("skill:review", "review", "skill")]);
+  canonicalAssetContent.mockImplementation(async (assetId: string) => ({
+    assetId,
+    assetType: assetId.split(":")[0],
+    canonicalPath: `/tmp/${assetId}`,
+    contentPath: `/tmp/${assetId}`,
+    content: `real canonical content for ${assetId}`,
+    truncated: false,
+  }));
+  canonicalAssetOpen.mockImplementation(async ({ assetId }: { assetId: string }) => ({
+    assetId,
+    path: `/tmp/${assetId}`,
+  }));
   listProjects.mockResolvedValue([{
     id: "/tmp/project-a",
     name: "project-a",
@@ -216,45 +234,13 @@ describe("read-only UI integration", () => {
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
   });
 
-  it("renders real Codex Skills while MCP remains one canonical asset center", async () => {
-    discoverRuntimeSources.mockResolvedValue({
-      sources: [{
-        sourceId: "codex:skill:codex-review",
-        provider: "codex",
-        sourcePath: "/tmp/home/.agents/skills/codex-review",
-        assetKind: "skill",
-        assetName: "codex-review",
-        sourceFormat: "skill_directory",
-        scope: "user",
-        isManaged: false,
-        isSymlink: false,
-        warnings: [],
-        eligibleImport: true,
-        eligibleAdopt: true,
-      }, {
-        sourceId: "codex:mcp:local-files",
-        provider: "codex",
-        sourcePath: "/tmp/home/.codex/config.toml",
-        configPath: "/tmp/home/.codex/config.toml",
-        assetKind: "mcp",
-        assetName: "local-files",
-        sourceFormat: "codex_toml",
-        scope: "user",
-        isManaged: false,
-        isSymlink: false,
-        warnings: [],
-        eligibleImport: true,
-        eligibleAdopt: false,
-      }],
-      warnings: [],
-    });
-
+  it("keeps Skills and MCP in one canonical asset center across provider selection", async () => {
+    listAssets.mockResolvedValue([assetFixture("skill:canonical-review", "canonical-review", "skill")]);
     const { rerender } = render(<SkillsListPage provider="codex" />);
-    expect(await screen.findByRole("option", { name: "codex-review" })).toBeInTheDocument();
-    expect(screen.getByText("skill_directory")).toBeInTheDocument();
-    expect(screen.getByText("可导入")).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: "canonical-review" })).toBeInTheDocument();
+    expect(screen.getByText("real canonical content for skill:canonical-review")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
-    expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" });
+    expect(discoverRuntimeSources).not.toHaveBeenCalled();
 
     listAssets.mockResolvedValue([assetFixture("mcp:canonical-files", "canonical-files", "mcp")]);
     rerender(<McpServersListPage provider="codex" />);
@@ -263,12 +249,12 @@ describe("read-only UI integration", () => {
     expect(screen.getByText(/统一模型是唯一真实配置/)).toBeInTheDocument();
   });
 
-  it("shows provider-specific empty states for empty Codex discovery", async () => {
+  it("shows canonical empty states independent of provider selection", async () => {
+    listAssets.mockResolvedValue([]);
     const { rerender } = render(<SkillsListPage provider="codex" />);
-    expect(await screen.findByText("未发现 Codex Skills")).toBeInTheDocument();
+    expect(await screen.findByText("未发现 Skills")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
-    listAssets.mockResolvedValue([]);
     rerender(<McpServersListPage provider="codex" />);
     expect(await screen.findByText("未发现 MCP Servers")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
@@ -784,6 +770,11 @@ describe("read-only UI integration", () => {
     }} />);
 
     expect(screen.getByText("Real selected asset")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "在文件管理器中显示" }));
+    await waitFor(() => expect(canonicalAssetOpen).toHaveBeenCalledWith({
+      assetId: "skill:real-review",
+      action: "reveal",
+    }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
       assetId: "skill:real-review",
       targetId: "claude-user-skills",
@@ -800,6 +791,32 @@ describe("read-only UI integration", () => {
     }));
     await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
     expect(await screen.findByText("/tmp/home/.claude/skills/real-review.md")).toBeInTheDocument();
+  });
+
+  it("opens a Command through the system external application by asset ID", async () => {
+    render(<AssetDetailPage detail={{
+      assetId: "command:commit",
+      assetType: "command",
+      name: "commit",
+      title: "Commit",
+      summary: "Real command",
+      status: "可用",
+      statusTone: "success",
+      typeLabel: "Command",
+      category: "本地 Command",
+      sourcePath: "/tmp/assets/commands/commit.md",
+      scope: "资产中心",
+      updated: "刚刚",
+      mountTargets: [],
+      previewLabel: "Markdown 内容预览",
+      preview: "# Commit",
+    }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "使用外部编辑器打开" }));
+    await waitFor(() => expect(canonicalAssetOpen).toHaveBeenCalledWith({
+      assetId: "command:commit",
+      action: "open_external",
+    }));
   });
 
   it("uses selected real project data for project mount preview, apply, and refresh", async () => {

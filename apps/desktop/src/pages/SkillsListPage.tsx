@@ -1,7 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { discoverRuntimeSources, listAssets } from "../app/data-api";
-import type { AssetSummary, DiscoveredRuntimeSource } from "../app/contracts";
+import { canonicalAssetContent, listAssets } from "../app/data-api";
+import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import type { AssetProvider } from "../app/provider";
 import {
@@ -105,11 +105,16 @@ export function SkillsListPage({
 
     setItems([]);
     setStateLabel("读取中");
-    const request = provider === "codex"
-      ? discoverRuntimeSources({ kind: "user" }).then((result) => result.sources
-        .filter((source) => source.provider === "codex" && source.assetKind === "skill")
-        .map(toCodexSkillItem))
-      : listAssets({ assetType: "skill" }).then((assets) => assets.map(toSkillItem));
+    const request = listAssets({ assetType: "skill" }).then((assets) =>
+      Promise.all(assets.map(async (asset) => {
+        try {
+          const content = await canonicalAssetContent(asset.id);
+          return toSkillItem(asset, previewText(content.content, content.truncated));
+        } catch (error) {
+          return toSkillItem(asset, `无法读取 canonical 内容：${errorMessage(error)}`);
+        }
+      })),
+    );
     request
       .then((assets) => {
         if (cancelled) return;
@@ -128,17 +133,15 @@ export function SkillsListPage({
 
   return (
     <AssetCenterLayout
-      emptyDescription={provider === "codex"
-        ? "请在 ~/.agents/skills、项目 .agents/skills 或 /etc/codex/skills 中添加包含 SKILL.md 的目录。"
-        : "请先扫描或导入 Claude Skill。"}
-      emptyTitle={provider === "codex" ? "未发现 Codex Skills" : "未发现 Skills"}
+      emptyDescription="请先从 Claude Code、Codex 或已授权自定义来源扫描并导入 Skill。"
+      emptyTitle="未发现 Skills"
       itemLabel="Skills"
       items={items}
       searchPlaceholder="搜索 Skill 名称、路径或作用域"
       stateLabel={stateLabel}
-      usageLabel={provider === "codex" ? "内容特征" : "挂载与使用"}
-      usageCountLabel={provider === "codex" ? "项特征" : "个挂载"}
-      onOpenDetail={provider === "claude" && onOpenAssetDetail
+      usageLabel="挂载与使用"
+      usageCountLabel="个挂载"
+      onOpenDetail={onOpenAssetDetail
         ? (skill) => onOpenAssetDetail(toAssetDetail(skill, "Skill", "SKILL.md 内容预览"))
         : undefined}
       renderInspector={(skill) => (
@@ -146,35 +149,6 @@ export function SkillsListPage({
       )}
     />
   );
-}
-
-function toCodexSkillItem(skill: DiscoveredRuntimeSource): SkillItem {
-  const features = [
-    skill.sourceFormat,
-    skill.isSymlink ? "symlink" : null,
-    skill.eligibleImport ? "可导入" : null,
-  ].filter((value): value is string => Boolean(value));
-  const warningText = skill.warnings.length > 0
-    ? `\n\nWarnings:\n${skill.warnings.map((warning) => `- ${warning}`).join("\n")}`
-    : "";
-  const symlinkText = skill.symlinkTarget ? `\n\nSymlink target: ${skill.symlinkTarget}` : "";
-
-  return {
-    id: skill.sourceId,
-    name: skill.assetName,
-    title: skill.assetName,
-    category: "Codex Skill",
-    summary: "Shared core 发现的本地 Codex Skill",
-    status: skill.warnings.length > 0 ? "需要检查" : "已发现",
-    statusTone: skill.warnings.length > 0 ? "warning" : "success",
-    scope: codexScopeLabel(skill.scope),
-    path: skill.sourcePath,
-    icon: BookOpen,
-    updated: "本地来源",
-    mounts: features,
-    preview: `# ${skill.assetName}\n\n来源格式：${skill.sourceFormat}${symlinkText}${warningText}`,
-    searchTerms: [skill.scope, ...features, ...skill.warnings],
-  };
 }
 
 function toAssetDetail(skill: SkillItem, typeLabel: string, previewLabel: string): AssetDetailContext {
@@ -197,7 +171,7 @@ function toAssetDetail(skill: SkillItem, typeLabel: string, previewLabel: string
   };
 }
 
-function toSkillItem(asset: AssetSummary): SkillItem {
+function toSkillItem(asset: AssetSummary, preview: string): SkillItem {
   return {
     id: asset.id,
     name: asset.name,
@@ -211,7 +185,7 @@ function toSkillItem(asset: AssetSummary): SkillItem {
     icon: BookOpen,
     updated: asset.updatedAt ?? "未知",
     mounts: asset.mountTargets,
-    preview: asset.description ? `# ${asset.name}\n\n${asset.description}` : `# ${asset.name}`,
+    preview,
     searchTerms: [asset.assetType, asset.status],
   };
 }
@@ -222,10 +196,8 @@ function scopeLabel(scope: AssetSummary["scope"]) {
   return "资产中心";
 }
 
-function codexScopeLabel(scope: DiscoveredRuntimeSource["scope"]) {
-  if (scope === "user") return "用户级";
-  if (scope === "project") return "项目级";
-  return "自定义";
+function previewText(content: string, truncated: boolean) {
+  return truncated ? `${content}\n\n[预览已截断]` : content;
 }
 
 function errorMessage(error: unknown) {

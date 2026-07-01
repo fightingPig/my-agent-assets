@@ -1,8 +1,9 @@
-import { BookOpen, FolderKanban, Link2 } from "lucide-react";
+import { BookOpen, ExternalLink, FolderKanban, FolderOpen, Link2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalMountApply,
   canonicalMountPreview,
+  canonicalAssetOpen,
   listAssets,
   listMountTargets,
 } from "../app/data-api";
@@ -57,6 +58,7 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
   const [operationError, setOperationError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [openMessage, setOpenMessage] = useState<string | null>(null);
   const previewInput = useMemo<CanonicalMountPreviewRequest | null>(
     () => detail && target ? { assetId: detail.assetId, targetId: target.id } : null,
     [detail, target],
@@ -140,6 +142,24 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
     }
   };
 
+  const handleOpenAsset = async () => {
+    if (!detail || detail.assetType === "mcp") return;
+    setOpenMessage(null);
+    try {
+      const result = await canonicalAssetOpen({
+        assetId: detail.assetId,
+        action: detail.assetType === "skill" ? "reveal" : "open_external",
+      });
+      setOpenMessage(
+        detail.assetType === "skill"
+          ? `已在文件管理器中显示：${result.path}`
+          : `已交给系统默认应用打开：${result.path}`,
+      );
+    } catch (error) {
+      setOpenMessage(errorMessage(error));
+    }
+  };
+
   if (!detail) {
     return (
       <section className="panel detail-section">
@@ -154,10 +174,14 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
 
   return (
     <div className="detail-workspace">
-      <section className="panel entity-hero">
+        <section className="panel entity-hero">
         <div className="entity-hero-title"><span className="entity-hero-icon"><BookOpen size={21} /></span><div><small>{detail.title}</small><h2>{detail.name}</h2><p>{detail.summary}</p></div></div>
-        <span className={`asset-status ${detail.statusTone}`}>{detail.status}</span>
+        <div className="entity-hero-actions">
+          <span className={`asset-status ${detail.statusTone}`}>{detail.status}</span>
+          {!demoMode && detail.assetType !== "mcp" ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => void handleOpenAsset()} style={NO_DRAG_REGION_STYLE} type="button">{detail.assetType === "skill" ? <FolderOpen size={14} /> : <ExternalLink size={14} />}{detail.assetType === "skill" ? "在文件管理器中显示" : "使用外部编辑器打开"}</button> : null}
+        </div>
       </section>
+      {openMessage ? <p className="asset-open-message">{openMessage}</p> : null}
       <div className="detail-two-column">
         <div className="detail-column">
           <section className="panel detail-section"><div className="section-heading"><div><h3>资产信息</h3><p>{detail.typeLabel} · {detail.category}</p></div></div><dl className="entity-field-list"><div><dt>来源路径</dt><dd>{detail.sourcePath}</dd></div><div><dt>作用域</dt><dd>{detail.scope}</dd></div><div><dt>最近更新</dt><dd>{detail.updated}</dd></div><div><dt>使用引用</dt><dd>{detail.mountTargets.length} 个运行目标</dd></div></dl></section>

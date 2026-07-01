@@ -45,7 +45,6 @@ export function ScanImportPage({
   const [adoptPreview, setAdoptPreview] = useState<AdoptPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [adoptResult, setAdoptResult] = useState<ApplyResult | null>(null);
-  const [confirmationValue, setConfirmationValue] = useState("");
   const [stateLabel, setStateLabel] = useState("读取中");
   const [isPlanning, setIsPlanning] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
@@ -152,7 +151,6 @@ export function ScanImportPage({
       });
       setApplyResult(toApplyResult(result));
       setStateLabel("导入已执行");
-      setConfirmationValue("");
       setRefreshKey((current) => current + 1);
     } catch (error) {
       setApplyResult(null);
@@ -230,7 +228,7 @@ export function ScanImportPage({
       <section className="panel operation-section">
         <div className="section-heading"><div><h3>选择扫描范围</h3><p>选择仅更新本地预览，不执行导入</p></div><span className="preview-label">{stateLabel}</span></div>
         <div className="scope-card-grid">
-          {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); setConfirmationValue(""); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
+          {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
         </div>
       </section>
 
@@ -246,11 +244,9 @@ export function ScanImportPage({
         <ApplyConfirmationPanel
           actionLabel="确认导入"
           canApply={canApply}
-          confirmationValue={confirmationValue}
           description="会把当前扫描资产写入资产中心；后端会校验 previewId 并在替换前创建备份。"
           isApplying={isApplying}
           onApply={handleApplyImport}
-          onConfirmationChange={setConfirmationValue}
           operationError={operationError}
           result={applyResult}
           title="执行导入"

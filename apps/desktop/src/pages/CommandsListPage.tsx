@@ -1,6 +1,6 @@
 import { TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listAssets } from "../app/data-api";
+import { canonicalAssetContent, listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import {
@@ -106,9 +106,16 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
     setItems([]);
     setStateLabel("读取中");
     listAssets({ assetType: "command" })
-      .then((assets) => {
+      .then(async (assets) => {
+        const mapped = await Promise.all(assets.map(async (asset) => {
+          try {
+            const content = await canonicalAssetContent(asset.id);
+            return toCommandItem(asset, previewText(content.content, content.truncated));
+          } catch (error) {
+            return toCommandItem(asset, `无法读取 canonical 内容：${errorMessage(error)}`);
+          }
+        }));
         if (cancelled) return;
-        const mapped = assets.map(toCommandItem);
         setItems(mapped);
         setStateLabel(mapped.length > 0 ? "只读真实数据" : "未发现本地数据");
       })
@@ -165,7 +172,7 @@ function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: st
   };
 }
 
-function toCommandItem(asset: AssetSummary): CommandItem {
+function toCommandItem(asset: AssetSummary, preview: string): CommandItem {
   return {
     id: asset.id,
     name: asset.name,
@@ -180,9 +187,13 @@ function toCommandItem(asset: AssetSummary): CommandItem {
     updated: asset.updatedAt ?? "未知",
     mounts: asset.mountTargets,
     tags: [asset.assetType, asset.status],
-    preview: asset.description ? `# ${asset.name}\n\n${asset.description}` : `# ${asset.name}`,
+    preview,
     searchTerms: [asset.assetType, asset.status],
   };
+}
+
+function previewText(content: string, truncated: boolean) {
+  return truncated ? `${content}\n\n[预览已截断]` : content;
 }
 
 function scopeLabel(scope: AssetSummary["scope"]) {

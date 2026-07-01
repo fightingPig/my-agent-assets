@@ -1,8 +1,12 @@
-use crate::contracts::{BackupRevealInput, BackupRevealResult};
+use crate::contracts::{AssetOpenResult, BackupRevealInput, BackupRevealResult};
 use crate::path_utils::home_dir;
 use my_agent_assets_core::adopt::{
     apply_adopt, preview_adopt, AdoptApplyRequest, AdoptApplyResult, AdoptPreview,
     AdoptPreviewRequest,
+};
+use my_agent_assets_core::asset_access::{
+    load_canonical_asset_content, resolve_asset_open_target, AssetOpenAction, AssetOpenRequest,
+    CanonicalAssetContent,
 };
 use my_agent_assets_core::backup_history::{
     list_backups, resolve_backup_manifest, BackupHistoryEntry,
@@ -75,6 +79,26 @@ pub fn discover_runtime_sources_command(scope: DiscoveryScope) -> Result<Discove
 pub fn list_assets_command(input: AssetQueryRequest) -> Result<Vec<AssetSummary>, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; asset list skipped.".to_string())?;
     list_assets_for_home(&home, input)
+}
+
+pub fn canonical_asset_content_command(asset_id: String) -> Result<CanonicalAssetContent, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; asset content lookup skipped.".to_string())?;
+    load_canonical_asset_content(&home, &asset_id).map_err(|error| error.to_string())
+}
+
+pub fn canonical_asset_open_command(input: AssetOpenRequest) -> Result<AssetOpenResult, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; asset open blocked.".to_string())?;
+    let target = resolve_asset_open_target(&home, &input).map_err(|error| error.to_string())?;
+    let (program, arguments) = platform_asset_open_command(&target.path, target.action)?;
+    Command::new(program)
+        .args(arguments)
+        .spawn()
+        .map_err(|error| format!("无法打开 canonical asset：{error}"))?;
+    Ok(AssetOpenResult {
+        asset_id: target.asset_id,
+        path: target.path.to_string_lossy().into_owned(),
+    })
 }
 
 pub fn list_projects_command() -> Result<Vec<ProjectSummary>, String> {
@@ -196,6 +220,43 @@ fn platform_reveal_command(path: &Path) -> Result<(OsString, Vec<OsString>), Str
         Ok((
             OsString::from("xdg-open"),
             vec![parent.as_os_str().to_owned()],
+        ))
+    }
+}
+
+fn platform_asset_open_command(
+    path: &Path,
+    action: AssetOpenAction,
+) -> Result<(OsString, Vec<OsString>), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut arguments = Vec::new();
+        if action == AssetOpenAction::Reveal {
+            arguments.push(OsString::from("-R"));
+        }
+        arguments.push(path.as_os_str().to_owned());
+        Ok((OsString::from("open"), arguments))
+    }
+    #[cfg(windows)]
+    {
+        let argument = if action == AssetOpenAction::Reveal {
+            OsString::from(format!("/select,{}", path.display()))
+        } else {
+            path.as_os_str().to_owned()
+        };
+        Ok((OsString::from("explorer"), vec![argument]))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let target = if action == AssetOpenAction::Reveal {
+            path.parent()
+                .ok_or_else(|| "asset content has no parent directory".to_string())?
+        } else {
+            path
+        };
+        Ok((
+            OsString::from("xdg-open"),
+            vec![target.as_os_str().to_owned()],
         ))
     }
 }
@@ -393,6 +454,18 @@ mod tests {
         assert!(!arguments.is_empty());
         assert_ne!(program, OsString::from("sh"));
         assert_ne!(program, OsString::from("cmd"));
+    }
+
+    #[test]
+    fn asset_open_uses_argument_arrays_without_a_shell() {
+        let path = PathBuf::from("/tmp/assets/commands/commit.md");
+        for action in [AssetOpenAction::Reveal, AssetOpenAction::OpenExternal] {
+            let (program, arguments) = platform_asset_open_command(&path, action).unwrap();
+            assert!(!program.is_empty());
+            assert!(!arguments.is_empty());
+            assert_ne!(program, OsString::from("sh"));
+            assert_ne!(program, OsString::from("cmd"));
+        }
     }
 
     fn initialize(home: &Path) {

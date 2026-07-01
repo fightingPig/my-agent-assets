@@ -1,5 +1,5 @@
 import {
-  ArchiveRestore,
+  Archive,
   AlertTriangle,
   Blocks,
   BookOpen,
@@ -30,7 +30,7 @@ const pageIcons: Record<PageId, LucideIcon> = {
   scan: ScanSearch,
   mounts: Link2,
   conflicts: AlertTriangle,
-  backups: ArchiveRestore,
+  backups: Archive,
   sync: RefreshCw,
   settings: Settings,
 };
@@ -67,7 +67,7 @@ export function Sidebar({ activePage, onPageChange, provider, onProviderChange }
         {getSidebarPageGroups().map(({ group, pages }) => (
           <section className="nav-group" key={group}>
             <div className="nav-label">{group}</div>
-            {pages.filter((page) => provider !== "codex" || page.id !== "commands").map((page) => {
+            {pages.map((page) => {
               const Icon = pageIcons[page.id];
               return (
                 <button

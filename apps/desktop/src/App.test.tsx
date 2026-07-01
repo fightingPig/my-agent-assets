@@ -104,7 +104,7 @@ describe("macOS preview home", () => {
       ["扫描导入", "导入预览"],
       ["挂载管理", "预览挂载计划"],
       ["冲突处理", "待处理冲突"],
-      ["备份恢复", "手动恢复说明"],
+      ["备份历史", "手动恢复说明"],
       ["同步", "本地 Git 仓库"],
       ["设置", "CLI 设置"],
     ];
@@ -218,13 +218,15 @@ describe("macOS preview home", () => {
     expect(styles).toMatch(/\.dropdown-menu,[^}]*-webkit-app-region:\s*no-drag;/s);
   });
 
-  it("switches providers and hides Commands for Codex", () => {
+  it("switches providers without splitting canonical asset navigation", () => {
     render(<App demoMode />);
     expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Codex" }));
-    expect(screen.queryByRole("button", { name: "Commands" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skills" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "MCP Servers" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Commands" }));
+    expect(screen.getByRole("heading", { name: "Commands" })).toBeInTheDocument();
   });
 
   it("does not show demo rows across normal production pages", async () => {
@@ -249,7 +251,7 @@ describe("macOS preview home", () => {
     expect(screen.getByText("暂无待处理冲突")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "备份恢复" }));
+    fireEvent.click(screen.getByRole("button", { name: "备份历史" }));
     expect(await screen.findByText("暂无备份历史")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "backup-20260621-1842" })).not.toBeInTheDocument();
   });

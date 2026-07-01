@@ -188,6 +188,19 @@ Implemented:
   itself; unsupported optional actions such as exporting plans or saving scan
   previews are omitted, while supported writes retain real Preview/Apply
   controls
+- replaced synthesized production Skill/Command/MCP previews with real,
+  symlink-safe canonical content reads capped at 256 KiB
+- added assetId-only Skill file reveal and Command external-open actions;
+  shared core resolves the canonical path and platform adapters use argument
+  arrays without shell command strings
+- removed the final typed-confirmation compatibility props and dead local
+  state; all write panels now use preview readiness plus ordinary button
+  confirmation
+- removed Provider-based filtering from canonical Asset Center navigation;
+  Commands remain visible under either provider selection while target
+  compatibility continues to block Codex Command mounts in shared core
+- renamed the user-facing backup page to “备份历史” so the UI no longer implies
+  an automatic Restore capability
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 - `scripts/e2e_fake_runtime.sh`: passed after the SHA-256 migration without
   touching the real HOME

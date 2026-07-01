@@ -1444,6 +1444,27 @@ h1 {
   gap: 10px;
 }
 
+.entity-hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.entity-hero-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.asset-open-message {
+  margin: -4px 0 0;
+  color: var(--secondary);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
 .mcp-editor-heading > div {
   display: grid;
   gap: 2px;

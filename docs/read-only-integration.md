@@ -178,6 +178,14 @@ configuration. Existing bindings are marked `out_of_sync`; each target must be
 explicitly synchronized through the existing targetId-only Mount
 Preview/Apply renderer flow.
 
+Skills, Commands, and MCP inspectors now load the real canonical file content
+through `canonical_asset_content`; production no longer synthesizes preview
+text from asset metadata. Preview reads are capped at 256 KiB and report
+truncation. Asset Detail exposes kind-specific system actions through
+`canonical_asset_open`: Skill reveals `SKILL.md` in the file manager and
+Command opens the canonical Markdown file with the system default application.
+Both commands accept an asset ID rather than a frontend path.
+
 ## Non-goals
 
 The read-only UI milestone still does not:

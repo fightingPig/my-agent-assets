@@ -60,9 +60,6 @@ function App({ demoMode = false }: AppProps = {}) {
 
   const changeProvider = (nextProvider: AssetProvider) => {
     setProvider(nextProvider);
-    if (nextProvider === "codex" && activePage === "commands") {
-      setActivePage("skills");
-    }
   };
 
   return (

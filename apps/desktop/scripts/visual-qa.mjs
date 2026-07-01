@@ -201,11 +201,8 @@ async function main() {
       "--disable-extensions",
       "--disable-features=Translate",
       "--disable-sync",
-      "--disable-threaded-animation",
-      "--disable-threaded-scrolling",
       "--metrics-recording-only",
       "--no-first-run",
-      "--run-all-compositor-stages-before-draw",
       "--window-size=1440,900",
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${chromeProfile}`,
@@ -245,11 +242,9 @@ async function main() {
           deviceScaleFactor: 1,
           mobile: false,
         });
-        await client.send("Emulation.setVisibleSize", {
-          width: viewport.width,
-          height: viewport.height,
-        });
         const url = `${viteUrl}/visual-qa.html?platform=macos&page=${encodeURIComponent(page.id)}`;
+        await client.send("Page.navigate", { url: "about:blank" });
+        await delay(50);
         await clearQaReport(client);
         await client.send("Page.navigate", { url });
         const report = await waitForQaReport(client, {
