@@ -1,7 +1,6 @@
 import { ChevronRight, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
-import { StaticActionButton } from "../ui/StaticActionButton";
 
 export type AssetStatusTone = "success" | "warning" | "neutral";
 
@@ -25,7 +24,6 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   items: readonly T[];
   itemLabel: string;
   searchPlaceholder: string;
-  actionLabel: string;
   stateLabel?: string;
   emptyTitle?: string;
   emptyDescription?: string;
@@ -61,7 +59,6 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   items,
   itemLabel,
   searchPlaceholder,
-  actionLabel,
   stateLabel,
   emptyTitle,
   emptyDescription,
@@ -180,12 +177,11 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
               </InspectorSection>
               {renderInspector(selectedItem)}
             </div>
-            <div className="asset-inspector-actions">
-              {onOpenDetail
-                ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenDetail(selectedItem)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button>
-                : <StaticActionButton className="asset-secondary-action">更多操作</StaticActionButton>}
-              <StaticActionButton className="asset-business-action">{actionLabel}</StaticActionButton>
-            </div>
+            {onOpenDetail ? (
+              <div className="asset-inspector-actions">
+                <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenDetail(selectedItem)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button>
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="asset-inspector-empty"><strong>暂无可检查资产</strong><span>左侧出现匹配结果后，这里将显示详情。</span></div>

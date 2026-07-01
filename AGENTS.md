@@ -259,8 +259,7 @@ src/
 │   ├── targets/
 │   │   └── TargetRegistryPanel.tsx
 │   └── ui/
-│       ├── ApplyConfirmationPanel.tsx
-│       └── StaticActionButton.tsx
+│       └── ApplyConfirmationPanel.tsx
 ├── lib/
 │   └── platform.ts
 ├── pages/

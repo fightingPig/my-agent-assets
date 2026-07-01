@@ -56,7 +56,7 @@ Status:
 Validation:
 - Rust workspace: CLI 7 tests, core 89 tests, and desktop 16 tests passed
 - Rust workspace Clippy passed with warnings denied
-- frontend: 82 tests passed
+- frontend: 80 tests passed
 - frontend TypeScript and renderer production build passed
 - shared discovery: 7 fake HOME tests passed
 - canonical MCP import/rendering: 10 tests passed
@@ -170,6 +170,10 @@ Implemented:
   platform mount mechanism
 - CLI fake-HOME coverage proves `maa doctor` emits stable JSON and leaves an
   uninitialized HOME untouched
+- removed every production `StaticActionButton` placeholder and the component
+  itself; unsupported optional actions such as exporting plans or saving scan
+  previews are omitted, while supported writes retain real Preview/Apply
+  controls
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 - `scripts/e2e_fake_runtime.sh`: passed after the SHA-256 migration without
   touching the real HOME

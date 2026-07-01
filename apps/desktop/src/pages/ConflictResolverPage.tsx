@@ -12,7 +12,6 @@ import type {
 } from "../app/contracts";
 import type { ConflictResolverContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
-import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type Resolution = "skip" | "rename" | "overwrite";
@@ -247,7 +246,6 @@ function ConflictResolverWorkspace({
               </div>
             </div>
             <div className="operation-actions">
-              <StaticActionButton className="asset-secondary-action">导出决策</StaticActionButton>
               <button
                 className="asset-secondary-action"
                 data-no-drag="true"

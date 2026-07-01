@@ -145,7 +145,6 @@ export function McpServersListPage({
 
   return (
     <AssetCenterLayout
-      actionLabel={provider === "codex" ? "Codex MCP 只读" : "挂载 MCP"}
       emptyDescription={provider === "codex"
         ? "请在 ~/.codex/config.toml 或项目 .codex/config.toml 中配置 mcp_servers。"
         : "请先扫描或导入 Claude MCP Server。"}

@@ -101,7 +101,7 @@ describe("remaining V1 static pages", () => {
     const controls = Array.from(container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input,select"));
     expect(controls.length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "保存设置" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "检查 CLI" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "检查 CLI" })).not.toBeInTheDocument();
   });
 
   it("keeps forbidden product concepts out of rendered UI", () => {

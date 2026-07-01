@@ -44,7 +44,8 @@ These interactions update only local component state. They do not read or write 
 
 ## StaticActionButton Rule
 
-Business actions in the static GUI use `StaticActionButton`.
+At the static-GUI freeze milestone, business-action placeholders used
+`StaticActionButton`.
 
 The component exposes visual props only and does not accept event-handler props. It always renders:
 
@@ -101,7 +102,9 @@ Recent activity has no backend event source yet and therefore displays an empty 
 - `app/pages.ts` provides stable page identity and metadata boundaries.
 - `app/CurrentPage.tsx` provides the page composition boundary for future data and command wiring.
 - List, inspector, detail, plan, warning, diff, and status surfaces define the static presentation targets for structured DTOs.
-- `StaticActionButton` locations mark destructive apply command entry points without currently exposing executable behavior; Settings save, Scan Import plan generation, Mount Manager plan generation, Sync plan generation, and Backup Restore plan generation are handled by separate controlled actions.
+- The historical placeholder component was removed during final product
+  integration. Production pages omit unimplemented optional actions and use
+  explicit Preview/Apply controls for supported writes.
 - Typed Tauri wrappers now provide Claude read/apply flows and read-only Codex Skills/MCP discovery. Page components receive structured DTOs and keep filesystem/config parsing in Rust.
 
 Future integration should place filesystem, Git, scan, mount, MCP compile, backup, restore, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.

@@ -4,7 +4,6 @@ import { CommandsListPage } from "../../pages/CommandsListPage";
 import { McpServersListPage } from "../../pages/McpServersListPage";
 import { SkillsListPage } from "../../pages/SkillsListPage";
 import { SyncPage } from "../../pages/SyncPage";
-import styles from "../../styles.css?raw";
 
 afterEach(cleanup);
 
@@ -65,17 +64,13 @@ describe("Asset Center static UI", () => {
     }
   });
 
-  it("keeps disabled business actions explicitly no-drag", () => {
+  it("omits unimplemented business-action placeholders", () => {
     for (const Page of [SkillsListPage, CommandsListPage, McpServersListPage]) {
       const { unmount } = render(<Page demoMode />);
-      const actions = screen.getAllByRole("button").filter((button) => button.getAttribute("aria-disabled") === "true");
-      expect(actions).toHaveLength(2);
-      for (const action of actions) {
-        expect(action).toBeDisabled();
-        expect(action).toHaveAttribute("data-no-drag", "true");
-      }
-      expect(styles).toMatch(/\.asset-secondary-action,[\s\S]*?\.asset-business-action\s*\{[^}]*-webkit-app-region:\s*no-drag;/);
-      expect(styles).toMatch(/\.asset-business-action:disabled\s*\{[^}]*-webkit-app-region:\s*no-drag;/);
+      const placeholders = screen
+        .queryAllByRole("button")
+        .filter((button) => button.getAttribute("aria-disabled") === "true");
+      expect(placeholders).toHaveLength(0);
       unmount();
     }
   });

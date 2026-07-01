@@ -124,7 +124,6 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
 
   return (
     <AssetCenterLayout
-      actionLabel="挂载 Command"
       emptyDescription="请先扫描或导入 Claude Command。"
       emptyTitle="未发现 Commands"
       itemLabel="Commands"

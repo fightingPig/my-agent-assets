@@ -296,8 +296,8 @@ describe("read-only UI integration", () => {
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("/tmp/local-app")).toBeInTheDocument();
     expect(container.textContent).toContain("只读真实数据");
-    expect(screen.getByRole("button", { name: "扫描项目" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "管理挂载" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "扫描项目" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "管理挂载" })).not.toBeInTheDocument();
   });
 
   it("shows an empty state instead of static projects when listProjects is empty", async () => {
@@ -489,7 +489,7 @@ describe("read-only UI integration", () => {
     }));
 
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "保存扫描预览" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "保存扫描预览" })).not.toBeInTheDocument();
   });
 
   it("generates an atomic batch import preview before enabling confirmation", async () => {

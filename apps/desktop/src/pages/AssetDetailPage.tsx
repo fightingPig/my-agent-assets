@@ -15,7 +15,6 @@ import type {
 } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
-import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 const fallbackDetail: AssetDetailContext = {
@@ -164,7 +163,7 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp }: AssetD
           <section className="panel detail-section"><div className="section-heading"><div><h3>资产信息</h3><p>{detail.typeLabel} · {detail.category}</p></div></div><dl className="entity-field-list"><div><dt>来源路径</dt><dd>{detail.sourcePath}</dd></div><div><dt>作用域</dt><dd>{detail.scope}</dd></div><div><dt>最近更新</dt><dd>{detail.updated}</dd></div><div><dt>使用引用</dt><dd>{detail.mountTargets.length} 个运行目标</dd></div></dl></section>
           <section className="panel detail-section"><div className="section-heading"><div><h3>挂载目标</h3><p>当前引用关系</p></div><Link2 size={16} /></div><div className="reference-list">{detail.mountTargets.length > 0 ? detail.mountTargets.map((target) => <div key={target}><FolderKanban size={15} /><span>{target.includes("project") ? "项目级 Claude Runtime" : "用户级 Claude Runtime"}</span><small>{target}</small></div>) : <div><FolderKanban size={15} /><span>暂无挂载目标</span><small>资产中心</small></div>}</div></section>
         </div>
-        <section className="panel detail-section content-preview-panel"><div className="section-heading"><div><h3>{detail.previewLabel}</h3><p>只读内容</p></div></div><pre><code>{detail.preview}</code></pre><div className="detail-actions"><StaticActionButton className="asset-secondary-action">查看引用</StaticActionButton><button className="asset-business-action" data-no-drag="true" disabled={!previewInput} onClick={() => setRefreshKey((current) => current + 1)} style={NO_DRAG_REGION_STYLE} type="button">刷新挂载预览</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} description={target ? `将挂载到已授权目标 ${target.id}（${preview?.affectedTargetPath ?? target.path}）；执行前校验 previewId，并在替换现有目标前创建备份。` : "没有兼容的已授权目标，请先在设置中注册目标。"} isApplying={isApplying} onApply={handleApplyMount} operationError={operationError} result={applyResult} title="执行资产挂载" /></section>
+        <section className="panel detail-section content-preview-panel"><div className="section-heading"><div><h3>{detail.previewLabel}</h3><p>只读内容</p></div></div><pre><code>{detail.preview}</code></pre><div className="detail-actions"><button className="asset-business-action" data-no-drag="true" disabled={!previewInput} onClick={() => setRefreshKey((current) => current + 1)} style={NO_DRAG_REGION_STYLE} type="button">刷新挂载预览</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} description={target ? `将挂载到已授权目标 ${target.id}（${preview?.affectedTargetPath ?? target.path}）；执行前校验 previewId，并在替换现有目标前创建备份。` : "没有兼容的已授权目标，请先在设置中注册目标。"} isApplying={isApplying} onApply={handleApplyMount} operationError={operationError} result={applyResult} title="执行资产挂载" /></section>
       </div>
     </div>
   );

@@ -128,7 +128,6 @@ export function SkillsListPage({
 
   return (
     <AssetCenterLayout
-      actionLabel={provider === "codex" ? "Codex Skill 只读" : "挂载 Skill"}
       emptyDescription={provider === "codex"
         ? "请在 ~/.agents/skills、项目 .agents/skills 或 /etc/codex/skills 中添加包含 SKILL.md 的目录。"
         : "请先扫描或导入 Claude Skill。"}

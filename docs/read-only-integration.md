@@ -138,9 +138,10 @@ Production pages do not fall back to sample rows. Empty commands produce explici
 
 The Provider switch selects `Claude Code` or `Codex` within the existing Asset Center. Codex exposes only Skills and MCP Servers; Commands are hidden. Codex data is never passed into Claude import, mount, conflict apply, or adoption workflows.
 
-`StaticActionButton` remains reserved for visual-only actions with no backend
-workflow. Real writes use a backend preview followed by ordinary button
-confirmation; typed `APPLY` is not required.
+The historical `StaticActionButton` placeholder has been removed. Production
+pages now expose only real read/preview/apply controls; unimplemented optional
+actions are omitted instead of rendered as permanently disabled buttons.
+Typed `APPLY` is not required.
 
 The preview workflow pages now consume preview-only data through the wrapper layer:
 

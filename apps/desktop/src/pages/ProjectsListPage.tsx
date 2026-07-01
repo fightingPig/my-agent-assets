@@ -4,7 +4,6 @@ import { listProjects } from "../app/data-api";
 import type { ProjectSummary } from "../app/contracts";
 import type { ProjectDetailContext } from "../app/detail-context";
 import { InspectorFields, InspectorSection, InspectorTags } from "../components/assets/AssetCenterLayout";
-import { StaticActionButton } from "../components/ui/StaticActionButton";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import { staticProjects, type StaticProject } from "./project-data";
 
@@ -89,7 +88,7 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: Proj
             <InspectorFields fields={[{ label: "项目路径", value: selected.path }, { label: "最近更新", value: selected.updated }]} />
             <InspectorSection title="当前挂载"><InspectorTags tags={selected.mounts} /></InspectorSection>
           </div>
-          <div className="asset-inspector-actions">{onOpenProjectDetail ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenProjectDetail(selected)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button> : <StaticActionButton className="asset-secondary-action">扫描项目</StaticActionButton>}<StaticActionButton className="asset-business-action">管理挂载</StaticActionButton></div>
+          {onOpenProjectDetail ? <div className="asset-inspector-actions"><button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenProjectDetail(selected)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button></div> : null}
         </> : <div className="asset-inspector-empty"><strong>暂无可检查项目</strong><span>调整筛选后选择一个项目。</span></div>}
       </aside>
     </div>
