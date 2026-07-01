@@ -86,6 +86,23 @@ fn source_id(scan: &Value, provider: &str, kind: &str, name: &str) -> String {
 }
 
 #[test]
+fn doctor_is_structured_and_read_only_before_initialization() {
+    let home = TestHome::new();
+    let report = json_output(&home.path, &["doctor"]);
+    assert_eq!(report["initialized"], false);
+    assert!(report["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|check| check["id"] == "asset_center" && check["status"] == "warning"));
+    assert_eq!(
+        fs::read_dir(&home.path).unwrap().count(),
+        0,
+        "doctor and startup recovery must not write into an empty HOME"
+    );
+}
+
+#[test]
 fn shared_core_cli_flow_uses_source_and_target_ids() {
     let home = TestHome::new();
     home.write(".claude/skills/review/SKILL.md", "# Review\n");

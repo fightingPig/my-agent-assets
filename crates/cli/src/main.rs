@@ -5,6 +5,7 @@ use my_agent_assets_core::asset_registry::{inspect_content, load as load_assets}
 use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
 };
+use my_agent_assets_core::diagnostics::doctor;
 use my_agent_assets_core::discovery::{discover, DiscoveryScope, SourceFormat};
 use my_agent_assets_core::git_sync::{
     apply_sync, preview_sync, SyncApplyRequest, SyncDirection, SyncPreviewRequest,
@@ -28,7 +29,7 @@ use my_agent_assets_core::target_management::{
     TargetRemovePreviewRequest,
 };
 use my_agent_assets_core::targets::{load as load_targets, AssetKind, MountTargetKind};
-use my_agent_assets_core::{doctor, Context, MaaError, Result};
+use my_agent_assets_core::{MaaError, Result};
 use serde::Serialize;
 use serde_json::json;
 use std::env;
@@ -75,7 +76,6 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
             eprintln!("启动恢复失败：{error}；只读命令仍可使用，写操作将保持阻止。");
         }
     }
-    let context = Context::new(home.clone());
     let apply = take_flag(&mut args, "--apply");
     let command = next_arg(&mut args, "command")?;
     if take_flag(&mut args, "--help") || take_flag(&mut args, "-h") {
@@ -254,11 +254,7 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
         }
         "doctor" => {
             reject_apply(apply, "doctor is read-only")?;
-            print!("{}", doctor(&context)?);
-            let incomplete = incomplete_journals(&home)?;
-            if !incomplete.is_empty() {
-                print_json(&json!({ "incompleteOperations": incomplete }))?;
-            }
+            print_json(&doctor(&home))?;
         }
         "sync" => {
             let direction = match next_arg(&mut args, "pull or push")?.as_str() {

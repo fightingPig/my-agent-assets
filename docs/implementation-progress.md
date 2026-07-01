@@ -54,7 +54,7 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: CLI 6 tests, core 95 tests, and desktop 16 tests passed
+- Rust workspace: CLI 7 tests, core 89 tests, and desktop 16 tests passed
 - Rust workspace Clippy passed with warnings denied
 - frontend: 82 tests passed
 - frontend TypeScript and renderer production build passed
@@ -161,6 +161,15 @@ Implemented:
   present/missing state plus content for every affected path
 - added regression assertions that preview IDs use their stable operation
   prefix followed by exactly 64 lowercase SHA-256 hexadecimal characters
+- removed the remaining 1,600-line monolithic `lib.rs` Scan/Mount/Remove/Sync
+  implementation and its legacy public types, so production and CLI callers
+  can no longer bypass the canonical preview/apply services
+- replaced the legacy one-line doctor output with a structured read-only
+  shared-core report covering initialization validity, registries, canonical
+  content consistency, incomplete operations, runtime presence, Git, and the
+  platform mount mechanism
+- CLI fake-HOME coverage proves `maa doctor` emits stable JSON and leaves an
+  uninitialized HOME untouched
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 - `scripts/e2e_fake_runtime.sh`: passed after the SHA-256 migration without
   touching the real HOME
