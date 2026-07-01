@@ -48,6 +48,14 @@ describe("read-only desktop data api", () => {
     await api.listBackups();
     expect(invoke).toHaveBeenLastCalledWith("list_backups");
 
+    invoke.mockResolvedValueOnce({
+      manifestPath: "/tmp/backups/local/one/manifest.yaml",
+    });
+    await api.revealBackupManifest({ entryId: "local:one" });
+    expect(invoke).toHaveBeenLastCalledWith("reveal_backup_manifest", {
+      input: { entryId: "local:one" },
+    });
+
     invoke.mockResolvedValueOnce({} satisfies Partial<GitStatus>);
     await api.gitStatus();
     expect(invoke).toHaveBeenLastCalledWith("git_status");

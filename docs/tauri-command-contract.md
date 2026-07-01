@@ -183,8 +183,23 @@ Apply resolves the path and adapter from `targets.yaml`; it never accepts
 - **Input:** None.
 - **Output:** `BackupSummary[]`.
 - **Side effect:** Read-only.
-- **Future consumer:** Backup Restore.
+- **Consumer:** Backup History.
 - **Status:** Implemented and registered as read-only.
+
+### `reveal_backup_manifest`
+
+- **Purpose:** Reveal one listed backup manifest in the native file manager.
+- **Input:** `BackupRevealInput { entryId }`.
+- **Output:** `BackupRevealResult { manifestPath }`.
+- **Side effect:** Local UI action only; no file write or Restore.
+- **Consumer:** Backup History.
+- **Status:** Implemented and registered.
+
+The command does not accept a frontend path. Shared core resolves `entryId`
+against the current backup history, rejects symlinked manifests, canonicalizes
+the result beneath `~/.my-agent-assets/backups`, and only then asks Finder,
+Explorer, or the Linux file manager to reveal it. Platform commands are invoked
+with argument arrays and never through a shell.
 
 ### `preview_restore`
 

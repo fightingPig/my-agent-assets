@@ -433,6 +433,18 @@ pub struct SettingsSaveInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BackupRevealInput {
+    pub entry_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupRevealResult {
+    pub manifest_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportApplyInput {
     pub preview_id: String,
     pub mode: ApplyMode,

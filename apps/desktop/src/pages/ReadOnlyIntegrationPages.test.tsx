@@ -26,6 +26,7 @@ const {
   listAssets,
   listProjects,
   listBackups,
+  revealBackupManifest,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -43,6 +44,7 @@ const {
   listAssets: vi.fn(),
   listProjects: vi.fn(),
   listBackups: vi.fn(),
+  revealBackupManifest: vi.fn(),
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
   settingsSave: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock("../app/data-api", () => ({
   listAssets,
   listProjects,
   listBackups,
+  revealBackupManifest,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -95,6 +98,9 @@ beforeEach(() => {
     assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
     mounts: ["review"],
   } satisfies ProjectSummary]);
+  revealBackupManifest.mockResolvedValue({
+    manifestPath: "/tmp/backups/restore-20260627/manifest.json",
+  });
   listMountTargets.mockResolvedValue([
     {
       id: "claude-user-skills",
@@ -333,6 +339,10 @@ describe("read-only UI integration", () => {
     expect(screen.getByText("/tmp/backups/restore-20260627/manifest.json")).toBeInTheDocument();
     expect(await screen.findByText("/tmp/restore/a")).toBeInTheDocument();
     expect(screen.getByText("手动恢复说明")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /在文件管理器中显示/ }));
+    await waitFor(() => expect(revealBackupManifest).toHaveBeenCalledWith({
+      entryId: "restore-20260627",
+    }));
     expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
   });
 

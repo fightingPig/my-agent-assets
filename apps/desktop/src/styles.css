@@ -1363,3 +1363,25 @@ h1 {
   justify-content: flex-end;
   gap: 8px;
 }
+
+.restore-summary .asset-secondary-action {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.backup-reveal-state {
+  margin: 8px 0 0;
+  color: var(--secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.manual-restore-steps {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 22px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}

@@ -105,6 +105,14 @@ export type BackupManifestSummary = BackupSummary & {
   affectedPaths: string[];
 };
 
+export type BackupRevealInput = {
+  entryId: string;
+};
+
+export type BackupRevealResult = {
+  manifestPath: string;
+};
+
 export type ApplyResult = {
   mode: ApplyMode;
   ok: boolean;

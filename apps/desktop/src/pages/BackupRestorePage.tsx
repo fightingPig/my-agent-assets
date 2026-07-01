@@ -1,6 +1,6 @@
-import { AlertTriangle, Archive, BookOpenCheck, FileJson, FolderKanban, History } from "lucide-react";
+import { AlertTriangle, Archive, BookOpenCheck, FileJson, FolderKanban, FolderOpen, History } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listBackups } from "../app/data-api";
+import { listBackups, revealBackupManifest } from "../app/data-api";
 import type { BackupSummary } from "../app/contracts";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -68,6 +68,7 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
   const [backups, setBackups] = useState<readonly BackupItem[]>(demoMode ? staticBackups : []);
   const [selectedId, setSelectedId] = useState(demoMode ? staticBackups[0].id : "");
   const [listState, setListState] = useState("读取中");
+  const [revealState, setRevealState] = useState("");
   const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0];
   const totalSize = backups.reduce((sum, backup) => sum + parseDisplayBytes(backup.size), 0);
 
@@ -104,6 +105,17 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
       cancelled = true;
     };
   }, [demoMode]);
+
+  const handleRevealManifest = async () => {
+    if (!selected || demoMode) return;
+    setRevealState("正在打开文件管理器…");
+    try {
+      const result = await revealBackupManifest({ entryId: selected.id });
+      setRevealState(`已在文件管理器中显示：${result.manifestPath}`);
+    } catch (error) {
+      setRevealState(`无法显示 manifest：${errorMessage(error)}`);
+    }
+  };
 
   return (
     <div className="master-detail-workspace backup-workspace">
@@ -159,7 +171,20 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
                 <strong>Manifest 文件</strong>
                 <code>{selected.manifestPath}</code>
               </div>
+              {!demoMode ? (
+                <button
+                  className="asset-secondary-action"
+                  data-no-drag="true"
+                  onClick={handleRevealManifest}
+                  style={NO_DRAG_REGION_STYLE}
+                  type="button"
+                >
+                  <FolderOpen size={15} />
+                  在文件管理器中显示
+                </button>
+              ) : null}
             </div>
+            {revealState ? <p className="backup-reveal-state" role="status">{revealState}</p> : null}
 
             <section className="affected-paths">
               <h4>记录的文件路径</h4>
@@ -174,12 +199,16 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
               <BookOpenCheck size={17} />
               <div>
                 <strong>手动恢复说明</strong>
-                <span>
-                  先退出 Claude Code、Codex 和相关编辑器；复制当前目标文件作为额外保护；
-                  打开 manifest，仅按其中的 originalPath 与 backupPath 逐项恢复。应用不会自动覆盖或恢复任何文件。
-                </span>
+                <span>应用不会自动覆盖或恢复任何历史文件。请按以下步骤人工核对。</span>
               </div>
             </div>
+            <ol className="manual-restore-steps">
+              <li>退出 Claude Code、Codex 以及正在使用相关配置的编辑器。</li>
+              <li>点击“在文件管理器中显示”，打开并阅读 manifest 的操作类型和受影响路径。</li>
+              <li>先复制当前目标文件或目录，作为恢复前的额外保护。</li>
+              <li>仅按 manifest 记录的原路径与备份内容逐项复制；不要整目录覆盖资产中心。</li>
+              <li>重新启动相关客户端，运行 <code>maa doctor</code>，确认 registry、mount 和 runtime 状态。</li>
+            </ol>
 
             <section className="affected-paths">
               <h4>备份信息</h4>

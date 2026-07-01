@@ -3,6 +3,8 @@ import { isTauriRuntime } from "../lib/platform";
 import type {
   AssetSummary,
   BackupSummary,
+  BackupRevealInput,
+  BackupRevealResult,
   DesktopSettings,
   GitStatus,
   RecoveryStatus,
@@ -95,6 +97,19 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 export async function listBackups(): Promise<BackupSummary[]> {
   const backups = await invokeRead<unknown>("list_backups", undefined, []);
   return Array.isArray(backups) ? backups as BackupSummary[] : [];
+}
+
+export async function revealBackupManifest(
+  input: BackupRevealInput,
+): Promise<BackupRevealResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("reveal_backup_manifest requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("reveal_backup_manifest", { input });
+  if (!isRecord(result) || typeof result.manifestPath !== "string") {
+    throw new Error("reveal_backup_manifest returned an invalid response.");
+  }
+  return result as BackupRevealResult;
 }
 
 export async function gitStatus(): Promise<GitStatus> {

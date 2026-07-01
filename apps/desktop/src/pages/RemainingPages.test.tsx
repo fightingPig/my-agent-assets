@@ -81,6 +81,8 @@ describe("remaining V1 static pages", () => {
     expect(screen.getAllByText("挂载变更前").length).toBeGreaterThan(1);
     expect(screen.getByText("~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json")).toBeInTheDocument();
     expect(screen.getByText("手动恢复说明")).toBeInTheDocument();
+    expect(screen.getByText(/maa doctor/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /在文件管理器中显示/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
   });
 

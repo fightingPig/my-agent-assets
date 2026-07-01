@@ -3,7 +3,9 @@ mod path_utils;
 mod settings;
 mod shared_core;
 
-use contracts::{AppInfo, DesktopSettings, SettingsSaveInput};
+use contracts::{
+    AppInfo, BackupRevealInput, BackupRevealResult, DesktopSettings, SettingsSaveInput,
+};
 
 #[tauri::command]
 fn app_info() -> AppInfo {
@@ -64,6 +66,11 @@ fn list_projects() -> Result<Vec<my_agent_assets_core::query::ProjectSummary>, S
 #[tauri::command]
 fn list_backups() -> Result<Vec<my_agent_assets_core::backup_history::BackupHistoryEntry>, String> {
     shared_core::list_backup_history_command()
+}
+
+#[tauri::command]
+fn reveal_backup_manifest(input: BackupRevealInput) -> Result<BackupRevealResult, String> {
+    shared_core::reveal_backup_manifest_command(input)
 }
 
 #[tauri::command]
@@ -221,6 +228,7 @@ pub fn run() {
             list_assets,
             list_projects,
             list_backups,
+            reveal_backup_manifest,
             preview_sync,
             sync_apply,
             discover_runtime_sources,

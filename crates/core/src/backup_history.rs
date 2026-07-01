@@ -1,3 +1,4 @@
+use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value as YamlValue;
 use std::fs;
@@ -47,6 +48,33 @@ pub fn list_backups(home: &Path) -> Vec<BackupHistoryEntry> {
     entries
 }
 
+pub fn resolve_backup_manifest(home: &Path, entry_id: &str) -> Result<PathBuf> {
+    if entry_id.is_empty()
+        || entry_id.contains('/')
+        || entry_id.contains('\\')
+        || entry_id.contains('\0')
+        || entry_id
+            .split(':')
+            .any(|part| part.is_empty() || part == "..")
+    {
+        return Err(MaaError::new("invalid backup history entry id"));
+    }
+    let entry = list_backups(home)
+        .into_iter()
+        .find(|entry| entry.id == entry_id)
+        .ok_or_else(|| MaaError::new(format!("backup history entry not found: {entry_id}")))?;
+    let metadata = fs::symlink_metadata(&entry.manifest_path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(MaaError::new("backup manifest must be a real file"));
+    }
+    let backup_root = home.join(".my-agent-assets/backups").canonicalize()?;
+    let manifest = entry.manifest_path.canonicalize()?;
+    if !manifest.starts_with(&backup_root) {
+        return Err(MaaError::new("backup manifest escapes the backup root"));
+    }
+    Ok(manifest)
+}
+
 fn scan_class(root: &Path, class: BackupClass, output: &mut Vec<BackupHistoryEntry>) {
     let Ok(children) = fs::read_dir(root) else {
         return;
@@ -60,7 +88,7 @@ fn scan_class(root: &Path, class: BackupClass, output: &mut Vec<BackupHistoryEnt
             continue;
         }
         let manifest = path.join("manifest.yaml");
-        if manifest.is_file() {
+        if is_real_file(&manifest) {
             output.push(read_yaml_entry(&path, &manifest, class));
         }
     }
@@ -83,10 +111,15 @@ fn scan_legacy_root(root: &Path, output: &mut Vec<BackupHistoryEntry>) {
             continue;
         }
         let manifest = path.join("manifest.json");
-        if manifest.is_file() {
+        if is_real_file(&manifest) {
             output.push(read_legacy_entry(&path, &manifest));
         }
     }
+}
+
+fn is_real_file(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
 }
 
 fn read_yaml_entry(backup_root: &Path, manifest: &Path, class: BackupClass) -> BackupHistoryEntry {
@@ -367,6 +400,11 @@ mod tests {
         assert!(entries
             .iter()
             .any(|entry| entry.class == BackupClass::Legacy));
+        assert_eq!(
+            resolve_backup_manifest(&home, &portable.id).unwrap(),
+            portable.manifest_path.canonicalize().unwrap()
+        );
+        assert!(resolve_backup_manifest(&home, "../escape").is_err());
         let _ = fs::remove_dir_all(home);
     }
 
@@ -386,6 +424,20 @@ mod tests {
         #[cfg(unix)]
         std::os::unix::fs::symlink(&outside, portable.join("escape")).unwrap();
         assert!(list_backups(&home).is_empty());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_manifest_is_not_listed_or_revealed() {
+        let home = home();
+        let outside = home.join("outside.yaml");
+        let backup = home.join(".my-agent-assets/backups/local/linked");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(&outside, "operation: mount\n").unwrap();
+        std::os::unix::fs::symlink(&outside, backup.join("manifest.yaml")).unwrap();
+        assert!(list_backups(&home).is_empty());
+        assert!(resolve_backup_manifest(&home, "local:linked").is_err());
         let _ = fs::remove_dir_all(home);
     }
 }

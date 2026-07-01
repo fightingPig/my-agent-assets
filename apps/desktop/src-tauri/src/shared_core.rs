@@ -1,9 +1,12 @@
+use crate::contracts::{BackupRevealInput, BackupRevealResult};
 use crate::path_utils::home_dir;
 use my_agent_assets_core::adopt::{
     apply_adopt, preview_adopt, AdoptApplyRequest, AdoptApplyResult, AdoptPreview,
     AdoptPreviewRequest,
 };
-use my_agent_assets_core::backup_history::{list_backups, BackupHistoryEntry};
+use my_agent_assets_core::backup_history::{
+    list_backups, resolve_backup_manifest, BackupHistoryEntry,
+};
 use my_agent_assets_core::batch_import::{
     apply_batch_import, preview_batch_import, BatchImportApplyRequest, BatchImportApplyResult,
     BatchImportPreview, BatchImportPreviewRequest,
@@ -42,7 +45,9 @@ use my_agent_assets_core::target_management::{
     TargetRegistrationPreviewRequest, TargetRemoveApplyRequest, TargetRemovePreviewRequest,
 };
 use my_agent_assets_core::targets::{load as load_targets, MountTarget};
+use std::ffi::OsString;
 use std::path::Path;
+use std::process::Command;
 
 pub fn initialization_preview_command() -> Result<InitializationPreview, String> {
     let home = home_dir()
@@ -145,6 +150,50 @@ pub fn list_backup_history_command() -> Result<Vec<BackupHistoryEntry>, String> 
     let home =
         home_dir().ok_or_else(|| "HOME is unavailable; backup history skipped.".to_string())?;
     Ok(list_backups(&home))
+}
+
+pub fn reveal_backup_manifest_command(
+    input: BackupRevealInput,
+) -> Result<BackupRevealResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; backup reveal blocked.".to_string())?;
+    let manifest =
+        resolve_backup_manifest(&home, &input.entry_id).map_err(|error| error.to_string())?;
+    let (program, arguments) = platform_reveal_command(&manifest)?;
+    Command::new(program)
+        .args(arguments)
+        .spawn()
+        .map_err(|error| format!("无法在文件管理器中显示备份 manifest：{error}"))?;
+    Ok(BackupRevealResult {
+        manifest_path: manifest.to_string_lossy().into_owned(),
+    })
+}
+
+fn platform_reveal_command(path: &Path) -> Result<(OsString, Vec<OsString>), String> {
+    #[cfg(target_os = "macos")]
+    {
+        Ok((
+            OsString::from("open"),
+            vec![OsString::from("-R"), path.as_os_str().to_owned()],
+        ))
+    }
+    #[cfg(windows)]
+    {
+        Ok((
+            OsString::from("explorer"),
+            vec![OsString::from(format!("/select,{}", path.display()))],
+        ))
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "backup manifest has no parent directory".to_string())?;
+        Ok((
+            OsString::from("xdg-open"),
+            vec![parent.as_os_str().to_owned()],
+        ))
+    }
 }
 
 pub fn git_status_command() -> Result<GitStatus, String> {
@@ -308,6 +357,16 @@ mod tests {
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "project-a");
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn backup_reveal_uses_a_platform_command_without_a_shell() {
+        let path = PathBuf::from("/tmp/backups/manifest.yaml");
+        let (program, arguments) = platform_reveal_command(&path).unwrap();
+        assert!(!program.is_empty());
+        assert!(!arguments.is_empty());
+        assert_ne!(program, OsString::from("sh"));
+        assert_ne!(program, OsString::from("cmd"));
     }
 
     fn initialize(home: &Path) {

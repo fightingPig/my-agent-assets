@@ -54,7 +54,7 @@ Status:
 - in progress
 
 Validation:
-- Rust workspace: CLI 7 tests, core 89 tests, and desktop 16 tests passed
+- Rust workspace: CLI 7 tests, core 90 tests, and desktop 17 tests passed
 - Rust workspace Clippy passed with warnings denied
 - frontend: 80 tests passed
 - frontend TypeScript and renderer production build passed
@@ -117,6 +117,11 @@ Implemented:
 - MCP conflicts show canonical existing/incoming JSON and expandable raw source content
 - added shared portable/local/legacy Backup History enumeration with manifest paths, affected paths, sizes, operation types, symlink-safe traversal, and sensitive MCP risk flags
 - migrated the Desktop Backup History command to shared core; no historical Restore command is exposed
+- added a real Backup History “reveal manifest” action that accepts only a
+  listed entry ID, rejects symlinked/escaping manifests in shared core, and
+  invokes Finder/Explorer/file manager without a shell
+- expanded Backup History into a five-step manual restore guide while keeping
+  automatic historical Restore absent
 - implemented shared Git status and SHA-256-bound Pull/Push preview/apply
 - Pull requires a clean worktree, creates a local canonical backup, and uses fast-forward only
 - Push uses a temporary Git index and stages only `.gitignore`, `assets/`, `assets.yaml`, and `backups/portable/`
