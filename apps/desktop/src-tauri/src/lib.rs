@@ -1,12 +1,9 @@
 mod contracts;
 mod path_utils;
-mod read_only;
 mod settings;
 mod shared_core;
 
-use contracts::{
-    AppInfo, AssetSummary, DesktopSettings, ListAssetsInput, ProjectSummary, SettingsSaveInput,
-};
+use contracts::{AppInfo, DesktopSettings, SettingsSaveInput};
 
 #[tauri::command]
 fn app_info() -> AppInfo {
@@ -40,13 +37,15 @@ fn recovery_status() -> Result<my_agent_assets_core::operation::RecoveryStatus, 
 }
 
 #[tauri::command]
-fn list_assets(input: ListAssetsInput) -> Vec<AssetSummary> {
-    read_only::list_assets_command(input)
+fn list_assets(
+    input: my_agent_assets_core::query::AssetQueryRequest,
+) -> Result<Vec<my_agent_assets_core::query::AssetSummary>, String> {
+    shared_core::list_assets_command(input)
 }
 
 #[tauri::command]
-fn list_projects() -> Vec<ProjectSummary> {
-    read_only::list_projects_command()
+fn list_projects() -> Result<Vec<my_agent_assets_core::query::ProjectSummary>, String> {
+    shared_core::list_projects_command()
 }
 
 #[tauri::command]
@@ -243,9 +242,6 @@ mod tests {
         assert!(info.backend_ready);
     }
 }
-
-#[cfg(test)]
-mod read_only_tests;
 
 #[cfg(test)]
 mod settings_tests;

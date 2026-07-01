@@ -1761,6 +1761,7 @@ dependencies = [
 name = "my-agent-assets-core"
 version = "0.1.0"
 dependencies = [
+ "humantime",
  "libc",
  "serde",
  "serde_json",
@@ -1775,7 +1776,6 @@ dependencies = [
 name = "my-agent-assets-desktop"
 version = "0.1.0"
 dependencies = [
- "humantime",
  "my-agent-assets-core",
  "serde",
  "serde_json",

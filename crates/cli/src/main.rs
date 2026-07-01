@@ -18,6 +18,7 @@ use my_agent_assets_core::mount::{
 };
 use my_agent_assets_core::mount_registry::load as load_mounts;
 use my_agent_assets_core::operation::{incomplete_journals, recover_incomplete};
+use my_agent_assets_core::query::{list_assets as query_assets, AssetQueryRequest};
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
     TargetRegistrationApplyRequest, TargetRegistrationPreviewRequest, TargetRemoveApplyRequest,
@@ -221,7 +222,10 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
         }
         "list" => {
             reject_apply(apply, "list is read-only")?;
-            print_json(&load_assets(&home).map_err(|error| MaaError::new(error.to_string()))?)?;
+            print_json(&query_assets(
+                &home,
+                &AssetQueryRequest { asset_type: None },
+            )?)?;
         }
         "status" => {
             reject_apply(apply, "status is read-only")?;

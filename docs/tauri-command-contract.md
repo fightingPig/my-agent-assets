@@ -92,16 +92,23 @@ Tauri transport.
 - **Output:** `AssetSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Skills, Commands, MCP Servers, Asset Detail, and Mount Manager.
-- **Status:** Implemented and registered as read-only.
+- **Status:** Implemented in shared core and registered as read-only. Tauri and
+  CLI use the same query service.
 
 ### `list_projects`
 
-- **Purpose:** List configured local projects and mounted-asset counts.
+- **Purpose:** Discover local projects and mounted-asset counts from
+  `config.yaml.scan_roots`.
 - **Input:** None.
 - **Output:** `ProjectSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Projects and Project Detail.
-- **Status:** Implemented and registered as read-only.
+- **Status:** Implemented in shared core and registered as read-only.
+
+Project discovery uses the configured `max_depth` (default `5`), supports
+nested/monorepo projects, follows the shared fixed skip list, and never follows
+directory symlinks. Missing scan roots and an uninitialized asset center return
+safe read-only results without creating files.
 
 ### Target Registry commands
 

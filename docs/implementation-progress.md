@@ -139,16 +139,17 @@ Implemented:
   shared-core discovery, batch import, target registry, and mount services
 - migrated Codex Asset Center provider views from a Desktop-only parser to the
   shared-core runtime discovery adapter
+- moved `list_assets` and `list_projects` filesystem queries into shared core;
+  Desktop is now a transport adapter and CLI `list` uses the same asset query
+- unified project discovery on `config.yaml.scan_roots` and configurable
+  `max_depth` (default 5), including nested projects, fixed skip rules, and no
+  directory-symlink traversal
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 
 Not implemented:
 - shared SHA-256 fingerprint migration for non-Git operations
-- migration of the remaining Desktop list-assets/list-projects read models to
-  shared-core query services
 
 Next:
-- add shared-core list-assets/list-projects query DTOs and remove the remaining
-  Desktop filesystem projection
 - add crash-point integration coverage to each remaining write workflow
 
 ## Progress Update Template

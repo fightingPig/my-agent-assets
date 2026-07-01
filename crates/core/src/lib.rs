@@ -11,6 +11,7 @@ pub mod mount;
 pub mod mount_registry;
 pub mod operation;
 pub mod path_safety;
+pub mod query;
 pub mod settings;
 pub mod target_management;
 pub mod targets;

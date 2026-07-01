@@ -29,16 +29,42 @@ use my_agent_assets_core::mount::{
 use my_agent_assets_core::operation::{
     recover_incomplete, recovery_status, RecoveryReport, RecoveryStatus,
 };
+use my_agent_assets_core::query::{
+    list_assets, list_projects, AssetQueryRequest, AssetSummary, ProjectSummary,
+};
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
     TargetChangePreview, TargetChangeResult, TargetRegistrationApplyRequest,
     TargetRegistrationPreviewRequest, TargetRemoveApplyRequest, TargetRemovePreviewRequest,
 };
 use my_agent_assets_core::targets::{load as load_targets, MountTarget};
+use std::path::Path;
 
 pub fn discover_runtime_sources_command(scope: DiscoveryScope) -> Result<DiscoveryResult, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; discovery skipped.".to_string())?;
     Ok(discover(&home, scope))
+}
+
+pub fn list_assets_command(input: AssetQueryRequest) -> Result<Vec<AssetSummary>, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; asset list skipped.".to_string())?;
+    list_assets_for_home(&home, input)
+}
+
+pub fn list_projects_command() -> Result<Vec<ProjectSummary>, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project list skipped.".to_string())?;
+    list_projects_for_home(&home)
+}
+
+pub fn list_assets_for_home(
+    home: &Path,
+    input: AssetQueryRequest,
+) -> Result<Vec<AssetSummary>, String> {
+    list_assets(home, &input).map_err(|error| error.to_string())
+}
+
+pub fn list_projects_for_home(home: &Path) -> Result<Vec<ProjectSummary>, String> {
+    list_projects(home).map_err(|error| error.to_string())
 }
 
 pub fn canonical_import_preview_command(
@@ -242,6 +268,27 @@ mod tests {
         assert!(home
             .join(".my-agent-assets/assets/skills/review/SKILL.md")
             .is_file());
+        let assets = list_assets_for_home(
+            &home,
+            AssetQueryRequest {
+                asset_type: Some(AssetKind::Skill),
+            },
+        )
+        .unwrap();
+        assert_eq!(assets.len(), 1);
+        assert_eq!(assets[0].id, "skill:review");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn project_query_adapter_uses_shared_core_depth_scanning() {
+        let home = test_home("project-query");
+        fs::create_dir_all(home.join("workspace/group/project-a")).unwrap();
+        fs::write(home.join("workspace/group/project-a/package.json"), "{}").unwrap();
+
+        let projects = list_projects_for_home(&home).unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "project-a");
         let _ = fs::remove_dir_all(home);
     }
 
