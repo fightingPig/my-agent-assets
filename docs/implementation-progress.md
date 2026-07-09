@@ -220,15 +220,21 @@ Implemented:
   acceptance language matches the final product boundary: Backup History is
   manual-restore-only, typed `APPLY` is absent, and provider selection no
   longer implies separate asset centers or hidden canonical Commands
+- added final manual acceptance and beta-readiness documents that separate
+  controlled macOS Beta requirements from cross-platform V1 Stable
+  requirements, including the Windows-only installer, signing, DPI, path, and
+  native-window checks
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
   multi-step workflow
+- Windows packaging/signing and real Windows manual qualification remain
+  external manual acceptance work before V1 Stable can be claimed
 
 Next:
-- perform a requirement-by-requirement final-goal audit and close the next
-  implementation or evidence gap that is still weaker than the final
-  acceptance criteria
+- continue the requirement-by-requirement final-goal audit and close the next
+  implementation, packaging, or evidence gap that is still weaker than the
+  final acceptance criteria
 
 ## Progress Update Template
 

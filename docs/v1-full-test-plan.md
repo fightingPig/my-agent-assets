@@ -235,6 +235,8 @@ This section must be updated with actual command output and evidence after each 
 
 Only cases left as `MANUAL` or `BLOCKED` after the automated run should be handed to the user. The handoff must include exact artifact paths, prerequisites, numbered actions, and expected results.
 
+Use `docs/manual-acceptance-checklist.md` as the authoritative handoff checklist for macOS Beta and Windows Stable manual qualification.
+
 ## Remaining Manual Run
 
 1. Review all 26 PNG files in `apps/desktop/artifacts/visual-qa/`, especially code, diff, inspector, and settings panels at 1180×760. The automated report found no overflow, collapse, or clipping, but semantic visual quality still needs human judgment.
