@@ -17,6 +17,10 @@ Implemented write commands cover:
 - Import apply
 - Conflict apply
 - Mount apply
+- Unmount apply
+- Delete apply
+- Adopt apply
+- Target Registry apply
 - Sync apply
 - Settings save
 
@@ -74,8 +78,8 @@ The frontend and Rust contract layers define:
 - `SyncApplyInput`
 
 Production pages use shared-core canonical contracts. Legacy Desktop
-`import_apply`, `conflict_apply`, and `mount_apply` transports remain only
-during migration and must not receive new consumers.
+`import_apply`, `conflict_apply`, and `mount_apply` transports were prototype
+names and must not receive new consumers.
 
 ## Backup Rule
 
@@ -119,19 +123,19 @@ For MCP JSON compilation:
 6. replace original
 7. verify final JSON
 
-For restore:
+For Backup History:
 
-1. validate backup manifest
-2. backup current state
-3. restore each path
-4. verify restored paths
-5. stop on first unrecoverable failure and report partial state
+1. enumerate portable and local manifests
+2. validate manifest IDs and manifest paths as untrusted input
+3. display affected paths and risk information
+4. reveal only a selected, listed manifest location through an argument-array
+   platform command
+5. show manual restore guidance without writing files
 
-Backup manifests are treated as untrusted input. Restore verifies the requested backup ID, manifest
-ID, `runtimeRoot`, every `originalPath`, every `backupPath`, entry kind, and stored symlink target
-before plan-only reporting or apply. Backup content paths must be regular descendants of the
-selected backup directory's fixed `files/` subtree and may not traverse symlinks. Restore targets
-cannot overwrite the selected backup directory. Restored symlinks must resolve below HOME.
+Backup History does not restore files. The application must not expose
+`preview_restore`, `restore_apply`, or another user-facing historical Restore
+write command. Operation-journal rollback for an interrupted app transaction is
+allowed, but it is transaction recovery, not arbitrary backup restore.
 
 ## Fake HOME Requirement
 
@@ -168,9 +172,10 @@ Each step result must include:
 
 If any step fails, later write steps must not continue unless explicitly marked as safe cleanup.
 
-## Current Implementation
+## Current Shared-core Implementation
 
-`import_apply` currently supports fake-HOME-tested imports into the asset center:
+`canonical_import_apply` and `canonical_batch_import_apply` support
+fake-HOME-tested imports into the asset center:
 
 - Skills from runtime `.claude/skills/<name>/` directories or `.claude/skills/<name>.md`
 - Commands from runtime `.claude/commands/<name>.md`
@@ -180,9 +185,12 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Unsafe asset IDs, scope traversal, symlinked runtime roots, and symlinks nested inside imported
   directories are rejected before asset-center or backup creation
 
-`import_apply` does not delete or modify runtime Claude files. MCP import extracts a server JSON object into the asset center and leaves the source config unchanged.
+Canonical import does not delete or modify runtime Claude/Codex source files.
+MCP import extracts a server object into the asset center and leaves the source
+config unchanged.
 
-`mount_apply` currently supports fake-HOME-tested Skill and Command symlink mounts plus MCP runtime config compilation:
+`canonical_mount_apply` supports fake-HOME-tested Skill and Command mounts plus
+MCP runtime config compilation:
 
 - Source assets are resolved from `~/.my-agent-assets/assets/skills` or `~/.my-agent-assets/assets/commands`
 - MCP source assets are resolved from `~/.my-agent-assets/assets/mcps/<name>.json`
@@ -193,7 +201,7 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
 - `planOnly` mode creates no symlink, writes no JSON, and creates no backup
 
-`settings_save` currently supports fake-HOME-tested settings persistence:
+`settings_save` supports fake-HOME-tested settings persistence:
 
 - Settings are written to `~/.my-agent-assets/config.json`
 - `settings_load` returns defaults when no config exists and reads the saved config when present
@@ -204,7 +212,7 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Empty path fields are normalized to defaults
 - Numeric settings are clamped to supported ranges
 
-`sync_apply` currently supports fake-HOME-tested Git sync execution:
+`sync_apply` supports fake-HOME-tested Git sync execution:
 
 - Targets only `~/.my-agent-assets`
 - Rejects a symlinked asset-center repository before running Git
@@ -215,7 +223,7 @@ If any step fails, later write steps must not continue unless explicitly marked 
 - Push executes `git push`
 - Git commands are executed through `std::process::Command` argument arrays, not shell strings
 
-`conflict_apply` currently supports fake-HOME-tested per-asset conflict decisions:
+Conflict decisions are executed through the canonical batch import apply path:
 
 - Uses the deterministic import preview ID for the same scope, asset IDs, and decisions
 - Direct `import_apply` rejects differing existing content unless an explicit conflict resolution is supplied
@@ -234,8 +242,10 @@ Before registering additional apply commands, add tests proving:
 - no writes in `planOnly`
 - backup-before-write
 - interrupted write reporting
-- restore from backup manifest
 - no direct real HOME access
+- no user-facing historical Restore command is registered
+- backup manifests can be listed and revealed only after symlink-safe
+  validation
 
 ## Safety Hardening Verification
 
@@ -243,11 +253,11 @@ The Rust suite includes:
 
 - strict unsafe asset ID and backup ID rejection tests
 - ParentDir and outside-root path tests
-- import, mount, settings, sync, manifest, backup-content, and restored-symlink escape tests
+- import, mount, settings, sync, manifest, backup-content, and symlink escape tests
 - deterministic preview ID mismatch tests that assert no write occurs
-- full-tree snapshots proving import, mount, MCP compile, and restore `planOnly` modes create or
+- full-tree snapshots proving import, mount, MCP compile, and backup-listing/reveal preview modes create or
   change no files, directories, symlinks, or backups
-- a single fake-HOME end-to-end workflow covering import, mount, restore, settings save/load, and
+- a single fake-HOME end-to-end workflow covering import, mount, disabled historical restore, settings save/load, and
   sync `planOnly`, with a local bare remote proving no Git mutation
 
 All test roots are created under the operating system temporary directory and passed explicitly to

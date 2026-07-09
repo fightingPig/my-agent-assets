@@ -224,6 +224,9 @@ Implemented:
   controlled macOS Beta requirements from cross-platform V1 Stable
   requirements, including the Windows-only installer, signing, DPI, path, and
   native-window checks
+- corrected the write-safety contract so it no longer describes historical
+  automatic Restore or legacy Desktop apply transports as current acceptance
+  requirements
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
