@@ -127,7 +127,7 @@ These pages now consume read-only data through the wrapper layer:
 - Commands list: `list_assets` with `assetType: "command"`
 - MCP Servers list: `list_assets` with `assetType: "mcp"`
 - Projects list: `list_projects`
-- Backup Restore: `list_backups`
+- Backup History: `list_backups`
 - Sync: `git_status`
 - Settings: `settings_load`
 - Scan Import: `scan_assets`
@@ -136,7 +136,10 @@ These pages now consume read-only data through the wrapper layer:
 
 Production pages do not fall back to sample rows. Empty commands produce explicit empty states, and rejected Tauri reads produce explicit error states. Static fixtures remain available only through explicit `demoMode` for tests and Visual QA.
 
-The Provider switch selects `Claude Code` or `Codex` within the existing Asset Center. Codex exposes only Skills and MCP Servers; Commands are hidden. Codex data is never passed into Claude import, mount, conflict apply, or adoption workflows.
+The Provider switch selects runtime-source views within the existing Asset
+Center. Commands remain visible as canonical assets under either provider
+selection, but shared-core compatibility validation rejects Codex Command
+targets. Codex data is never treated as a separate asset center.
 
 The historical `StaticActionButton` placeholder has been removed. Production
 pages now expose only real read/preview/apply controls; unimplemented optional

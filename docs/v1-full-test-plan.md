@@ -15,7 +15,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | Environment | Purpose |
 | --- | --- |
-| Temporary Rust test directories | Backend read, preview, apply, path guard, backup, restore, and Git tests |
+| Temporary Rust test directories | Backend read, preview, apply, path guard, backup-history, operation recovery, and Git tests |
 | `/tmp/my-agent-assets-e2e-*` fake HOME | CLI lifecycle tests |
 | `/tmp/my-agent-assets-v1-*` fake HOME | Tauri dev and packaged app smoke |
 | Headless Chrome | 13-page Visual QA at 1440×900 and 1180×760 |
@@ -44,13 +44,13 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | B-02 | Import planOnly | Snapshot fake HOME before/after import plan | Entire tree unchanged; no asset center or backup created | PASS |
 | B-03 | Mount planOnly | Snapshot fake HOME before/after Skill mount plan | Entire tree unchanged; no symlink created | PASS |
 | B-04 | MCP mount planOnly | Snapshot fake HOME before/after MCP mount plan | Runtime JSON unchanged and no file created | PASS |
-| B-05 | Restore planOnly | Snapshot fake HOME before/after restore plan | Entire tree unchanged; no current-state backup created | PASS |
+| B-05 | Backup History read-only | Snapshot fake HOME before/after backup listing and manifest reveal preview | Entire tree unchanged; no restore or current-state backup created | PASS |
 | B-06 | Sync planOnly | Compare local and remote refs before/after | No Git mutation; ahead count unchanged | PASS |
 | B-07 | Unsafe asset IDs | Test `/`, `\\`, `:`, control chars, `.`, `..`, traversal | Rejected before path construction or write | PASS |
 | B-08 | Symlink parent escape | Point guarded parent outside fake HOME | Operation rejected; outside tree unchanged | PASS |
 | B-09 | Nested Skill symlink | Put symlink inside imported Skill directory | Import rejected; no asset-center write | PASS |
 | B-10 | Preview ID tampering | Change previewId for each apply command | Rejected before write/Git execution | PASS |
-| B-11 | Restore manifest tampering | Alter ID, runtime root, entry path, kind, or symlink target | Restore rejected before mutation | PASS |
+| B-11 | Backup manifest reveal tampering | Alter backup ID, manifest path, symlink target, or escaping entry | Reveal/listing rejects unsafe entries before opening any path | PASS |
 | B-12 | Rename validation | Use traversal name or existing rename target | Rejected; existing assets unchanged | PASS |
 
 ## Gate C: Read-only Discovery
@@ -80,7 +80,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | D-04 | MCP extraction | Import selected MCP server | Only selected JSON object is stored; source config unchanged | PASS |
 | D-05 | Replacement backup | Import over existing destination | Old destination stored in manifest backup | PASS |
 | D-06 | Missing source | Import nonexistent asset | Failure reported; destination not created | PASS |
-| D-07 | UI confirmation | Preview, planOnly, type `APPLY`, execute | Apply disabled before exact token; enabled afterward | PASS |
+| D-07 | UI confirmation | Preview import, review impact summary, click explicit confirm | Apply remains disabled until backend preview is valid; no typed token required | PASS |
 | D-08 | UI refresh | Complete import | Scan and preview data reload; result remains visible | PASS |
 
 ## Gate E: Mount Workflow
@@ -93,7 +93,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | E-04 | MCP merge | Mount MCP into existing JSON | Unrelated keys and other servers preserved; backup created | PASS |
 | E-05 | Invalid existing MCP JSON | Mount into malformed JSON | Failure reported; original file unchanged | PASS |
 | E-06 | Outside-HOME target | Provide external or traversing target | Backend rejects target | PASS |
-| E-07 | UI confirmation | Preview, planOnly, type `APPLY`, execute | Same typed confirmation gate as import | PASS |
+| E-07 | UI confirmation | Preview mount, review target/backup impact, click explicit confirm | Same preview-bound ordinary confirmation as import | PASS |
 | E-08 | Detail-page mount | Open selected Asset/Project detail and mount | Selected real ID/path used; detail data refreshes | PASS |
 
 ## Gate F: Conflict Workflow
@@ -108,18 +108,18 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | F-06 | MCP rename extraction | Rename incoming MCP | Original runtime server is extracted under new asset name | PASS |
 | F-07 | One decision per asset | Omit or duplicate a decision | Apply rejected | PASS |
 | F-08 | UI decision binding | Change decision and regenerate preview | previewId is bound to scope, IDs, decisions, renameTo | PASS |
-| F-09 | UI confirmation | Generate plan and type `APPLY` | Conflict apply remains disabled until plan and token pass | PASS |
+| F-09 | UI confirmation | Generate conflict plan and click explicit confirm for selected decisions | Conflict apply remains disabled until backend preview is valid; no typed token required | PASS |
 
-## Gate G: Backup And Restore
+## Gate G: Backup History And Manual Restore Guidance
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| G-01 | File restore | Restore import backup over current file | Previous file restored; current file optionally backed up | PASS |
-| G-02 | Directory restore | Restore Skill directory backup | Directory tree restored and verified | PASS |
-| G-03 | Symlink restore | Restore mount backup | Original symlink and target restored safely | PASS |
-| G-04 | Restore preview | Read selected manifest | Affected paths and impact returned without writes | PASS |
-| G-05 | UI confirmation | Plan, type `APPLY`, restore | Restore disabled until plan/token; result and backup shown | PASS |
-| G-06 | UI refresh | Complete restore | Backup list and selected preview reload | PASS |
+| G-01 | Portable backup listing | Add portable backup manifests in fake asset center | Backup History lists manifest path, operation, size, count, and affected paths | PASS |
+| G-02 | Local backup listing | Add local runtime backup manifests | Backup History lists local backups without Git-syncing them | PASS |
+| G-03 | Unsafe backup entries | Add symlinked or escaping backup/manifest entries | Unsafe entries are skipped or rejected; outside tree is untouched | PASS |
+| G-04 | Manifest reveal | Select a listed backup and reveal its manifest | Backend accepts only a listed entry ID and opens the manifest location without shell command strings | PASS |
+| G-05 | Manual restore guide | Open Backup History page | Page shows read-only affected paths and a manual restore procedure; no automatic Restore button or command exists | PASS |
+| G-06 | CLI restore boundary | Run `maa restore` | CLI rejects automatic historical Restore and points to Backup History/manual guide | PASS |
 
 ## Gate H: Settings And Git Sync
 
@@ -140,7 +140,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| I-01 | Fake runtime lifecycle | Run `./scripts/e2e_fake_runtime.sh` | init/scan/import/adopt/MCP conflict/mount/unmount/remove/restore/list/status/doctor pass | PASS |
+| I-01 | Fake runtime lifecycle | Run `./scripts/e2e_fake_runtime.sh` | init/scan/import/adopt/MCP conflict/mount/unmount/remove/list/status/doctor pass; `maa restore` remains disabled | PASS |
 | I-02 | Scan defaults to plan | Inspect fixture before/after scan without `--apply` | Runtime and asset center unchanged | PASS |
 | I-03 | MCP source preservation | Complete scan/import | `.claude.json` and `.mcp.json` retain source entries and unrelated keys | PASS |
 | I-04 | Fake Git remote lifecycle | Run Git E2E against disposable private/local remote | Commit, Push and Pull succeed without real Claude data | PASS |
@@ -192,8 +192,8 @@ This section must be updated with actual command output and evidence after each 
 
 | Area | Result | Evidence |
 | --- | --- | --- |
-| Automated frontend | PASS | TypeScript passed; Vitest: 10 files / 75 tests; renderer production build passed |
-| Automated Rust | PASS | Desktop: 84 tests; full workspace also passed, including 10 core tests |
+| Automated frontend | PASS | TypeScript passed; Vitest suite passed; renderer production build passed |
+| Automated Rust | PASS | Full workspace passed, including shared-core operation recovery and desktop adapter tests |
 | CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; disposable fake HOME only |
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
@@ -225,6 +225,8 @@ This section must be updated with actual command output and evidence after each 
 - Backend import apply independently rejects unresolved content conflicts.
 - Preview asset IDs use strict type and safe-component validation.
 - Settings save failures reject the Tauri invocation; `assetCenterPath` is read-only and fixed in V1.
+- Apply confirmation uses ordinary preview-bound buttons; typed `APPLY` prompts are intentionally absent.
+- Backup History is read-only and manual-restore-only; historical `preview_restore`, `restore_apply`, and `maa restore` are intentionally absent or rejected.
 - The regression suite covers directory/direct Skills, conflict detection and blocking, explicit overwrite/skip/rename, invalid preview IDs, settings write failures, and fixed asset-center behavior.
 - The latest ad-hoc-signed installed build passed direct macOS AX API validation. `System Events` did not enumerate its window, but `AXUIElement` exposed one window and all native controls without requiring a permission change.
 - Current-package AX validation covered enabled close/minimize/zoom controls, two consecutive real pointer drags, minimize/restore, full-screen enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901` window.

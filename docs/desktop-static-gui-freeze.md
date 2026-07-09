@@ -22,7 +22,7 @@ The page registry contains 13 implemented static pages:
 8. Scan Import / 扫描导入
 9. Mount Manager / 挂载管理
 10. Conflict Resolver / 冲突处理
-11. Backup Restore / 备份恢复
+11. Backup History / 备份历史
 12. Sync / 同步
 13. Settings / 设置
 
@@ -36,7 +36,7 @@ Navigation uses local React state rather than React Router. The static GUI permi
 - Asset and project search, filtering, and row selection.
 - Scan scope selection.
 - Mount asset and target selection.
-- Conflict and backup master-detail selection.
+- Conflict and backup-history master-detail selection.
 - Conflict resolution preview selection.
 - Settings controls were static at freeze time; a later controlled-write milestone enabled local settings save without changing the page layout.
 
@@ -107,13 +107,13 @@ Recent activity has no backend event source yet and therefore displays an empty 
   explicit Preview/Apply controls for supported writes.
 - Typed Tauri wrappers now provide Claude read/apply flows and read-only Codex Skills/MCP discovery. Page components receive structured DTOs and keep filesystem/config parsing in Rust.
 
-Future integration should place filesystem, Git, scan, mount, MCP compile, backup, restore, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.
+Future integration should place filesystem, Git, scan, mount, MCP compile, backup-history, operation recovery, and sync logic in Rust. React should receive structured data and invoke explicit Tauri commands rather than implementing those operations itself.
 
 ## Known Limitations
 
 - Asset Detail and Project Detail are reached from list inspector actions rather than primary sidebar navigation.
-- Codex support is read-only and does not include AGENTS.md, custom commands, import, mount, config writes, or OAuth token management.
-- Destructive apply-style business actions remain intentionally disabled; Settings save, Scan Import plan generation, Mount Manager plan generation, Sync plan generation, and Backup Restore plan generation were added as controlled actions after the static freeze.
+- Codex support has since expanded to compatible Skill/MCP discovery, import, and mount targets; Codex Commands, AGENTS.md assets, and OAuth token management remain prohibited.
+- Destructive apply-style business actions were intentionally disabled at static freeze time. Later controlled-write milestones added Settings save, Scan Import, Mount Manager, Sync, Target Registry, Backup History reveal, and other preview/apply flows without changing the frozen page layout.
 - Visual QA currently batch-generates macOS-layout screenshots only.
 - Headless Chrome does not validate native Tauri window chrome, macOS traffic lights, or Windows native titlebar behavior.
 - Visual QA detects structural overflow and clipping risks, but final product review still requires human inspection on installed macOS and Windows builds.

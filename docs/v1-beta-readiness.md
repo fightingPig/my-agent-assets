@@ -10,10 +10,10 @@ My Agent Assets V1 is ready for controlled local beta testing. It remains a loca
 - One-level project discovery under `~/workspace` and `~/code`
 - User, project, and custom runtime asset scans
 - Exact MCP conflict preview from top-level `mcpServers.<name>` JSON
-- Import preview, plan-only validation, typed confirmation, apply, and backup
+- Import preview, preview-bound ordinary confirmation, apply, and backup
 - Skill/Command symlink mount and MCP runtime config compilation
 - Conflict decisions: skip, rename, and overwrite
-- Backup manifest listing, restore preview, typed confirmation, and restore
+- Backup manifest listing, file reveal, affected-path display, and manual restore guidance
 - Local settings load/save
 - Local Git status, Pull preview/apply, and Push preview/apply
 - Real selected asset/project details with mount preview/apply
@@ -25,11 +25,11 @@ My Agent Assets V1 is ready for controlled local beta testing. It remains a loca
 - Production apply commands resolve HOME through the centralized path layer.
 - `planOnly` performs no filesystem or Git mutations.
 - Every apply command validates its deterministic `previewId`.
-- UI apply requires a successful preview, successful plan-only result, and typed `APPLY`.
+- UI apply requires a successful backend preview and an explicit confirmation button; typed `APPLY` is intentionally absent.
 - Asset names, backup IDs, rename targets, runtime paths, and manifest paths are validated before writes.
 - Writes must stay below the resolved HOME; symlinked parent traversal is rejected.
 - Existing destructive targets are backed up before replacement when backup is enabled.
-- Restore validates manifest identity, runtime root, backup subtree, entry kind, and symlink target.
+- Backup History validates listed manifest identity and symlink-safe manifest reveal; automatic historical Restore is intentionally absent.
 - MCP import leaves source Claude JSON unchanged; MCP mount merges a top-level `mcpServers` entry.
 - Git commands use `std::process::Command` argument arrays, never shell-concatenated command strings.
 - Sync rejects dirty worktrees, unresolved conflicts, missing upstreams, and non-repositories.
@@ -67,11 +67,10 @@ Build artifacts:
 - The macOS build is ad-hoc signed and not notarized. Gatekeeper behavior on another Mac still requires manual validation.
 - Windows packaging, native titlebar behavior, DPI scaling, path handling, and symlink permissions were not validated in this macOS run.
 - Automated Visual QA runs in headless Chrome. It does not validate native traffic lights, overlay dragging, Dock behavior, or OS window shadows.
-- Project discovery is limited to one directory level under `~/workspace` and `~/code`.
-- Conflict Resolver currently requests its configured preview selection; automatic aggregation of every conflict from every scan root is not yet implemented.
-- Asset content shown in details is summary-derived; the frontend does not directly read source files.
-- Unmount, asset removal, repository initialization, fetch, add, and commit are not exposed as desktop apply workflows.
-- Git Pull is fast-forward only. Sync requires an existing clean repository and configured upstream.
+- Final shared-core integration expanded project discovery to configured scan roots and `max_depth`.
+- Asset content shown in details is read from canonical asset files through shared-core Tauri commands.
+- Automatic historical Restore remains out of scope; Backup History is manual-restore-only.
+- Git Pull is fast-forward only. Git Push requires a verifiable GitHub Private repository and stages only the canonical sync whitelist.
 - There is no updater, notarized distribution channel, telemetry, account service, or cloud service.
 
 ## Manual Beta Checklist
@@ -85,7 +84,7 @@ Build artifacts:
 7. Verify Skill and Command mounts resolve to the asset-center source.
 8. Verify MCP mount preserves unrelated JSON keys and other MCP servers.
 9. Verify skip, rename, and overwrite conflict decisions, including the displayed JSON content.
-10. Verify restore recreates files/directories/symlinks from the selected manifest.
+10. Verify Backup History lists manifests, reveals the selected manifest, and shows the manual restore guide without an automatic Restore button.
 11. Verify settings survive app restart.
 12. Verify Git Pull/Push only against a disposable local test remote.
 13. Repeat packaging and native-window checks on Windows before claiming Windows beta readiness.

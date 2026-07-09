@@ -216,6 +216,10 @@ Implemented:
   Adopt, Delete Asset, Unmount, and Git Push; each flow now has a regression
   proving a durable journal step can survive a simulated process interruption
   and be recovered on the next startup pass
+- corrected historical beta/full-test/read-only milestone documents so current
+  acceptance language matches the final product boundary: Backup History is
+  manual-restore-only, typed `APPLY` is absent, and provider selection no
+  longer implies separate asset centers or hidden canonical Commands
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

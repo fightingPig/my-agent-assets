@@ -7,6 +7,8 @@
 > The dedicated Desktop `list_codex_skills` and `list_codex_mcp_servers`
 > commands have since been removed. Production Codex views use shared-core
 > `discover_runtime_sources` filtered by `provider: "codex"`.
+> Commands remain visible as canonical assets regardless of provider selection;
+> Codex Command targets are still prohibited by compatibility validation.
 >
 > See `docs/final-product-model.md` and `my_agent_assets_final_goal.md` for authoritative scope. The historical implementation details below remain unchanged as milestone evidence.
 
@@ -21,7 +23,10 @@ Codex currently exposes:
 - Skills
 - MCP Servers
 
-Commands are hidden while the Codex provider is selected. Codex AGENTS.md files, custom commands, asset import, mount, adoption, configuration writes, and OAuth token management are not supported.
+At this historical milestone, Commands were hidden while the Codex provider was
+selected. The final product keeps canonical Commands visible while still
+prohibiting Codex Command targets. Codex AGENTS.md files, custom commands, and
+OAuth token management remain unsupported.
 
 ## Skill Discovery
 

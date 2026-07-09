@@ -39,7 +39,7 @@ The static workflow pages now call preview wrappers from `apps/desktop/src/app/d
 - `ConflictResolverPage` calls `previewConflicts` for a static preview scope and keeps `skip` / `rename` / `overwrite` as local resolution preview state.
 - `BackupRestorePage` is now Backup History only. It lists manifests and manual
   restore guidance without a preview/apply Restore command.
-- `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`, then can call `syncApply` after typed confirmation.
+- `SyncPage` calls `previewSync` for Pull/Push plan generation without running `git fetch`, `git pull`, or `git push`, then can call `syncApply` after preview-bound ordinary confirmation. Typed `APPLY` is not required.
 
 Current write pages use preview plus ordinary button confirmation. Typed
 `APPLY` is not required.
