@@ -229,6 +229,8 @@ Implemented:
   requirements
 - removed the obsolete `restore` plan-step wire value from the TypeScript/Rust
   Tauri contract and aligned the historical execution plan with Backup History
+- fixed and verified a Windows-only shared-core compile path by checking
+  `my-agent-assets-core` for `x86_64-pc-windows-msvc`
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

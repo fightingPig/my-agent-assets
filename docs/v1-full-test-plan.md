@@ -194,6 +194,7 @@ This section must be updated with actual command output and evidence after each 
 | --- | --- | --- |
 | Automated frontend | PASS | TypeScript passed; Vitest suite passed; renderer production build passed |
 | Automated Rust | PASS | Full workspace passed, including shared-core operation recovery and desktop adapter tests |
+| Windows core compile | PASS | `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` |
 | CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; disposable fake HOME only |
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
