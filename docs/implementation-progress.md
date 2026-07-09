@@ -55,7 +55,7 @@ Status:
 
 Validation:
 - Rust workspace: CLI 7 tests, core 90 tests, and desktop 17 tests passed
-- Core crash-recovery increment: 102 tests passed
+- Core crash-recovery increment: 107 tests passed
 - Rust workspace Clippy passed with warnings denied
 - frontend: 80 tests passed
 - frontend TypeScript and renderer production build passed
@@ -212,16 +212,19 @@ Implemented:
   Registry add, Skill Mount, and canonical MCP save; each test verifies the
   mutation is visible after the simulated crash and then restored by
   `recover_incomplete`
+- extended persisted-step crash recovery coverage to Batch Import, Import and
+  Adopt, Delete Asset, Unmount, and Git Push; each flow now has a regression
+  proving a durable journal step can survive a simulated process interruption
+  and be recovered on the next startup pass
 
 Not implemented:
-- exhaustive process-crash injection at every journal step for the remaining
-  multi-step workflows, especially batch Import, Adopt, Delete, Git Sync, and
-  Unmount
+- an exhaustive crash matrix for every individual journal step in every
+  multi-step workflow
 
 Next:
-- extend persisted-step crash recovery coverage to Batch Import, Adopt,
-  Delete, Git Sync, and Unmount without weakening the existing immediate
-  rollback tests
+- perform a requirement-by-requirement final-goal audit and close the next
+  implementation or evidence gap that is still weaker than the final
+  acceptance criteria
 
 ## Progress Update Template
 

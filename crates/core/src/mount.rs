@@ -1304,6 +1304,59 @@ mod tests {
         let _ = fs::remove_dir_all(home);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn skill_unmount_recovers_when_process_crashes_after_persisted_step() {
+        let home = initialized_home("crash-unmount");
+        register_asset(&home, AssetKind::Skill, "review", "# Review");
+        let mount_request = MountPreviewRequest {
+            asset_id: "skill:review".into(),
+            target_id: "claude-user-skills".into(),
+        };
+        let mount_preview = preview_mount(&home, &mount_request).unwrap();
+        apply_preview(&home, mount_request, mount_preview).unwrap();
+
+        let request = UnmountPreviewRequest {
+            asset_id: "skill:review".into(),
+            target_id: "claude-user-skills".into(),
+        };
+        let preview = preview_unmount(&home, &request).unwrap();
+        let runtime_path = home.join(".claude/skills/review");
+        let crash = crash_test::crash_after_step("unmount", "unmount_applied");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_unmount(
+                &home,
+                &UnmountApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(!runtime_path.exists());
+        assert!(load_mounts(&home)
+            .unwrap()
+            .for_asset("skill:review")
+            .is_empty());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(fs::symlink_metadata(&runtime_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            load_mounts(&home).unwrap().for_asset("skill:review")[0].target_id,
+            "claude-user-skills"
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
     fn apply_preview(
         home: &Path,
         request: MountPreviewRequest,

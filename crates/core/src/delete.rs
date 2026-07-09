@@ -451,9 +451,11 @@ mod tests {
     use crate::asset_registry::{save as save_assets, AssetRecord, AssetRegistry};
     use crate::mount::{apply_mount, preview_mount, MountApplyRequest, MountPreviewRequest};
     use crate::mount_registry::{save as save_mounts, MountRegistry};
+    use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{
         save as save_targets, AssetKind, MountAdapter, ProviderState, TargetRegistry,
     };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]
     #[test]
@@ -530,6 +532,48 @@ mod tests {
         assert!(home.join(".agents/skills/review").exists());
         assert_eq!(fs::read(asset_registry_path(&home)).unwrap(), assets_before);
         assert_eq!(fs::read(mount_registry_path(&home)).unwrap(), mounts_before);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn delete_recovers_when_process_crashes_after_canonical_is_staged() {
+        let home = initialized_home("crash-recovery");
+        register_skill(&home, "review");
+        let request = DeletePreviewRequest {
+            asset_id: "skill:review".into(),
+            mode: DeleteMode::RequireUnmounted,
+        };
+        let preview = preview_delete(&home, &request).unwrap();
+        let canonical = canonical_path(&home, AssetKind::Skill, "review");
+        let crash = crash_test::crash_after_step("delete_asset", "canonical_staged_for_delete");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_delete(
+                &home,
+                &DeleteApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(!canonical.exists());
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(AssetKind::Skill, "review")
+            .is_some());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(canonical.join("SKILL.md").is_file());
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(AssetKind::Skill, "review")
+            .is_some());
         let _ = fs::remove_dir_all(home);
     }
 

@@ -296,6 +296,8 @@ mod tests {
     use crate::asset_registry::{load as load_assets, save as save_assets, AssetRegistry};
     use crate::discovery::{discover, DiscoveryScope};
     use crate::mount_registry::{save as save_mounts, MountRegistry};
+    use crate::operation::{crash_test, recover_incomplete};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
     fn imports_multiple_sources_atomically_and_rolls_back_injected_failure() {
@@ -343,6 +345,57 @@ mod tests {
         .unwrap();
         assert_eq!(applied.items.len(), 2);
         assert_eq!(load_assets(&home).unwrap().assets.len(), 2);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn batch_import_recovers_when_process_crashes_after_imported_step() {
+        let home = initialized_home();
+        fs::create_dir_all(home.join(".claude/commands")).unwrap();
+        fs::write(home.join(".claude/commands/one.md"), "one").unwrap();
+        let selections = discover(&home, DiscoveryScope::User)
+            .sources
+            .into_iter()
+            .map(|source| BatchImportSelection {
+                source_id: source.source_id,
+                resolution: ImportResolution::Unresolved,
+            })
+            .collect::<Vec<_>>();
+        let request = BatchImportPreviewRequest {
+            scope: DiscoveryScope::User,
+            selections,
+        };
+        let preview = preview_batch_import(&home, &request).unwrap();
+        let crash = crash_test::crash_after_step("batch_import", "imported:command:one");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_batch_import(
+                &home,
+                &BatchImportApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(crate::targets::AssetKind::Command, "one")
+            .is_some());
+        assert!(home
+            .join(".my-agent-assets/assets/commands/one.md")
+            .exists());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(load_assets(&home).unwrap().assets.is_empty());
+        assert!(!home
+            .join(".my-agent-assets/assets/commands/one.md")
+            .exists());
         let _ = fs::remove_dir_all(home);
     }
 

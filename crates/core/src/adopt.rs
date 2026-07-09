@@ -506,8 +506,10 @@ mod tests {
     use super::*;
     use crate::asset_registry::{load as load_assets, save as save_assets, AssetRegistry};
     use crate::mount_registry::{load as load_mounts, save as save_mounts, MountRegistry};
+    use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{save as save_targets, MountAdapter, ProviderState, TargetRegistry};
     use serde_json::Value as JsonValue;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]
     #[test]
@@ -607,6 +609,66 @@ mod tests {
         assert!(!home.join(".my-agent-assets/assets/skills/two").exists());
         assert_eq!(fs::read(asset_registry_path(&home)).unwrap(), assets_before);
         assert_eq!(fs::read(mount_registry_path(&home)).unwrap(), mounts_before);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn adopt_recovers_when_process_crashes_after_mounted_step() {
+        let home = initialized_home("crash-recovery");
+        fs::create_dir_all(home.join(".claude/skills/one")).unwrap();
+        fs::write(home.join(".claude/skills/one/SKILL.md"), "# One").unwrap();
+        let discovered = crate::discovery::discover(&home, DiscoveryScope::User);
+        let request = AdoptPreviewRequest {
+            scope: DiscoveryScope::User,
+            selections: discovered
+                .sources
+                .iter()
+                .map(|source| AdoptSelection {
+                    source_id: source.source_id.clone(),
+                    resolution: ImportResolution::Unresolved,
+                })
+                .collect(),
+        };
+        let preview = preview_adopt(&home, &request).unwrap();
+        let runtime_path = home.join(".claude/skills/one");
+        let crash = crash_test::crash_after_step(
+            "import_and_adopt",
+            "mounted:skill:one@claude-user-skills",
+        );
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_adopt(
+                &home,
+                &AdoptApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(fs::symlink_metadata(&runtime_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(crate::targets::AssetKind::Skill, "one")
+            .is_some());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(runtime_path.join("SKILL.md").is_file());
+        assert!(!fs::symlink_metadata(&runtime_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(load_assets(&home).unwrap().assets.is_empty());
+        assert!(load_mounts(&home).unwrap().bindings.is_empty());
         let _ = fs::remove_dir_all(home);
     }
 

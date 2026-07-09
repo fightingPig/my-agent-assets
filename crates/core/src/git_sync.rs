@@ -951,6 +951,8 @@ fn epoch_nanos() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operation::{crash_test, recover_incomplete};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1174,6 +1176,62 @@ mod tests {
         );
         assert_eq!(
             git_stdout(&remote, &["show", "main:assets/skills/review/SKILL.md"]).unwrap(),
+            "# Review"
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn push_recovers_when_process_crashes_after_sync_commit_step() {
+        let (home, remote) = setup("push-crash-recovery");
+        let repository = home.join(".my-agent-assets");
+        fs::write(
+            repository.join("assets/skills/review/SKILL.md"),
+            "# Updated",
+        )
+        .unwrap();
+        let old_head = git_stdout(&repository, &["rev-parse", "HEAD"]).unwrap();
+        let request = SyncPreviewRequest {
+            direction: SyncDirection::Push,
+        };
+        let preview = preview_sync_with(&home, &request, &PrivateVerifier).unwrap();
+        let remote_ref = format!("{}:assets/skills/review/SKILL.md", preview.status.branch);
+        let crash = crash_test::crash_after_step("git-sync", "sync_commit_created");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_sync_with(
+                &home,
+                &SyncApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+                &PrivateVerifier,
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        let crash_head = git_stdout(&repository, &["rev-parse", "HEAD"]).unwrap();
+        assert_ne!(crash_head, old_head);
+        assert_eq!(
+            git_stdout(&remote, &["show", &remote_ref]).unwrap(),
+            "# Review"
+        );
+
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert_eq!(
+            git_stdout(&repository, &["rev-parse", "HEAD"]).unwrap(),
+            old_head
+        );
+        assert!(git_stdout(&repository, &["status", "--porcelain"])
+            .unwrap()
+            .contains("assets/skills/review/SKILL.md"));
+        assert_eq!(
+            git_stdout(&remote, &["show", &remote_ref]).unwrap(),
             "# Review"
         );
         let _ = fs::remove_dir_all(home);
