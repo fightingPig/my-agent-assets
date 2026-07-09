@@ -451,8 +451,10 @@ mod tests {
     use crate::mount_registry::{
         load as load_mounts, save as save_mounts, BindingStatus, MountBinding, MountRegistry,
     };
+    use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{save as save_targets, MountAdapter, ProviderState, TargetRegistry};
     use serde_json::Map;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     fn temp_home(name: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!("maa-mcp-save-{name}-{}", operation_id()));
@@ -680,6 +682,49 @@ mod tests {
             },
         );
         assert!(result.unwrap_err().to_string().contains("stale"));
+        assert!(!canonical_path(&home, AssetKind::Mcp, "filesystem").exists());
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(AssetKind::Mcp, "filesystem")
+            .is_none());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn mcp_save_recovers_when_process_crashes_after_persisted_step() {
+        let home = temp_home("crash-recovery");
+        let request = McpSavePreviewRequest {
+            asset_id: None,
+            canonical: canonical("filesystem", "first"),
+            title: Some("Filesystem".into()),
+            description: None,
+        };
+        let generated_at = epoch_seconds();
+        let preview = preview_mcp_save_at(&home, &request, generated_at).unwrap();
+        let crash = crash_test::crash_after_step("mcp_save", "canonical_mcp_saved");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_mcp_save(
+                &home,
+                &McpSaveApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: generated_at,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(canonical_path(&home, AssetKind::Mcp, "filesystem").exists());
+        assert!(load_assets(&home)
+            .unwrap()
+            .get(AssetKind::Mcp, "filesystem")
+            .is_some());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
         assert!(!canonical_path(&home, AssetKind::Mcp, "filesystem").exists());
         assert!(load_assets(&home)
             .unwrap()

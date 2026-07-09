@@ -1103,10 +1103,12 @@ mod tests {
     use super::*;
     use crate::asset_registry::{save as save_assets, AssetRecord, AssetRegistry};
     use crate::mount_registry::MountRegistry;
+    use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{
         save as save_targets, AssetKind, MountAdapter, ProviderState, TargetRegistry,
     };
     use serde_json::json;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]
     #[test]
@@ -1252,6 +1254,53 @@ mod tests {
         assert_eq!(config["other"], "keep");
         assert_eq!(config["mcpServers"]["keep"]["command"], "keep");
         assert!(config["mcpServers"].get("remote").is_none());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn skill_mount_recovers_when_process_crashes_after_persisted_step() {
+        let home = initialized_home("crash-mount");
+        register_asset(&home, AssetKind::Skill, "review", "# Review");
+        let request = MountPreviewRequest {
+            asset_id: "skill:review".into(),
+            target_id: "claude-user-skills".into(),
+        };
+        let preview = preview_mount(&home, &request).unwrap();
+        let runtime_path = home.join(".claude/skills/review");
+        let crash = crash_test::crash_after_step("mount", "mount_applied");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_mount(
+                &home,
+                &MountApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(fs::symlink_metadata(&runtime_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            load_mounts(&home).unwrap().for_asset("skill:review")[0].target_id,
+            "claude-user-skills"
+        );
+
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(!runtime_path.exists());
+        assert!(load_mounts(&home)
+            .unwrap()
+            .for_asset("skill:review")
+            .is_empty());
         let _ = fs::remove_dir_all(home);
     }
 

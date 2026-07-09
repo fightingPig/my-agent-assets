@@ -273,8 +273,12 @@ impl OperationJournal {
     }
 
     pub fn record_step(&mut self, step: impl Into<String>) -> Result<()> {
-        self.state.completed_steps.push(step.into());
-        self.persist()
+        let step = step.into();
+        self.state.completed_steps.push(step.clone());
+        self.persist()?;
+        #[cfg(test)]
+        crash_test::maybe_panic_after_step(&self.state.operation_kind, &step);
+        Ok(())
     }
 
     pub fn mark_rollback_required(&mut self, message: impl Into<String>) -> Result<()> {
@@ -334,6 +338,49 @@ impl OperationJournal {
             MaaError::new(format!("cannot serialize operation journal: {error}"))
         })?;
         atomic_write(&self.path, content.as_bytes())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod crash_test {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CRASH_AFTER_STEP: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) struct CrashAfterStepGuard;
+
+    impl Drop for CrashAfterStepGuard {
+        fn drop(&mut self) {
+            CRASH_AFTER_STEP.with(|hook| {
+                *hook.borrow_mut() = None;
+            });
+        }
+    }
+
+    pub(crate) fn crash_after_step(
+        operation_kind: impl Into<String>,
+        step: impl Into<String>,
+    ) -> CrashAfterStepGuard {
+        CRASH_AFTER_STEP.with(|hook| {
+            *hook.borrow_mut() = Some((operation_kind.into(), step.into()));
+        });
+        CrashAfterStepGuard
+    }
+
+    pub(crate) fn maybe_panic_after_step(operation_kind: &str, step: &str) {
+        CRASH_AFTER_STEP.with(|hook| {
+            let should_panic =
+                hook.borrow()
+                    .as_ref()
+                    .is_some_and(|(expected_kind, expected_step)| {
+                        expected_kind == operation_kind && expected_step == step
+                    });
+            if should_panic {
+                panic!("injected process crash after journal step {operation_kind}:{step}");
+            }
+        });
     }
 }
 

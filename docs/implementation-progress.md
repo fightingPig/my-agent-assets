@@ -55,6 +55,7 @@ Status:
 
 Validation:
 - Rust workspace: CLI 7 tests, core 90 tests, and desktop 17 tests passed
+- Core crash-recovery increment: 102 tests passed
 - Rust workspace Clippy passed with warnings denied
 - frontend: 80 tests passed
 - frontend TypeScript and renderer production build passed
@@ -204,12 +205,23 @@ Implemented:
 - verified initial unborn-branch Push, regular Push, rejected Push rollback, Pull backup, and cross-device clone semantics
 - `scripts/e2e_fake_runtime.sh`: passed after the SHA-256 migration without
   touching the real HOME
+- added a test-only journal crash hook that panics after a completed step has
+  been durably recorded, leaving the operation journal incomplete exactly like
+  a process interruption before normal error rollback can run
+- added persisted-step crash recovery coverage for Settings save, Target
+  Registry add, Skill Mount, and canonical MCP save; each test verifies the
+  mutation is visible after the simulated crash and then restored by
+  `recover_incomplete`
 
 Not implemented:
-- exhaustive process-crash injection at every journal step
+- exhaustive process-crash injection at every journal step for the remaining
+  multi-step workflows, especially batch Import, Adopt, Delete, Git Sync, and
+  Unmount
 
 Next:
-- add crash-point integration coverage to each remaining write workflow
+- extend persisted-step crash recovery coverage to Batch Import, Adopt,
+  Delete, Git Sync, and Unmount without weakening the existing immediate
+  rollback tests
 
 ## Progress Update Template
 

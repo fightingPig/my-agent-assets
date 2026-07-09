@@ -419,7 +419,9 @@ fn epoch_nanos() -> u128 {
 mod tests {
     use super::*;
     use crate::mount_registry::{save as save_mounts, BindingStatus, MountBinding, MountRegistry};
+    use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{MountAdapter, MountTargetKind, ProviderState, TargetRegistry};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     fn home(label: &str) -> PathBuf {
         let home =
@@ -606,6 +608,48 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("changed after preview"));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn target_add_recovers_when_process_crashes_after_persisted_step() {
+        let home = home("crash-add");
+        let request = TargetAddPreviewRequest {
+            target: MountTarget::custom(
+                "custom-skills",
+                MountTargetKind::CustomSkillDirectory,
+                home.join("custom/skills"),
+            )
+            .unwrap(),
+        };
+        let preview = preview_add_target(&home, &request).unwrap();
+        let crash = crash_test::crash_after_step("target_add", "target_added");
+
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            apply_add_target(
+                &home,
+                &TargetAddApplyRequest {
+                    preview_id: preview.preview_id,
+                    preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    request,
+                },
+            )
+        }));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert!(load_targets(&home)
+            .unwrap()
+            .resolve("custom-skills")
+            .is_ok());
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert!(report.attempts[0].recovered);
+        assert!(load_targets(&home)
+            .unwrap()
+            .resolve("custom-skills")
+            .is_err());
         let _ = fs::remove_dir_all(home);
     }
 }

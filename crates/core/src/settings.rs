@@ -448,6 +448,8 @@ fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::operation::{crash_test, recover_incomplete};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_TEST_ID: AtomicU64 = AtomicU64::new(1);
@@ -568,6 +570,31 @@ mod tests {
 
         assert!(matches!(error, SettingsError::Io { .. }));
         assert!(!real.join("config.yaml").exists());
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn transactional_save_recovers_when_process_crashes_after_persisted_step() {
+        let home = fake_home("crash-recovery");
+        fs::create_dir_all(home.join(".my-agent-assets/backups/local")).unwrap();
+        let mut original = Settings::defaults_for_home(&home);
+        original.max_depth = 3;
+        save(&home, &original).unwrap();
+
+        let mut changed = original.clone();
+        changed.max_depth = 9;
+        let crash = crash_test::crash_after_step("settings_save", "settings_saved");
+        let result = catch_unwind(AssertUnwindSafe(|| save_transactional(&home, &changed)));
+        assert!(result.is_err());
+        drop(crash);
+
+        assert_eq!(load(&home).unwrap().max_depth, 9);
+        let report = recover_incomplete(&home).unwrap();
+        assert!(report.attempted);
+        assert!(!report.writes_blocked);
+        assert_eq!(report.attempts.len(), 1);
+        assert!(report.attempts[0].recovered);
+        assert_eq!(load(&home).unwrap().max_depth, 3);
         fs::remove_dir_all(home).unwrap();
     }
 }
