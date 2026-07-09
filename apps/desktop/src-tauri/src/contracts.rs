@@ -99,8 +99,6 @@ pub enum PlanStepKind {
     CompileMcp,
     #[serde(rename = "backup")]
     Backup,
-    #[serde(rename = "restore")]
-    Restore,
     #[serde(rename = "git")]
     Git,
     #[serde(rename = "settings")]
@@ -532,7 +530,6 @@ mod tests {
         assert_eq!(wire_value(PlanStepKind::Mount), json!("mount"));
         assert_eq!(wire_value(PlanStepKind::CompileMcp), json!("compileMcp"));
         assert_eq!(wire_value(PlanStepKind::Backup), json!("backup"));
-        assert_eq!(wire_value(PlanStepKind::Restore), json!("restore"));
         assert_eq!(wire_value(PlanStepKind::Git), json!("git"));
         assert_eq!(wire_value(PlanStepKind::Settings), json!("settings"));
         assert_eq!(wire_value(RiskLevel::None), json!("none"));

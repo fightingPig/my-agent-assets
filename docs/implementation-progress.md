@@ -227,6 +227,8 @@ Implemented:
 - corrected the write-safety contract so it no longer describes historical
   automatic Restore or legacy Desktop apply transports as current acceptance
   requirements
+- removed the obsolete `restore` plan-step wire value from the TypeScript/Rust
+  Tauri contract and aligned the historical execution plan with Backup History
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

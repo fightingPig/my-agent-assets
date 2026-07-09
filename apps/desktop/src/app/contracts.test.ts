@@ -29,7 +29,7 @@ describe("Tauri command contracts", () => {
     expect(ASSET_STATUSES).toEqual(["ready", "mounted", "unmounted", "conflict", "invalid"]);
     expect(PROJECT_STATUSES).toEqual(["ready", "changed", "needsSync", "invalid"]);
     expect(RUNTIME_SCOPES).toEqual(["user", "local", "project"]);
-    expect(PLAN_STEP_KINDS).toEqual(["check", "import", "mount", "compileMcp", "backup", "restore", "git", "settings"]);
+    expect(PLAN_STEP_KINDS).toEqual(["check", "import", "mount", "compileMcp", "backup", "git", "settings"]);
     expect(APPEARANCE_THEMES).toEqual(["system", "light", "dark"]);
     expect(DENSITY_PREFERENCES).toEqual(["compact", "comfortable"]);
     expect(LOG_LEVELS).toEqual(["error", "warn", "info", "debug"]);

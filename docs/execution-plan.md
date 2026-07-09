@@ -8,7 +8,7 @@
 4. Implement scan planning and scan apply.
 5. Implement Skill and Command backup/adopt/symlink behavior.
 6. Implement MCP extract and compile for user, local, and project scope.
-7. Implement list, status, doctor, mount, unmount, remove, restore, and sync.
+7. Implement list, status, doctor, mount, unmount, remove, Backup History, and sync.
 8. Add tests and an isolated fake-runtime e2e script.
 9. Optionally create a private GitHub test repository and use it as the fake
    asset center remote for sync validation.
@@ -57,6 +57,6 @@ fake-home/.my-agent-assets/.git
 - MCP conflict tests must verify that scan displays both JSON bodies, default
   apply fails without a decision, and rename imports without rewriting the
   original runtime JSON source.
-- Security tests must cover restore path traversal rejection, malformed backup
-  manifests, git output sanitization, YAML config parsing, and registry
+- Security tests must cover Backup History manifest path validation, malformed
+  backup manifests, git output sanitization, YAML config parsing, and registry
   round-tripping.

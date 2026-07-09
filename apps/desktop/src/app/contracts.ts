@@ -10,7 +10,7 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 export const RUNTIME_SCOPES = ["user", "local", "project"] as const;
 export type RuntimeScope = (typeof RUNTIME_SCOPES)[number];
 
-export const PLAN_STEP_KINDS = ["check", "import", "mount", "compileMcp", "backup", "restore", "git", "settings"] as const;
+export const PLAN_STEP_KINDS = ["check", "import", "mount", "compileMcp", "backup", "git", "settings"] as const;
 export type PlanStepKind = (typeof PLAN_STEP_KINDS)[number];
 
 export const APPEARANCE_THEMES = ["system", "light", "dark"] as const;

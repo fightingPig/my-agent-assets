@@ -23,7 +23,7 @@ These values are part of the public JSON contract and must not be inferred only 
 | `ProjectStatus` | `ready`, `changed`, `needsSync`, `invalid` |
 | `RuntimeScope` | `user`, `local`, `project` |
 | `ConflictResolution` | `skip`, `rename`, `overwrite` |
-| `PlanStepKind` | `check`, `import`, `mount`, `compileMcp`, `backup`, `restore`, `git`, `settings` |
+| `PlanStepKind` | `check`, `import`, `mount`, `compileMcp`, `backup`, `git`, `settings` |
 | `RiskLevel` | `none`, `low`, `medium`, `high` |
 | `AppearanceTheme` | `system`, `light`, `dark` |
 | `DensityPreference` | `compact`, `comfortable` |
