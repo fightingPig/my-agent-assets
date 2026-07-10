@@ -102,7 +102,7 @@ fn preview_diagnostic_export_at(
     generated_at_epoch_seconds: u64,
 ) -> Result<DiagnosticExportPreview> {
     let preview_id = export_fingerprint(home, generated_at_epoch_seconds)?;
-    let package_path = package_path(home, generated_at_epoch_seconds);
+    let package_path = package_path(home, generated_at_epoch_seconds, &preview_id);
     let mut included_files = vec![
         DiagnosticExportFile {
             logical_path: "status-summary.json".into(),
@@ -205,9 +205,12 @@ fn sanitize_doctor(report: &DoctorReport) -> SanitizedDoctorSummary {
     }
 }
 
-fn package_path(home: &Path, generated_at_epoch_seconds: u64) -> PathBuf {
-    home.join(".my-agent-assets/logs/diagnostics")
-        .join(format!("diagnostic-{generated_at_epoch_seconds}.json"))
+fn package_path(home: &Path, generated_at_epoch_seconds: u64, preview_id: &str) -> PathBuf {
+    let suffix = preview_id.rsplit('-').next().unwrap_or("preview");
+    let suffix = &suffix[..suffix.len().min(12)];
+    home.join(".my-agent-assets/logs/diagnostics").join(format!(
+        "diagnostic-{generated_at_epoch_seconds}-{suffix}.json"
+    ))
 }
 
 fn export_fingerprint(home: &Path, generated_at_epoch_seconds: u64) -> Result<String> {
@@ -332,6 +335,18 @@ mod tests {
         )
         .is_err());
         assert!(!preview.package_path.exists());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn preview_bound_package_name_changes_with_the_fingerprint() {
+        let home = home("unique-path");
+        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        let first = preview_diagnostic_export_at(&home, 123).unwrap();
+        fs::write(home.join(".my-agent-assets/assets.yaml"), "changed").unwrap();
+        let second = preview_diagnostic_export_at(&home, 123).unwrap();
+        assert_ne!(first.preview_id, second.preview_id);
+        assert_ne!(first.package_path, second.package_path);
         let _ = fs::remove_dir_all(home);
     }
 }
