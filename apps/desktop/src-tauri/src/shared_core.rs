@@ -19,10 +19,15 @@ use my_agent_assets_core::batch_import::{
     apply_batch_import, preview_batch_import, BatchImportApplyRequest, BatchImportApplyResult,
     BatchImportPreview, BatchImportPreviewRequest,
 };
+use my_agent_assets_core::consistency_repair::{
+    apply_consistency_repair, preview_consistency_repair, ConsistencyRepairApplyRequest,
+    ConsistencyRepairApplyResult, ConsistencyRepairPreview, ConsistencyRepairPreviewRequest,
+};
 use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteApplyResult, DeletePreview,
     DeletePreviewRequest,
 };
+use my_agent_assets_core::diagnostics::{doctor, DoctorReport};
 use my_agent_assets_core::discovery::{discover, DiscoveryResult, DiscoveryScope};
 use my_agent_assets_core::git_sync::{
     apply_sync, preview_sync, status as git_status, GitStatus, SyncApplyRequest, SyncApplyResult,
@@ -65,6 +70,27 @@ pub fn initialization_preview_command() -> Result<InitializationPreview, String>
     let home = home_dir()
         .ok_or_else(|| "HOME is unavailable; initialization preview skipped.".to_string())?;
     preview_initialization(&home).map_err(|error| error.to_string())
+}
+
+pub fn doctor_report_command() -> Result<DoctorReport, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; diagnostics skipped.".to_string())?;
+    Ok(doctor(&home))
+}
+
+pub fn consistency_repair_preview_command(
+    input: ConsistencyRepairPreviewRequest,
+) -> Result<ConsistencyRepairPreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; consistency repair preview skipped.".to_string())?;
+    preview_consistency_repair(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn consistency_repair_apply_command(
+    input: ConsistencyRepairApplyRequest,
+) -> Result<ConsistencyRepairApplyResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; consistency repair apply blocked.".to_string())?;
+    apply_consistency_repair(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn initialization_apply_command(

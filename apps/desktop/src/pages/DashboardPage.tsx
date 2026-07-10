@@ -12,6 +12,9 @@ import {
 import { useEffect, useState } from "react";
 import {
   gitStatus,
+  doctorReport,
+  consistencyRepairApply,
+  consistencyRepairPreview,
   initializationApply,
   initializationPreview,
   listAssets,
@@ -21,6 +24,9 @@ import {
 import type {
   AppInfo,
   AssetSummary,
+  ConsistencyRepairAction,
+  ConsistencyRepairPreview,
+  DoctorReport,
   GitStatus,
   InitializationPreview,
   ProjectSummary,
@@ -75,6 +81,10 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
   const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
+  const [doctor, setDoctor] = useState<DoctorReport | null>(null);
+  const [repairPreview, setRepairPreview] = useState<ConsistencyRepairPreview | null>(null);
+  const [repairMessage, setRepairMessage] = useState("");
+  const [repairBusy, setRepairBusy] = useState(false);
   const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
   const [showInitializationPreview, setShowInitializationPreview] = useState(false);
   const [initializationMessage, setInitializationMessage] = useState("");
@@ -96,14 +106,16 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       gitStatus(),
       recoveryStatus(),
       initializationPreview(),
+      doctorReport(),
     ])
-      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedInitialization]) => {
+      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedInitialization, loadedDoctor]) => {
         if (cancelled) return;
         setAssets(loadedAssets);
         setProjects(loadedProjects);
         setRepository(loadedRepository);
         setRecovery(loadedRecovery);
         setInitialization(loadedInitialization);
+        setDoctor(loadedDoctor);
         setStateLabel("只读真实数据");
       })
       .catch((error) => {
@@ -113,6 +125,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         setRepository(emptyGitStatus);
         setRecovery(healthyRecoveryStatus);
         setInitialization(null);
+        setDoctor(null);
         setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
@@ -155,6 +168,38 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
     }
   };
 
+  const handleRepairPreview = async (assetId: string, action: ConsistencyRepairAction) => {
+    setRepairBusy(true);
+    setRepairMessage("");
+    try {
+      setRepairPreview(await consistencyRepairPreview({ assetId, action }));
+    } catch (error) {
+      setRepairMessage(`一致性修复预览失败：${errorMessage(error)}`);
+    } finally {
+      setRepairBusy(false);
+    }
+  };
+
+  const handleRepairApply = async () => {
+    if (!repairPreview?.canApply) return;
+    setRepairBusy(true);
+    setRepairMessage("");
+    try {
+      const result = await consistencyRepairApply({
+        previewId: repairPreview.previewId,
+        previewGeneratedAtEpochSeconds: repairPreview.generatedAtEpochSeconds,
+        request: repairPreview.request,
+      });
+      setRepairMessage(`一致性修复已完成：${result.assetId}`);
+      setRepairPreview(null);
+      setReloadKey((value) => value + 1);
+    } catch (error) {
+      setRepairMessage(`一致性修复失败：${errorMessage(error)}`);
+    } finally {
+      setRepairBusy(false);
+    }
+  };
+
   const stats = demoMode ? demoStats : realStats(assets, projects);
   const visibleProjects = demoMode
     ? demoProjects
@@ -184,6 +229,15 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       label: "事务恢复",
       detail: recovery.message,
       status: recovery.writesBlocked ? "写入已阻止" : "正常",
+    },
+    {
+      label: "资产一致性",
+      detail: doctor
+        ? doctor.contentDiagnostics.length === 0
+          ? "assets.yaml 与 canonical 内容一致"
+          : `${doctor.contentDiagnostics.length} 项需要处理`
+        : "未读取诊断",
+      status: doctor?.contentDiagnostics.length ? "需处理" : "正常",
     },
   ];
 
@@ -317,6 +371,47 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
           )}
           {!demoMode && initializationMessage && initialization?.alreadyInitialized && (
             <p className="initialization-message">{initializationMessage}</p>
+          )}
+          {!demoMode && doctor && doctor.contentDiagnostics.length > 0 && (
+            <section className="initialization-panel" aria-label="资产一致性修复">
+              <div className="initialization-copy">
+                <AlertTriangle size={17} />
+                <div>
+                  <strong>检测到资产索引与 canonical 内容不一致</strong>
+                  <span>不会自动修复。请选择一项操作后先查看高风险 Preview。</span>
+                </div>
+              </div>
+              <div className="initialization-preview">
+                {doctor.contentDiagnostics.map((diagnostic) => (
+                  <div className="repair-diagnostic" key={diagnostic.assetId}>
+                    <strong>{diagnostic.assetId}</strong>
+                    <p>{diagnostic.message ?? diagnostic.state}</p>
+                    {diagnostic.state === "missing_content" && (
+                      <button className="asset-secondary-action" data-no-drag="true" disabled={repairBusy} onClick={() => handleRepairPreview(diagnostic.assetId, "remove_missing_registry_record")} style={NO_DRAG_REGION_STYLE} type="button">预览移除陈旧索引</button>
+                    )}
+                    {diagnostic.state === "unregistered" && (
+                      <div className="initialization-actions">
+                        <button className="asset-secondary-action" data-no-drag="true" disabled={repairBusy} onClick={() => handleRepairPreview(diagnostic.assetId, "register_unregistered_content")} style={NO_DRAG_REGION_STYLE} type="button">预览重新登记</button>
+                        <button className="asset-business-action danger-action" data-no-drag="true" disabled={repairBusy} onClick={() => handleRepairPreview(diagnostic.assetId, "delete_unregistered_content")} style={NO_DRAG_REGION_STYLE} type="button">预览删除孤立内容</button>
+                      </div>
+                    )}
+                    {diagnostic.state === "invalid_content" && <p className="initialization-warning">损坏内容仅供诊断，系统不会自动覆盖或删除。</p>}
+                  </div>
+                ))}
+                {repairPreview && (
+                  <div className="repair-diagnostic">
+                    <strong>修复 Preview: {repairPreview.diagnostic.assetId}</strong>
+                    {repairPreview.plannedEffects.map((effect) => <p key={effect}>{effect}</p>)}
+                    {repairPreview.warnings.map((warning) => <p className="initialization-warning" key={warning}>{warning}</p>)}
+                    <div className="initialization-actions">
+                      <button className="asset-secondary-action" data-no-drag="true" disabled={repairBusy} onClick={() => setRepairPreview(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button>
+                      <button className="asset-business-action danger-action" data-no-drag="true" disabled={repairBusy || !repairPreview.canApply} onClick={handleRepairApply} style={NO_DRAG_REGION_STYLE} type="button">确认修复</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {repairMessage && <p className="initialization-message">{repairMessage}</p>}
+            </section>
           )}
         </section>
       </div>

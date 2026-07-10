@@ -1,3 +1,6 @@
+use crate::asset_registry::{
+    inspect_content, load as load_assets, ContentDiagnostic, ContentState,
+};
 use crate::mount::copy_any;
 use crate::operation::{GitRefRecovery, OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_existing_path;
@@ -97,6 +100,8 @@ pub struct SyncApplyResult {
     pub pushed: bool,
     pub pulled: bool,
     pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_diagnostics: Vec<ContentDiagnostic>,
     pub journal_path: PathBuf,
 }
 
@@ -506,6 +511,31 @@ fn apply_sync_with(
         }
     }
 
+    let content_diagnostics = if request.request.direction == SyncDirection::Pull {
+        match load_assets(home).and_then(|registry| inspect_content(home, &registry)) {
+            Ok(entries) => {
+                let diagnostics = entries
+                    .into_iter()
+                    .filter(|entry| entry.state != ContentState::Ready)
+                    .collect::<Vec<_>>();
+                if !diagnostics.is_empty() {
+                    warnings.push(format!(
+                        "Git Pull completed, but {} registry/content consistency issue(s) require an explicit Doctor repair preview",
+                        diagnostics.len()
+                    ));
+                }
+                diagnostics
+            }
+            Err(error) => {
+                warnings.push(format!(
+                    "Git Pull completed, but registry/content consistency could not be verified: {error}"
+                ));
+                Vec::new()
+            }
+        }
+    } else {
+        Vec::new()
+    };
     journal.complete()?;
     Ok(SyncApplyResult {
         preview_id: preview.preview_id,
@@ -516,6 +546,7 @@ fn apply_sync_with(
         pushed,
         pulled,
         warnings: std::mem::take(&mut warnings),
+        content_diagnostics,
         journal_path: journal.path().to_path_buf(),
     })
 }
@@ -1324,6 +1355,13 @@ mod tests {
         .unwrap();
         assert!(result.pulled);
         assert!(result.backup_id.is_some());
+        assert!(result.content_diagnostics.iter().any(|diagnostic| {
+            diagnostic.asset_id == "skill:review" && diagnostic.state == ContentState::Unregistered
+        }));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("consistency issue")));
         assert_eq!(
             fs::read_to_string(repository.join("assets/skills/review/SKILL.md")).unwrap(),
             "# Remote"

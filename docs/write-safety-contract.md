@@ -24,6 +24,7 @@ Implemented write commands cover:
 - Sync apply
 - Settings save
 - Backup delete
+- Doctor consistency repair
 
 They remain supported only while this contract is satisfied by code, tests, and fake HOME end-to-end verification.
 
@@ -41,6 +42,14 @@ Apply commands must not accept arbitrary frontend paths as sufficient authority 
 Preview commands return bound `previewId` values for supported write workflows.
 Apply commands recompute the expected identity from trusted state and fail
 before any write when the supplied ID does not match.
+
+Doctor consistency repair is a high-risk, state-bound write. It may only remove
+a registry record whose canonical content is missing, register valid canonical
+content that lacks a record, or delete the specifically previewed unregistered
+content. Invalid content is diagnostic-only. It uses the same global lock,
+preview expiry and fingerprint revalidation, recoverable backup journal, and
+atomic registry writer as other destructive operations. No startup, scan, or
+Git Pull path may repair content automatically.
 
 `mode` has two wire values:
 

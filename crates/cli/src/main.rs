@@ -7,6 +7,10 @@ use my_agent_assets_core::backup_delete::{
     BackupDeletePreviewRequest,
 };
 use my_agent_assets_core::backup_history::list_backups;
+use my_agent_assets_core::consistency_repair::{
+    apply_consistency_repair, preview_consistency_repair, ConsistencyRepairAction,
+    ConsistencyRepairApplyRequest, ConsistencyRepairPreviewRequest,
+};
 use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
 };
@@ -258,10 +262,7 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
                 "incompleteOperations": incomplete_journals(&home)?,
             }))?;
         }
-        "doctor" => {
-            reject_apply(apply, "doctor is read-only")?;
-            print_json(&doctor(&home))?;
-        }
+        "doctor" => handle_doctor(&home, &mut args, apply)?,
         "sync" => {
             let direction = match next_arg(&mut args, "pull or push")?.as_str() {
                 "pull" => SyncDirection::Pull,
@@ -395,6 +396,50 @@ fn handle_backup(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()>
         }
         operation => Err(MaaError::new(format!(
             "unknown backup operation: {operation}; expected list or delete"
+        ))),
+    }
+}
+
+fn handle_doctor(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()> {
+    if args.is_empty() {
+        reject_apply(apply, "doctor report is read-only")?;
+        return print_json(&doctor(home));
+    }
+    match next_arg(args, "doctor operation")?.as_str() {
+        "repair" => {
+            let action = match next_arg(args, "repair action")?.as_str() {
+                "remove-missing" => ConsistencyRepairAction::RemoveMissingRegistryRecord,
+                "register-unregistered" => ConsistencyRepairAction::RegisterUnregisteredContent,
+                "delete-unregistered" => ConsistencyRepairAction::DeleteUnregisteredContent,
+                value => {
+                    return Err(MaaError::new(format!(
+                        "unknown doctor repair action: {value}; expected remove-missing, register-unregistered, or delete-unregistered"
+                    )))
+                }
+            };
+            let request = ConsistencyRepairPreviewRequest {
+                asset_id: next_arg(args, "asset ID")?,
+                action,
+            };
+            let preview = preview_consistency_repair(home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_consistency_repair(
+                    home,
+                    &ConsistencyRepairApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to execute this high-risk repair.");
+                Ok(())
+            }
+        }
+        operation => Err(MaaError::new(format!(
+            "unknown doctor operation: {operation}; expected repair"
         ))),
     }
 }
@@ -568,6 +613,9 @@ fn print_command_help(command: &str) {
         ),
         "backup" => println!(
             "Usage:\n  maa backup list\n  maa backup delete <entry-id> [--apply]\nBackup deletion is preview-bound and does not restore historical files."
+        ),
+        "doctor" => println!(
+            "Usage:\n  maa doctor\n  maa doctor repair remove-missing|register-unregistered|delete-unregistered <asset-id> [--apply]\nConsistency repairs are preview-bound high-risk writes."
         ),
         _ => print_help(),
     }

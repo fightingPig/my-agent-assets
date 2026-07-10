@@ -4,6 +4,7 @@ pub mod asset_registry;
 pub mod backup_delete;
 pub mod backup_history;
 pub mod batch_import;
+pub mod consistency_repair;
 pub mod delete;
 pub mod diagnostics;
 pub mod discovery;

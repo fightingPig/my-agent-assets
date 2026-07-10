@@ -63,6 +63,11 @@ import type {
   CanonicalAssetContent,
   AssetOpenInput,
   AssetOpenResult,
+  DoctorReport,
+  ConsistencyRepairPreviewRequest,
+  ConsistencyRepairPreview,
+  ConsistencyRepairApplyRequest,
+  ConsistencyRepairApplyResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -216,6 +221,46 @@ export async function recoveryStatus(): Promise<RecoveryStatus> {
     Array.isArray(status.recentRecoveries)
     ? status as RecoveryStatus
     : fallback;
+}
+
+export async function doctorReport(): Promise<DoctorReport> {
+  if (!isTauriRuntime()) {
+    throw new Error("doctor_report requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("doctor_report");
+  if (!isRecord(result) || !Array.isArray(result.checks) || typeof result.initialized !== "boolean") {
+    throw new Error("doctor_report returned an invalid response.");
+  }
+  return {
+    ...result,
+    contentDiagnostics: Array.isArray(result.contentDiagnostics) ? result.contentDiagnostics : [],
+  } as DoctorReport;
+}
+
+export async function consistencyRepairPreview(
+  input: ConsistencyRepairPreviewRequest,
+): Promise<ConsistencyRepairPreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("consistency_repair_preview requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("consistency_repair_preview", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || !isRecord(result.diagnostic)) {
+    throw new Error("consistency_repair_preview returned an invalid response.");
+  }
+  return result as ConsistencyRepairPreview;
+}
+
+export async function consistencyRepairApply(
+  input: ConsistencyRepairApplyRequest,
+): Promise<ConsistencyRepairApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("consistency_repair_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("consistency_repair_apply", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || !Array.isArray(result.affectedPaths)) {
+    throw new Error("consistency_repair_apply returned an invalid response.");
+  }
+  return result as ConsistencyRepairApplyResult;
 }
 
 export async function initializationPreview(): Promise<InitializationPreview> {

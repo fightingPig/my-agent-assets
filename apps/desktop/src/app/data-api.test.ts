@@ -127,6 +127,42 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("recovery_status");
 
     invoke.mockResolvedValueOnce({
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      initialized: true,
+      checks: [],
+      contentDiagnostics: [],
+    });
+    await api.doctorReport();
+    expect(invoke).toHaveBeenLastCalledWith("doctor_report");
+
+    const repairRequest = {
+      assetId: "skill:orphan",
+      action: "register_unregistered_content" as const,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "repair-1",
+      diagnostic: { assetId: "skill:orphan" },
+    });
+    await api.consistencyRepairPreview(repairRequest);
+    expect(invoke).toHaveBeenLastCalledWith("consistency_repair_preview", {
+      input: repairRequest,
+    });
+
+    const repairApply = {
+      previewId: "repair-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: repairRequest,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "repair-1",
+      affectedPaths: [],
+    });
+    await api.consistencyRepairApply(repairApply);
+    expect(invoke).toHaveBeenLastCalledWith("consistency_repair_apply", {
+      input: repairApply,
+    });
+
+    invoke.mockResolvedValueOnce({
       previewId: "init-1",
       assetCenterPath: "/tmp/home/.my-agent-assets",
       plannedPaths: [],

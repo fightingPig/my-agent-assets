@@ -219,6 +219,68 @@ export type RecoveryStatus = {
   message: string;
 };
 
+export type CanonicalContentState = "ready" | "missing_content" | "unregistered" | "invalid_content";
+
+export type ContentDiagnostic = {
+  assetId: string;
+  assetType: AssetType;
+  name: string;
+  path: string;
+  state: CanonicalContentState;
+  message?: string;
+};
+
+export type DoctorCheck = {
+  id: string;
+  label: string;
+  status: "ok" | "warning" | "error";
+  message: string;
+};
+
+export type DoctorReport = {
+  assetCenterPath: string;
+  initialized: boolean;
+  checks: DoctorCheck[];
+  contentDiagnostics: ContentDiagnostic[];
+};
+
+export const CONSISTENCY_REPAIR_ACTIONS = [
+  "remove_missing_registry_record",
+  "register_unregistered_content",
+  "delete_unregistered_content",
+] as const;
+export type ConsistencyRepairAction = (typeof CONSISTENCY_REPAIR_ACTIONS)[number];
+
+export type ConsistencyRepairPreviewRequest = {
+  assetId: string;
+  action: ConsistencyRepairAction;
+};
+
+export type ConsistencyRepairPreview = {
+  previewId: string;
+  request: ConsistencyRepairPreviewRequest;
+  diagnostic: ContentDiagnostic;
+  plannedEffects: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type ConsistencyRepairApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ConsistencyRepairPreviewRequest;
+};
+
+export type ConsistencyRepairApplyResult = {
+  previewId: string;
+  assetId: string;
+  action: ConsistencyRepairAction;
+  affectedPaths: string[];
+  journalPath: string;
+};
+
 export type InitializationPreview = {
   previewId: string;
   assetCenterPath: string;
@@ -287,6 +349,7 @@ export type SyncApplyResult = {
   pushed: boolean;
   pulled: boolean;
   warnings: string[];
+  contentDiagnostics?: ContentDiagnostic[];
   journalPath: string;
 };
 export type SettingsSaveInput = { settings: DesktopSettings };

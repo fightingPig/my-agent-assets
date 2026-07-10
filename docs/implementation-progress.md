@@ -79,6 +79,12 @@ Implemented:
 - discovery can safely reload the exact selected Claude JSON or Codex TOML MCP entry into the canonical model and detects entries removed after discovery
 - added a strict, portable `assets.yaml` registry model keyed by canonical asset ID
 - added non-mutating registry/content consistency diagnostics for missing, unregistered, and invalid canonical content
+- implemented high-risk, preview-bound registry/content consistency repair:
+  remove stale missing-content registry records, register valid unregistered
+  canonical content, or explicitly delete selected orphan content; damaged
+  content stays diagnostic-only and all applies use the operation lock,
+  fingerprint revalidation, transaction snapshot, atomic registry write, and
+  automatic interruption rollback
 - implemented sourceId-based canonical Import preview/apply with five-minute expiry, source/registry/content fingerprints, explicit skip/overwrite/rename, rollback, and Git-portable backups
 - canonical Import supports Claude/Codex Skills, Claude Commands, Claude JSON MCP, and Codex TOML MCP without modifying source live configs
 - MCP overwrite marks existing local bindings `outOfSync` without reverse-synchronizing live configs

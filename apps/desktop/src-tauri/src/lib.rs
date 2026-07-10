@@ -40,6 +40,25 @@ fn recovery_status() -> Result<my_agent_assets_core::operation::RecoveryStatus, 
 }
 
 #[tauri::command]
+fn doctor_report() -> Result<my_agent_assets_core::diagnostics::DoctorReport, String> {
+    shared_core::doctor_report_command()
+}
+
+#[tauri::command]
+fn consistency_repair_preview(
+    input: my_agent_assets_core::consistency_repair::ConsistencyRepairPreviewRequest,
+) -> Result<my_agent_assets_core::consistency_repair::ConsistencyRepairPreview, String> {
+    shared_core::consistency_repair_preview_command(input)
+}
+
+#[tauri::command]
+fn consistency_repair_apply(
+    input: my_agent_assets_core::consistency_repair::ConsistencyRepairApplyRequest,
+) -> Result<my_agent_assets_core::consistency_repair::ConsistencyRepairApplyResult, String> {
+    shared_core::consistency_repair_apply_command(input)
+}
+
+#[tauri::command]
 fn initialization_preview(
 ) -> Result<my_agent_assets_core::initialization::InitializationPreview, String> {
     shared_core::initialization_preview_command()
@@ -273,6 +292,9 @@ pub fn run() {
             settings_save,
             git_status,
             recovery_status,
+            doctor_report,
+            consistency_repair_preview,
+            consistency_repair_apply,
             initialization_preview,
             initialization_apply,
             list_assets,

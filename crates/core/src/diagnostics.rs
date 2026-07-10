@@ -1,4 +1,6 @@
-use crate::asset_registry::{inspect_content, load as load_assets, ContentState};
+use crate::asset_registry::{
+    inspect_content, load as load_assets, ContentDiagnostic, ContentState,
+};
 use crate::initialization::preview_initialization;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::incomplete_journals;
@@ -32,6 +34,8 @@ pub struct DoctorReport {
     pub asset_center_path: String,
     pub initialized: bool,
     pub checks: Vec<DoctorCheck>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub content_diagnostics: Vec<ContentDiagnostic>,
 }
 
 pub fn doctor(home: &Path) -> DoctorReport {
@@ -82,12 +86,16 @@ pub fn doctor(home: &Path) -> DoctorReport {
         }
     };
 
-    if initialized {
-        checks.push(asset_registry_check(home));
+    let content_diagnostics = if initialized {
+        let (check, diagnostics) = asset_registry_check(home);
+        checks.push(check);
         checks.push(target_registry_check(home));
         checks.push(mount_registry_check(home));
         checks.push(operation_check(home));
-    }
+        diagnostics
+    } else {
+        Vec::new()
+    };
     checks.push(runtime_check(
         "claude_runtime",
         "Claude Code Runtime",
@@ -104,6 +112,7 @@ pub fn doctor(home: &Path) -> DoctorReport {
         asset_center_path: root.to_string_lossy().into_owned(),
         initialized,
         checks,
+        content_diagnostics,
     }
 }
 
@@ -125,7 +134,7 @@ fn git_check() -> DoctorCheck {
     }
 }
 
-fn asset_registry_check(home: &Path) -> DoctorCheck {
+fn asset_registry_check(home: &Path) -> (DoctorCheck, Vec<ContentDiagnostic>) {
     match load_assets(home) {
         Ok(registry) => match inspect_content(home, &registry) {
             Ok(entries) => {
@@ -134,33 +143,49 @@ fn asset_registry_check(home: &Path) -> DoctorCheck {
                     .filter(|entry| entry.state != ContentState::Ready)
                     .count();
                 if invalid == 0 {
-                    check(
-                        "asset_registry",
-                        "资产索引",
-                        DoctorCheckStatus::Ok,
-                        format!("{} 个 canonical assets 一致。", entries.len()),
+                    (
+                        check(
+                            "asset_registry",
+                            "资产索引",
+                            DoctorCheckStatus::Ok,
+                            format!("{} 个 canonical assets 一致。", entries.len()),
+                        ),
+                        Vec::new(),
                     )
                 } else {
-                    check(
-                        "asset_registry",
-                        "资产索引",
-                        DoctorCheckStatus::Warning,
-                        format!("{invalid} 个资产存在 missing、invalid 或 unregistered 状态。"),
+                    let diagnostics = entries
+                        .into_iter()
+                        .filter(|entry| entry.state != ContentState::Ready)
+                        .collect();
+                    (
+                        check(
+                            "asset_registry",
+                            "资产索引",
+                            DoctorCheckStatus::Warning,
+                            format!("{invalid} 个资产存在 missing、invalid 或 unregistered 状态。"),
+                        ),
+                        diagnostics,
                     )
                 }
             }
-            Err(error) => check(
+            Err(error) => (
+                check(
+                    "asset_registry",
+                    "资产索引",
+                    DoctorCheckStatus::Error,
+                    error.to_string(),
+                ),
+                Vec::new(),
+            ),
+        },
+        Err(error) => (
+            check(
                 "asset_registry",
                 "资产索引",
                 DoctorCheckStatus::Error,
                 error.to_string(),
             ),
-        },
-        Err(error) => check(
-            "asset_registry",
-            "资产索引",
-            DoctorCheckStatus::Error,
-            error.to_string(),
+            Vec::new(),
         ),
     }
 }
@@ -345,6 +370,31 @@ mod tests {
         ] {
             assert!(report.checks.iter().any(|entry| entry.id == id), "{id}");
         }
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn reports_each_non_ready_canonical_asset_for_preview_bound_repair() {
+        let home = home("content-diagnostics");
+        let preview = preview_initialization(&home).unwrap();
+        apply_initialization(
+            &home,
+            &InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
+        fs::create_dir_all(home.join(".my-agent-assets/assets/skills/orphan")).unwrap();
+        fs::write(
+            home.join(".my-agent-assets/assets/skills/orphan/SKILL.md"),
+            "# Orphan",
+        )
+        .unwrap();
+        let report = doctor(&home);
+        assert!(report.content_diagnostics.iter().any(|entry| {
+            entry.asset_id == "skill:orphan" && entry.state == ContentState::Unregistered
+        }));
         let _ = fs::remove_dir_all(home);
     }
 }

@@ -31,6 +31,8 @@ These values are part of the public JSON contract and must not be inferred only 
 | `ApplyMode` | `planOnly`, `apply` |
 | `ApplyStepStatus` | `pending`, `skipped`, `success`, `failed` |
 | `SyncDirection` | `pull`, `push` |
+| `CanonicalContentState` | `ready`, `missing_content`, `unregistered`, `invalid_content` |
+| `ConsistencyRepairAction` | `remove_missing_registry_record`, `register_unregistered_content`, `delete_unregistered_content` |
 
 `ScanScope` is a discriminated object with these exact shapes:
 
@@ -269,6 +271,45 @@ manual restore material. An incomplete operation journal that references the
 backup blocks deletion. Apply takes the global operation lock, revalidates the
 preview, snapshots the selected directory for transaction recovery, and never
 restores historical runtime content through the product UI.
+
+### `doctor_report`
+
+- **Purpose:** Return the read-only asset-center health report, including each
+  registry/content mismatch that requires manual selection of a repair.
+- **Input:** None.
+- **Output:** `DoctorReport { assetCenterPath, initialized, checks,
+  contentDiagnostics }`.
+- **Side effect:** Read-only.
+- **Consumer:** Dashboard system-status and consistency-repair panel.
+- **Status:** Implemented in shared core and registered.
+
+`contentDiagnostics` uses exact `state` wire values `missing_content`,
+`unregistered`, and `invalid_content` for non-ready entries. It does not
+perform a repair during app startup, scan, or Git Pull.
+
+### `consistency_repair_preview` / `consistency_repair_apply`
+
+- **Purpose:** Safely repair one explicitly selected `assets.yaml` / canonical
+  content mismatch.
+- **Preview input:** `ConsistencyRepairPreviewRequest { assetId, action }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Actions:** `remove_missing_registry_record`,
+  `register_unregistered_content`, `delete_unregistered_content`.
+- **Output:** `ConsistencyRepairPreview` / `ConsistencyRepairApplyResult`.
+- **Side effect:** Read-only preview / explicit high-risk local write.
+- **Consumer:** Dashboard consistency diagnostics and `maa doctor repair`.
+- **Status:** Implemented in shared core and registered.
+
+Actions are state-bound: a missing canonical file may only remove its stale
+registry record; an unregistered valid file or directory may only be
+registered or deleted. Invalid canonical MCP JSON, Skill directories, and
+Command files remain diagnostic-only so their original evidence is retained.
+Apply takes the global lock, revalidates the preview fingerprint, snapshots all
+affected paths in a recoverable journal, and uses the existing atomic registry
+writer. It never performs automatic repairs after startup, Scan, or Git Pull.
+After an applied Pull, `SyncApplyResult.contentDiagnostics` contains any
+newly-detected mismatch and the result warnings direct the user to Doctor; Pull
+never repairs, overwrites, or registers content itself.
 
 ### `preview_restore`
 

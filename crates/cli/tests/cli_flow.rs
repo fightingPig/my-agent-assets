@@ -103,6 +103,41 @@ fn doctor_is_structured_and_read_only_before_initialization() {
 }
 
 #[test]
+fn doctor_consistency_repair_is_preview_bound_and_only_repairs_selected_mismatch() {
+    let home = TestHome::new();
+    success(&home.path, &["init", "--apply"]);
+    home.write(
+        ".my-agent-assets/assets/skills/orphan/SKILL.md",
+        "# Orphan\n",
+    );
+
+    let report = json_output(&home.path, &["doctor"]);
+    assert!(report["contentDiagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["assetId"] == "skill:orphan" && entry["state"] == "unregistered"));
+    let preview = json_output(
+        &home.path,
+        &["doctor", "repair", "register-unregistered", "skill:orphan"],
+    );
+    assert_eq!(preview["canApply"], true);
+    assert!(home.path.join(".my-agent-assets/assets.yaml").exists());
+    let applied = json_output(
+        &home.path,
+        &[
+            "doctor",
+            "repair",
+            "register-unregistered",
+            "skill:orphan",
+            "--apply",
+        ],
+    );
+    assert_eq!(applied["assetId"], "skill:orphan");
+    assert!(success(&home.path, &["list"]).contains("skill:orphan"));
+}
+
+#[test]
 fn shared_core_cli_flow_uses_source_and_target_ids() {
     let home = TestHome::new();
     home.write(".claude/skills/review/SKILL.md", "# Review\n");

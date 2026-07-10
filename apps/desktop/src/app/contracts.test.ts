@@ -15,6 +15,7 @@ import {
   RUNTIME_SOURCE_FORMATS,
   RUNTIME_SOURCE_SCOPES,
   CANONICAL_IMPORT_DISPOSITIONS,
+  CONSISTENCY_REPAIR_ACTIONS,
   type GitStatus,
   type ApplyResult,
   type PreviewSyncInput,
@@ -52,6 +53,11 @@ describe("Tauri command contracts", () => {
       "overwrite",
       "rename",
       "unchanged",
+    ]);
+    expect(CONSISTENCY_REPAIR_ACTIONS).toEqual([
+      "remove_missing_registry_record",
+      "register_unregistered_content",
+      "delete_unregistered_content",
     ]);
   });
 
