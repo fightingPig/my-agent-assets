@@ -59,6 +59,19 @@ fn consistency_repair_apply(
 }
 
 #[tauri::command]
+fn diagnostic_export_preview(
+) -> Result<my_agent_assets_core::diagnostic_export::DiagnosticExportPreview, String> {
+    shared_core::diagnostic_export_preview_command()
+}
+
+#[tauri::command]
+fn diagnostic_export_apply(
+    input: my_agent_assets_core::diagnostic_export::DiagnosticExportApplyRequest,
+) -> Result<my_agent_assets_core::diagnostic_export::DiagnosticExportApplyResult, String> {
+    shared_core::diagnostic_export_apply_command(input)
+}
+
+#[tauri::command]
 fn initialization_preview(
 ) -> Result<my_agent_assets_core::initialization::InitializationPreview, String> {
     shared_core::initialization_preview_command()
@@ -295,6 +308,8 @@ pub fn run() {
             doctor_report,
             consistency_repair_preview,
             consistency_repair_apply,
+            diagnostic_export_preview,
+            diagnostic_export_apply,
             initialization_preview,
             initialization_apply,
             list_assets,

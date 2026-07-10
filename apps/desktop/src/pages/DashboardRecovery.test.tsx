@@ -10,6 +10,8 @@ const {
   doctorReport,
   consistencyRepairPreview,
   consistencyRepairApply,
+  diagnosticExportPreview,
+  diagnosticExportApply,
   initializationPreview,
   initializationApply,
 } = vi.hoisted(() => ({
@@ -20,6 +22,8 @@ const {
   doctorReport: vi.fn(),
   consistencyRepairPreview: vi.fn(),
   consistencyRepairApply: vi.fn(),
+  diagnosticExportPreview: vi.fn(),
+  diagnosticExportApply: vi.fn(),
   initializationPreview: vi.fn(),
   initializationApply: vi.fn(),
 }));
@@ -32,6 +36,8 @@ vi.mock("../app/data-api", () => ({
   doctorReport,
   consistencyRepairPreview,
   consistencyRepairApply,
+  diagnosticExportPreview,
+  diagnosticExportApply,
   initializationPreview,
   initializationApply,
 }));
@@ -207,6 +213,34 @@ describe("Dashboard recovery status", () => {
       previewId: "repair-1",
       previewGeneratedAtEpochSeconds: 100,
       request: { assetId: "skill:orphan", action: "register_unregistered_content" },
+    }));
+  });
+
+  it("exports only after a diagnostic package preview", async () => {
+    recoveryStatus.mockResolvedValue({ writesBlocked: false, journals: [], recentRecoveries: [], message: "没有未完成事务。" });
+    diagnosticExportPreview.mockResolvedValue({
+      previewId: "diagnostic-export-1",
+      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
+      includedFiles: [{ logicalPath: "status-summary.json", kind: "status_summary" }],
+      warnings: ["脱敏"],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
+    });
+    diagnosticExportApply.mockResolvedValue({
+      previewId: "diagnostic-export-1",
+      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
+      journalPath: "/tmp/home/.my-agent-assets/operations/diagnostic.yaml",
+    });
+
+    render(<DashboardPage appInfo={{ name: "My Agent Assets", version: "0.1.0", platform: "macos", arch: "aarch64", backendReady: true }} />);
+    fireEvent.click((await screen.findAllByRole("button", { name: "预览诊断包" })).at(-1)!);
+    await waitFor(() => expect(diagnosticExportPreview).toHaveBeenCalledTimes(1));
+    expect(diagnosticExportApply).not.toHaveBeenCalled();
+    fireEvent.click((await screen.findAllByRole("button", { name: "确认导出" })).at(-1)!);
+    await waitFor(() => expect(diagnosticExportApply).toHaveBeenCalledWith({
+      previewId: "diagnostic-export-1",
+      previewGeneratedAtEpochSeconds: 100,
     }));
   });
 });

@@ -68,6 +68,9 @@ import type {
   ConsistencyRepairPreview,
   ConsistencyRepairApplyRequest,
   ConsistencyRepairApplyResult,
+  DiagnosticExportPreview,
+  DiagnosticExportApplyRequest,
+  DiagnosticExportApplyResult,
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
@@ -261,6 +264,30 @@ export async function consistencyRepairApply(
     throw new Error("consistency_repair_apply returned an invalid response.");
   }
   return result as ConsistencyRepairApplyResult;
+}
+
+export async function diagnosticExportPreview(): Promise<DiagnosticExportPreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("diagnostic_export_preview requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("diagnostic_export_preview");
+  if (!isRecord(result) || typeof result.previewId !== "string" || !Array.isArray(result.includedFiles)) {
+    throw new Error("diagnostic_export_preview returned an invalid response.");
+  }
+  return result as DiagnosticExportPreview;
+}
+
+export async function diagnosticExportApply(
+  input: DiagnosticExportApplyRequest,
+): Promise<DiagnosticExportApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("diagnostic_export_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("diagnostic_export_apply", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || typeof result.packagePath !== "string") {
+    throw new Error("diagnostic_export_apply returned an invalid response.");
+  }
+  return result as DiagnosticExportApplyResult;
 }
 
 export async function initializationPreview(): Promise<InitializationPreview> {

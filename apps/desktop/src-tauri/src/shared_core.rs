@@ -27,6 +27,10 @@ use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteApplyResult, DeletePreview,
     DeletePreviewRequest,
 };
+use my_agent_assets_core::diagnostic_export::{
+    apply_diagnostic_export, preview_diagnostic_export, DiagnosticExportApplyRequest,
+    DiagnosticExportApplyResult, DiagnosticExportPreview,
+};
 use my_agent_assets_core::diagnostics::{doctor, DoctorReport};
 use my_agent_assets_core::discovery::{discover, DiscoveryResult, DiscoveryScope};
 use my_agent_assets_core::git_sync::{
@@ -91,6 +95,20 @@ pub fn consistency_repair_apply_command(
     let home = home_dir()
         .ok_or_else(|| "HOME is unavailable; consistency repair apply blocked.".to_string())?;
     apply_consistency_repair(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn diagnostic_export_preview_command() -> Result<DiagnosticExportPreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; diagnostic export preview skipped.".to_string())?;
+    preview_diagnostic_export(&home).map_err(|error| error.to_string())
+}
+
+pub fn diagnostic_export_apply_command(
+    input: DiagnosticExportApplyRequest,
+) -> Result<DiagnosticExportApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; diagnostic export blocked.".to_string())?;
+    apply_diagnostic_export(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn initialization_apply_command(

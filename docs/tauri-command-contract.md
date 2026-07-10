@@ -311,6 +311,24 @@ After an applied Pull, `SyncApplyResult.contentDiagnostics` contains any
 newly-detected mismatch and the result warnings direct the user to Doctor; Pull
 never repairs, overwrites, or registers content itself.
 
+### `diagnostic_export_preview` / `diagnostic_export_apply`
+
+- **Purpose:** Preview and create one local, redacted diagnostic package.
+- **Preview input:** None.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds }`.
+- **Output:** `DiagnosticExportPreview` / `DiagnosticExportApplyResult`.
+- **Side effect:** Read-only preview / explicit local write under
+  `logs/diagnostics/`.
+- **Consumer:** Dashboard diagnostic-export panel and `maa doctor export`.
+- **Status:** Implemented in shared core and registered.
+
+The Preview lists the logical source categories before any package is created.
+The package is an allowlisted JSON document containing only schema-valid,
+redacted operation audit entries, core version/platform metadata, and a
+path-free Doctor summary. It excludes canonical assets, live configs, backup
+content, settings, runtime files, paths, MCP values, environment/header values,
+and Git credentials. A log or registry change invalidates the Preview.
+
 ### `preview_restore`
 
 - **Status:** Historical contract only; not registered.

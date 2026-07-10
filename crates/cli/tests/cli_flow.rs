@@ -138,6 +138,24 @@ fn doctor_consistency_repair_is_preview_bound_and_only_repairs_selected_mismatch
 }
 
 #[test]
+fn doctor_diagnostic_export_is_preview_bound_and_does_not_export_runtime_content() {
+    let home = TestHome::new();
+    success(&home.path, &["init", "--apply"]);
+    home.write(
+        ".claude/skills/private/SKILL.md",
+        "secret runtime content\n",
+    );
+    let preview = json_output(&home.path, &["doctor", "export"]);
+    let package = preview["packagePath"].as_str().unwrap();
+    assert!(!Path::new(package).exists());
+    let result = json_output(&home.path, &["doctor", "export", "--apply"]);
+    let text = fs::read_to_string(result["packagePath"].as_str().unwrap()).unwrap();
+    assert!(text.contains("schemaVersion"));
+    assert!(!text.contains("secret runtime content"));
+    assert!(!text.contains(".claude/skills/private"));
+}
+
+#[test]
 fn shared_core_cli_flow_uses_source_and_target_ids() {
     let home = TestHome::new();
     home.write(".claude/skills/review/SKILL.md", "# Review\n");

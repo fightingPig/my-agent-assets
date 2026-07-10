@@ -281,6 +281,34 @@ export type ConsistencyRepairApplyResult = {
   journalPath: string;
 };
 
+export type DiagnosticExportFileKind = "audit_log" | "status_summary" | "version_metadata";
+
+export type DiagnosticExportFile = {
+  logicalPath: string;
+  kind: DiagnosticExportFileKind;
+};
+
+export type DiagnosticExportPreview = {
+  previewId: string;
+  packagePath: string;
+  includedFiles: DiagnosticExportFile[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type DiagnosticExportApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+};
+
+export type DiagnosticExportApplyResult = {
+  previewId: string;
+  packagePath: string;
+  journalPath: string;
+};
+
 export type InitializationPreview = {
   previewId: string;
   assetCenterPath: string;

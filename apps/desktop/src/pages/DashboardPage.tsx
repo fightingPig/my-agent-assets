@@ -15,6 +15,8 @@ import {
   doctorReport,
   consistencyRepairApply,
   consistencyRepairPreview,
+  diagnosticExportApply,
+  diagnosticExportPreview,
   initializationApply,
   initializationPreview,
   listAssets,
@@ -27,6 +29,7 @@ import type {
   ConsistencyRepairAction,
   ConsistencyRepairPreview,
   DoctorReport,
+  DiagnosticExportPreview,
   GitStatus,
   InitializationPreview,
   ProjectSummary,
@@ -85,6 +88,9 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
   const [repairPreview, setRepairPreview] = useState<ConsistencyRepairPreview | null>(null);
   const [repairMessage, setRepairMessage] = useState("");
   const [repairBusy, setRepairBusy] = useState(false);
+  const [diagnosticExport, setDiagnosticExport] = useState<DiagnosticExportPreview | null>(null);
+  const [diagnosticExportMessage, setDiagnosticExportMessage] = useState("");
+  const [diagnosticExportBusy, setDiagnosticExportBusy] = useState(false);
   const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
   const [showInitializationPreview, setShowInitializationPreview] = useState(false);
   const [initializationMessage, setInitializationMessage] = useState("");
@@ -197,6 +203,36 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       setRepairMessage(`一致性修复失败：${errorMessage(error)}`);
     } finally {
       setRepairBusy(false);
+    }
+  };
+
+  const handleDiagnosticExportPreview = async () => {
+    setDiagnosticExportBusy(true);
+    setDiagnosticExportMessage("");
+    try {
+      setDiagnosticExport(await diagnosticExportPreview());
+    } catch (error) {
+      setDiagnosticExportMessage(`诊断包预览失败：${errorMessage(error)}`);
+    } finally {
+      setDiagnosticExportBusy(false);
+    }
+  };
+
+  const handleDiagnosticExportApply = async () => {
+    if (!diagnosticExport?.canApply) return;
+    setDiagnosticExportBusy(true);
+    setDiagnosticExportMessage("");
+    try {
+      const result = await diagnosticExportApply({
+        previewId: diagnosticExport.previewId,
+        previewGeneratedAtEpochSeconds: diagnosticExport.generatedAtEpochSeconds,
+      });
+      setDiagnosticExportMessage(`已导出脱敏诊断包：${result.packagePath}`);
+      setDiagnosticExport(null);
+    } catch (error) {
+      setDiagnosticExportMessage(`导出诊断包失败：${errorMessage(error)}`);
+    } finally {
+      setDiagnosticExportBusy(false);
     }
   };
 
@@ -411,6 +447,30 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
                 )}
               </div>
               {repairMessage && <p className="initialization-message">{repairMessage}</p>}
+            </section>
+          )}
+          {!demoMode && doctor && (
+            <section className="initialization-panel" aria-label="导出诊断包">
+              <div className="initialization-copy">
+                <Activity size={17} />
+                <div>
+                  <strong>导出诊断包</strong>
+                  <span>仅导出脱敏日志、版本/平台和状态摘要，不包含资产、live config、备份或用户配置。</span>
+                </div>
+              </div>
+              {!diagnosticExport ? (
+                <button className="asset-secondary-action" data-no-drag="true" disabled={diagnosticExportBusy} onClick={handleDiagnosticExportPreview} style={NO_DRAG_REGION_STYLE} type="button">{diagnosticExportBusy ? "正在检查…" : "预览诊断包"}</button>
+              ) : (
+                <div className="initialization-preview">
+                  <p>将导出 {diagnosticExport.includedFiles.length} 个逻辑文件：{diagnosticExport.includedFiles.map((file) => file.logicalPath).join("、") || "状态摘要"}</p>
+                  {diagnosticExport.warnings.map((warning) => <p className="initialization-warning" key={warning}>{warning}</p>)}
+                  <div className="initialization-actions">
+                    <button className="asset-secondary-action" data-no-drag="true" disabled={diagnosticExportBusy} onClick={() => setDiagnosticExport(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button>
+                    <button className="asset-business-action" data-no-drag="true" disabled={diagnosticExportBusy || !diagnosticExport.canApply} onClick={handleDiagnosticExportApply} style={NO_DRAG_REGION_STYLE} type="button">确认导出</button>
+                  </div>
+                </div>
+              )}
+              {diagnosticExportMessage && <p className="initialization-message">{diagnosticExportMessage}</p>}
             </section>
           )}
         </section>

@@ -1,3 +1,4 @@
+use crate::audit_log::{append_operation, AuditOutcome};
 use crate::mount::{copy_any, remove_path_if_present};
 use crate::path_safety::{guard_existing_path, guard_write_path};
 use crate::targets::load as load_targets;
@@ -199,6 +200,7 @@ pub struct RecoveryReport {
 }
 
 pub struct OperationJournal {
+    home: PathBuf,
     path: PathBuf,
     state: JournalFile,
 }
@@ -255,6 +257,7 @@ impl OperationJournal {
             )));
         }
         let mut journal = Self {
+            home: home.to_path_buf(),
             path,
             state: JournalFile {
                 schema_version: JOURNAL_SCHEMA_VERSION,
@@ -284,13 +287,25 @@ impl OperationJournal {
     pub fn mark_rollback_required(&mut self, message: impl Into<String>) -> Result<()> {
         self.state.status = JournalStatus::RollbackRequired;
         self.state.recovery_message = Some(message.into());
-        self.persist()
+        self.persist()?;
+        let _ = append_operation(
+            &self.home,
+            &self.state.operation_kind,
+            AuditOutcome::RollbackRequired,
+        );
+        Ok(())
     }
 
     pub fn complete(&mut self) -> Result<()> {
         self.state.status = JournalStatus::Completed;
         self.state.recovery_message = None;
-        self.persist()
+        self.persist()?;
+        let _ = append_operation(
+            &self.home,
+            &self.state.operation_kind,
+            AuditOutcome::Completed,
+        );
+        Ok(())
     }
 
     pub fn rollback_now(&mut self, home: &Path) -> Result<Vec<PathBuf>> {
@@ -305,6 +320,11 @@ impl OperationJournal {
         self.state.recovery_message = Some("automatic transaction rollback succeeded".into());
         self.state.recovered_at_epoch_seconds = Some(epoch_seconds());
         self.persist()?;
+        let _ = append_operation(
+            &self.home,
+            &self.state.operation_kind,
+            AuditOutcome::Recovered,
+        );
         Ok(affected)
     }
 
@@ -447,6 +467,7 @@ pub fn recover_incomplete(home: &Path) -> Result<RecoveryReport> {
     let mut attempts = Vec::new();
     for state in incomplete_journals(home)? {
         let mut journal = OperationJournal {
+            home: home.to_path_buf(),
             path: journal_path(home, &state.operation_id)?,
             state,
         };

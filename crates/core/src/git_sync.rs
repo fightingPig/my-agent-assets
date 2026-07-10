@@ -605,6 +605,12 @@ fn status_for_repository(repository: &Path, remote_name: &str) -> GitStatus {
     for line in porcelain.lines().filter(|line| line.len() >= 3) {
         let code = &line[..2];
         let path = normalize_status_path(line.get(2..).unwrap_or_default().trim_start());
+        // Local operation state is never part of the portable asset-center
+        // worktree. Older centers might predate the current .gitignore; do not
+        // let an audit log or recovery file incorrectly block sync.
+        if is_local_state_path(&path) {
+            continue;
+        }
         status.changed_files.push(path.clone());
         if code.contains('U') || matches!(code, "AA" | "DD") {
             status.conflicts.push(path.clone());
@@ -647,6 +653,22 @@ fn is_sync_path(path: &str) -> bool {
         || path.starts_with("assets/")
         || path == "backups/portable"
         || path.starts_with("backups/portable/")
+}
+
+fn is_local_state_path(path: &str) -> bool {
+    [
+        "config.yaml",
+        "targets.yaml",
+        "mounts.yaml",
+        "backups/local/",
+        "operations/",
+        "locks/",
+        "cache/",
+        "logs/",
+        "secrets/",
+    ]
+    .iter()
+    .any(|prefix| path == prefix.trim_end_matches('/') || path.starts_with(prefix))
 }
 
 fn normalize_status_path(value: &str) -> String {
@@ -1053,7 +1075,7 @@ mod tests {
         .unwrap();
         fs::write(
             repository.join(".gitignore"),
-            "config.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\n",
+            "config.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\nlogs/\n",
         )
         .unwrap();
         run(&repository, &["add", "assets", "assets.yaml", ".gitignore"]);
@@ -1087,6 +1109,9 @@ mod tests {
         assert!(valid_branch_name("feature/assets"));
         assert!(!valid_branch_name("-unsafe"));
         assert!(!valid_branch_name("feature..unsafe"));
+        assert!(is_local_state_path("logs/operations-1.jsonl"));
+        assert!(is_local_state_path("operations/recovery.yaml"));
+        assert!(!is_local_state_path("assets/skills/review/SKILL.md"));
     }
 
     #[test]
@@ -1181,7 +1206,7 @@ mod tests {
         .unwrap();
         fs::write(
             repository.join(".gitignore"),
-            "backups/local/\ncache/\nlocks/\noperations/\n",
+            "backups/local/\ncache/\nlocks/\noperations/\nlogs/\n",
         )
         .unwrap();
 

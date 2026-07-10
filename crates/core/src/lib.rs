@@ -1,11 +1,13 @@
 pub mod adopt;
 pub mod asset_access;
 pub mod asset_registry;
+pub mod audit_log;
 pub mod backup_delete;
 pub mod backup_history;
 pub mod batch_import;
 pub mod consistency_repair;
 pub mod delete;
+pub mod diagnostic_export;
 pub mod diagnostics;
 pub mod discovery;
 pub mod fingerprint;

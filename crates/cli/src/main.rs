@@ -14,6 +14,9 @@ use my_agent_assets_core::consistency_repair::{
 use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
 };
+use my_agent_assets_core::diagnostic_export::{
+    apply_diagnostic_export, preview_diagnostic_export, DiagnosticExportApplyRequest,
+};
 use my_agent_assets_core::diagnostics::doctor;
 use my_agent_assets_core::discovery::{discover, DiscoveryScope, SourceFormat};
 use my_agent_assets_core::git_sync::{
@@ -406,6 +409,24 @@ fn handle_doctor(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()>
         return print_json(&doctor(home));
     }
     match next_arg(args, "doctor operation")?.as_str() {
+        "export" => {
+            let preview = preview_diagnostic_export(home)?;
+            if apply {
+                print_json(&apply_diagnostic_export(
+                    home,
+                    &DiagnosticExportApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                    },
+                )?)
+            } else {
+                print_json(&preview)?;
+                println!(
+                    "Run the same command with --apply to export the reviewed diagnostic package."
+                );
+                Ok(())
+            }
+        }
         "repair" => {
             let action = match next_arg(args, "repair action")?.as_str() {
                 "remove-missing" => ConsistencyRepairAction::RemoveMissingRegistryRecord,
@@ -439,7 +460,7 @@ fn handle_doctor(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()>
             }
         }
         operation => Err(MaaError::new(format!(
-            "unknown doctor operation: {operation}; expected repair"
+            "unknown doctor operation: {operation}; expected export or repair"
         ))),
     }
 }
@@ -615,7 +636,7 @@ fn print_command_help(command: &str) {
             "Usage:\n  maa backup list\n  maa backup delete <entry-id> [--apply]\nBackup deletion is preview-bound and does not restore historical files."
         ),
         "doctor" => println!(
-            "Usage:\n  maa doctor\n  maa doctor repair remove-missing|register-unregistered|delete-unregistered <asset-id> [--apply]\nConsistency repairs are preview-bound high-risk writes."
+            "Usage:\n  maa doctor\n  maa doctor export [--apply]\n  maa doctor repair remove-missing|register-unregistered|delete-unregistered <asset-id> [--apply]\nDiagnostic export and consistency repairs are preview-bound writes."
         ),
         _ => print_help(),
     }

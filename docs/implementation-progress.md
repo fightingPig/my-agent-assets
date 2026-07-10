@@ -85,6 +85,14 @@ Implemented:
   content stays diagnostic-only and all applies use the operation lock,
   fingerprint revalidation, transaction snapshot, atomic registry write, and
   automatic interruption rollback
+- added local redacted audit logging at the operation-journal boundary; entries
+  contain only operation type, outcome, and timestamp, use the Settings log
+  retention value, and never contain paths, assets contents, MCP values,
+  credentials, errors, or backup payloads
+- implemented Preview-bound diagnostic export in `logs/diagnostics/`; the
+  package allowlists only schema-valid audit entries, version/platform metadata,
+  and path-free status summary, while excluding assets, live configs, backups,
+  settings, runtime files, and user configuration
 - implemented sourceId-based canonical Import preview/apply with five-minute expiry, source/registry/content fingerprints, explicit skip/overwrite/rename, rollback, and Git-portable backups
 - canonical Import supports Claude/Codex Skills, Claude Commands, Claude JSON MCP, and Codex TOML MCP without modifying source live configs
 - MCP overwrite marks existing local bindings `outOfSync` without reverse-synchronizing live configs

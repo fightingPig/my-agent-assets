@@ -163,6 +163,27 @@ describe("read-only desktop data api", () => {
     });
 
     invoke.mockResolvedValueOnce({
+      previewId: "diagnostic-export-1",
+      includedFiles: [],
+    });
+    await api.diagnosticExportPreview();
+    expect(invoke).toHaveBeenLastCalledWith("diagnostic_export_preview");
+
+    const diagnosticApply = {
+      previewId: "diagnostic-export-1",
+      previewGeneratedAtEpochSeconds: 100,
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "diagnostic-export-1",
+      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
+      journalPath: "/tmp/home/.my-agent-assets/operations/export.yaml",
+    });
+    await api.diagnosticExportApply(diagnosticApply);
+    expect(invoke).toHaveBeenLastCalledWith("diagnostic_export_apply", {
+      input: diagnosticApply,
+    });
+
+    invoke.mockResolvedValueOnce({
       previewId: "init-1",
       assetCenterPath: "/tmp/home/.my-agent-assets",
       plannedPaths: [],

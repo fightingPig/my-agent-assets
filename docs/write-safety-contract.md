@@ -25,6 +25,7 @@ Implemented write commands cover:
 - Settings save
 - Backup delete
 - Doctor consistency repair
+- Diagnostic export
 
 They remain supported only while this contract is satisfied by code, tests, and fake HOME end-to-end verification.
 
@@ -50,6 +51,14 @@ content. Invalid content is diagnostic-only. It uses the same global lock,
 preview expiry and fingerprint revalidation, recoverable backup journal, and
 atomic registry writer as other destructive operations. No startup, scan, or
 Git Pull path may repair content automatically.
+
+Diagnostic export is preview-bound even though it does not alter canonical
+assets. Its generated package is local-only and lives below the ignored logs
+directory. The core serializes an explicit allowlist of audit metadata,
+version/platform information, and path-free status states; it must never copy
+arbitrary log lines, canonical assets, runtime/live config, backup data,
+settings, user files, MCP values, headers, environment values, credentials, or
+absolute paths. A changed audit log or registry invalidates its Preview.
 
 `mode` has two wire values:
 
