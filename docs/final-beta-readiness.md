@@ -67,11 +67,13 @@ Do not call the product V1 Stable until all of the following are true:
 
 Latest automated macOS package verification:
 
-- source commit: `436a59f` (`codex/final-product-v1`)
+- source commit: `6a6ef84` (`codex/final-product-v1`)
 - build command: `cd apps/desktop && npm run build`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `45ee846c6ec58113f59fc65d2b8042898db5c6bf2df28e17e6127db3180cc845`
+- DMG SHA-256: `f1984623a7e7d2181c8149ccba467590a386350afd6e4c6ce8c2b62b64af001e`
+- Fake HOME launch smoke: passed; the packaged binary started and left the
+  disposable HOME uninitialized
 - verification date: 2026-07-10
 
 This is automated package evidence only. It does not replace installation,
