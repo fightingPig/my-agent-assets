@@ -63,6 +63,11 @@ Do not call the product V1 Stable until all of the following are true:
 - Installing, upgrading, and uninstalling the app do not delete the asset
   center.
 
+The repository includes a Windows GitHub Actions workflow that produces unsigned
+MSI and NSIS **test packages**. Its artifacts are not code-signed and must not
+be labeled Stable; they exist to make the required Windows installation and
+runtime validation reproducible on a Windows runner.
+
 ## Current Package Evidence
 
 Latest automated macOS package verification:

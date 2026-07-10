@@ -241,6 +241,10 @@ Implemented:
 - produced and verified a current ad-hoc macOS package with `codesign --verify
   --deep --strict` and `hdiutil verify`; manual installed-app, upgrade,
   Gatekeeper, and accessibility acceptance remains explicitly outstanding
+- added a Windows GitHub Actions test-package workflow that validates the
+  renderer and creates unsigned MSI/NSIS artifacts for later Windows 10/11
+  installation, titlebar, DPI, junction/symlink, and runtime patch acceptance;
+  it is explicitly not a signed Stable release
 - corrected the write-safety contract so it no longer describes historical
   automatic Restore or legacy Desktop apply transports as current acceptance
   requirements
