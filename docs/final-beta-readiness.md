@@ -65,6 +65,19 @@ Do not call the product V1 Stable until all of the following are true:
 
 ## Current Package Evidence
 
+Latest automated macOS package verification:
+
+- source commit: `436a59f` (`codex/final-product-v1`)
+- build command: `cd apps/desktop && npm run build`
+- app signature: `codesign --verify --deep --strict` passed
+- DMG integrity: `hdiutil verify` passed
+- DMG SHA-256: `45ee846c6ec58113f59fc65d2b8042898db5c6bf2df28e17e6127db3180cc845`
+- verification date: 2026-07-10
+
+This is automated package evidence only. It does not replace installation,
+upgrade, launch, workflow, or accessibility manual acceptance on the exact
+candidate build.
+
 The current macOS artifact locations used by the existing test plan are:
 
 - `target/release/bundle/macos/My Agent Assets.app`

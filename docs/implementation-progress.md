@@ -238,6 +238,9 @@ Implemented:
   controlled macOS Beta requirements from cross-platform V1 Stable
   requirements, including the Windows-only installer, signing, DPI, path, and
   native-window checks
+- produced and verified a current ad-hoc macOS package with `codesign --verify
+  --deep --strict` and `hdiutil verify`; manual installed-app, upgrade,
+  Gatekeeper, and accessibility acceptance remains explicitly outstanding
 - corrected the write-safety contract so it no longer describes historical
   automatic Restore or legacy Desktop apply transports as current acceptance
   requirements
