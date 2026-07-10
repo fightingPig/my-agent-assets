@@ -15,6 +15,7 @@ const savedSettings: DesktopSettings = {
   scanRoots: ["~/workspace"],
   maxDepth: 4,
   backupBeforeApply: true,
+  backupWarningThresholdBytes: 1024 * 1024 * 1024,
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
@@ -82,6 +83,35 @@ describe("read-only desktop data api", () => {
     await api.revealBackupManifest({ entryId: "local:one" });
     expect(invoke).toHaveBeenLastCalledWith("reveal_backup_manifest", {
       input: { entryId: "local:one" },
+    });
+
+    invoke.mockResolvedValueOnce({
+      previewId: "backup-delete-1",
+      entryId: "local:one",
+      plannedEffects: ["permanently delete backup directory /tmp/backups/local/one"],
+      warnings: [],
+    });
+    await api.backupDeletePreview({ entryId: "local:one" });
+    expect(invoke).toHaveBeenLastCalledWith("backup_delete_preview", {
+      input: { entryId: "local:one" },
+    });
+
+    const deleteRequest = {
+      previewId: "backup-delete-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { entryId: "local:one" },
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "backup-delete-1",
+      entryId: "local:one",
+      deleted: true,
+      affectedPaths: ["/tmp/backups/local/one"],
+      warnings: [],
+      journalPath: "/tmp/operations/backup-delete.yaml",
+    });
+    await api.backupDeleteApply(deleteRequest);
+    expect(invoke).toHaveBeenLastCalledWith("backup_delete_apply", {
+      input: deleteRequest,
     });
 
     invoke.mockResolvedValueOnce({} satisfies Partial<GitStatus>);

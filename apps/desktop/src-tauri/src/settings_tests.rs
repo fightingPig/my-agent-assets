@@ -50,6 +50,7 @@ fn custom_settings(home: &Path) -> DesktopSettings {
         ],
         max_depth: 7,
         backup_before_apply: false,
+        backup_warning_threshold_bytes: 2 * 1024 * 1024 * 1024,
         plan_only_by_default: false,
         git_default_branch: "trunk".into(),
         git_remote: "upstream".into(),

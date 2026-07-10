@@ -120,6 +120,8 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | G-04 | Manifest reveal | Select a listed backup and reveal its manifest | Backend accepts only a listed entry ID and opens the manifest location without shell command strings | PASS |
 | G-05 | Manual restore guide | Open Backup History page | Page shows read-only affected paths and a manual restore procedure; no automatic Restore button or command exists | PASS |
 | G-06 | CLI restore boundary | Run `maa restore` | CLI rejects automatic historical Restore and points to Backup History/manual guide | PASS |
+| G-07 | Backup deletion preview/apply | Preview deletion of one fake-HOME backup in GUI or `maa backup delete`, then confirm | Selected backup is removed only after preview; stale preview and journal references are blocked | PASS |
+| G-08 | Backup capacity reminder | Load a configurable fake-HOME threshold and list oversized history | UI shows count, total size, oldest backup, and a manual-cleanup reminder; it never auto-deletes | PASS |
 
 ## Gate H: Settings And Git Sync
 

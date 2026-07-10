@@ -21,6 +21,7 @@ import {
   type SyncApplyInput,
   type SyncPreview,
   type BackupSummary,
+  type BackupDeletePreview,
 } from "./contracts";
 
 describe("Tauri command contracts", () => {
@@ -164,5 +165,26 @@ describe("Tauri command contracts", () => {
     expect(backup.manifestPath).toContain("manifest.json");
     expect(backup.affectedPaths).toHaveLength(1);
     expectTypeOf(backup).toMatchTypeOf<BackupSummary>();
+  });
+
+  it("binds backup deletion to an explicit preview without adding a Restore contract", () => {
+    const preview = {
+      previewId: "backup-delete-1",
+      entryId: "local:one",
+      backupId: "one",
+      class: "local",
+      backupPath: "~/.my-agent-assets/backups/local/one",
+      sizeBytes: 120,
+      entryCount: 1,
+      sensitiveConfigRisk: false,
+      plannedEffects: ["permanently delete backup directory"],
+      warnings: ["high risk"],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
+    } satisfies BackupDeletePreview;
+
+    expect(preview.previewId).toContain("backup-delete");
+    expectTypeOf(preview).toMatchTypeOf<BackupDeletePreview>();
   });
 });

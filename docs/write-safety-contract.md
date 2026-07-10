@@ -23,6 +23,7 @@ Implemented write commands cover:
 - Target Registry apply
 - Sync apply
 - Settings save
+- Backup delete
 
 They remain supported only while this contract is satisfied by code, tests, and fake HOME end-to-end verification.
 
@@ -96,6 +97,14 @@ Backup manifests must record:
 
 Backup history must expose enough information for the documented manual restore
 guide. The application does not expose an arbitrary historical Restore command.
+
+Backup deletion is a separate high-risk write: it accepts only a listed backup
+entry ID, requires a short-lived SHA-256-bound preview, and is blocked when an
+incomplete operation journal references the selected directory. It deletes only
+the selected backup directory. It never restores runtime content, and a
+transaction interruption rolls back the deletion through the operation journal.
+The desktop GUI and `maa backup delete <entry-id> [--apply]` call this same
+shared-core workflow.
 
 ## Write Algorithm
 

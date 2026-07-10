@@ -256,6 +256,45 @@ fn scan_is_read_only_sync_is_previewed_and_restore_is_disabled() {
 }
 
 #[test]
+fn backup_delete_is_preview_bound_and_never_restores_historical_files() {
+    let home = TestHome::new();
+    success(&home.path, &["init", "--apply"]);
+    home.write(
+        ".my-agent-assets/backups/local/removable/manifest.yaml",
+        "schemaVersion: 1\noperation: mount\ntarget: /tmp/runtime/.claude.json\n",
+    );
+    home.write(
+        ".my-agent-assets/backups/local/removable/content.json",
+        "{}",
+    );
+
+    let listed = success(&home.path, &["backup", "list"]);
+    assert!(listed.contains("local:removable"));
+
+    let preview = json_output(&home.path, &["backup", "delete", "local:removable"]);
+    assert_eq!(preview["entryId"], "local:removable");
+    assert_eq!(preview["canApply"], true);
+    assert!(preview["warnings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|warning| warning
+            .as_str()
+            .unwrap_or_default()
+            .contains("手动恢复材料")));
+
+    let applied = json_output(
+        &home.path,
+        &["backup", "delete", "local:removable", "--apply"],
+    );
+    assert_eq!(applied["deleted"], true);
+    assert!(!home
+        .path
+        .join(".my-agent-assets/backups/local/removable")
+        .exists());
+}
+
+#[test]
 fn cli_startup_recovers_an_interrupted_transaction_before_reading_status() {
     let home = TestHome::new();
     success(&home.path, &["init", "--apply"]);

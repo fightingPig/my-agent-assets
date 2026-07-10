@@ -78,6 +78,8 @@ paths, and resulting backup manifest paths with the acceptance record.
 | F-18 | Overwrite conflict | Apply overwrite | Existing canonical asset is backed up, then replaced |
 | F-19 | Backup History | Open Backup History after writes | Portable/local backups are listed with affected paths and manifest locations |
 | F-20 | Manual restore guide | Inspect Backup History guidance | No automatic Restore button exists; manual restore instructions are visible |
+| F-20a | Backup deletion | Preview deletion of one disposable backup, review warning, then confirm | Only the selected backup is removed; stale/journal-referenced backups remain blocked; no runtime file is restored or modified |
+| F-20b | Backup capacity reminder | Set a low local capacity reminder threshold and open Backup History | Count, total size, oldest backup, and manual-cleanup warning are visible; nothing is auto-deleted |
 | F-21 | Git sync | Use a disposable private/local remote and run preview/apply | Only sync whitelist paths are staged; Pull/Push obey safety checks |
 | F-22 | Restart persistence | Quit and relaunch the app | Assets, targets, mounts, settings, and backup history remain correct |
 | F-23 | No fake data | Inspect all production pages | Empty/error states or real data are shown; static demo fixtures are not default production data |

@@ -89,6 +89,20 @@ fn reveal_backup_manifest(input: BackupRevealInput) -> Result<BackupRevealResult
 }
 
 #[tauri::command]
+fn backup_delete_preview(
+    input: my_agent_assets_core::backup_delete::BackupDeletePreviewRequest,
+) -> Result<my_agent_assets_core::backup_delete::BackupDeletePreview, String> {
+    shared_core::backup_delete_preview_command(input)
+}
+
+#[tauri::command]
+fn backup_delete_apply(
+    input: my_agent_assets_core::backup_delete::BackupDeleteApplyRequest,
+) -> Result<my_agent_assets_core::backup_delete::BackupDeleteApplyResult, String> {
+    shared_core::backup_delete_apply_command(input)
+}
+
+#[tauri::command]
 fn preview_sync(
     input: my_agent_assets_core::git_sync::SyncPreviewRequest,
 ) -> Result<my_agent_assets_core::git_sync::SyncPreview, String> {
@@ -267,6 +281,8 @@ pub fn run() {
             list_projects,
             list_backups,
             reveal_backup_manifest,
+            backup_delete_preview,
+            backup_delete_apply,
             preview_sync,
             sync_apply,
             discover_runtime_sources,

@@ -5,6 +5,10 @@ import type {
   BackupSummary,
   BackupRevealInput,
   BackupRevealResult,
+  BackupDeletePreviewRequest,
+  BackupDeletePreview,
+  BackupDeleteApplyRequest,
+  BackupDeleteApplyResult,
   DesktopSettings,
   GitStatus,
   RecoveryStatus,
@@ -66,6 +70,7 @@ const fallbackSettings: DesktopSettings = {
   scanRoots: ["~/.claude", "~/workspace", "~/code"],
   maxDepth: 5,
   backupBeforeApply: true,
+  backupWarningThresholdBytes: 1024 * 1024 * 1024,
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
@@ -151,6 +156,45 @@ export async function revealBackupManifest(
     throw new Error("reveal_backup_manifest returned an invalid response.");
   }
   return result as BackupRevealResult;
+}
+
+export async function backupDeletePreview(
+  input: BackupDeletePreviewRequest,
+): Promise<BackupDeletePreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("backup_delete_preview requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("backup_delete_preview", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.entryId !== "string" ||
+    !Array.isArray(result.plannedEffects) ||
+    !Array.isArray(result.warnings)
+  ) {
+    throw new Error("backup_delete_preview returned an invalid response.");
+  }
+  return result as BackupDeletePreview;
+}
+
+export async function backupDeleteApply(
+  input: BackupDeleteApplyRequest,
+): Promise<BackupDeleteApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("backup_delete_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("backup_delete_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    typeof result.entryId !== "string" ||
+    typeof result.deleted !== "boolean" ||
+    !Array.isArray(result.affectedPaths) ||
+    !Array.isArray(result.warnings)
+  ) {
+    throw new Error("backup_delete_apply returned an invalid response.");
+  }
+  return result as BackupDeleteApplyResult;
 }
 
 export async function gitStatus(): Promise<GitStatus> {

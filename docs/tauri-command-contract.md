@@ -252,6 +252,24 @@ the result beneath `~/.my-agent-assets/backups`, and only then asks Finder,
 Explorer, or the Linux file manager to reveal it. Platform commands are invoked
 with argument arrays and never through a shell.
 
+### `backup_delete_preview` / `backup_delete_apply`
+
+- **Purpose:** Preview and permanently delete one listed portable, local, or
+  legacy backup directory.
+- **Preview input:** `BackupDeletePreviewRequest { entryId }`.
+- **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `BackupDeletePreview` / `BackupDeleteApplyResult`.
+- **Side effect:** Read-only preview / explicit local delete.
+- **Consumer:** Backup History.
+- **Status:** Implemented in shared core and registered.
+
+The preview resolves only a current, listed entry ID, fingerprints the complete
+backup directory and operation state, and highlights permanent loss of the
+manual restore material. An incomplete operation journal that references the
+backup blocks deletion. Apply takes the global operation lock, revalidates the
+preview, snapshots the selected directory for transaction recovery, and never
+restores historical runtime content through the product UI.
+
 ### `preview_restore`
 
 - **Status:** Historical contract only; not registered.

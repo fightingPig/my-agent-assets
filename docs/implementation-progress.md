@@ -231,6 +231,12 @@ Implemented:
   Tauri contract and aligned the historical execution plan with Backup History
 - fixed and verified a Windows-only shared-core compile path by checking
   `my-agent-assets-core` for `x86_64-pc-windows-msvc`
+- added preview-bound, journal-safe manual backup deletion: selected backup
+  directories can be deleted only after explicit confirmation, while stale
+  previews and incomplete journal references are blocked; Backup History now
+  shows total size, oldest backup, and a configurable 1 GiB default cleanup
+  reminder without automatic deletion; `maa backup list` and `maa backup
+  delete <entry-id> [--apply]` call the same shared-core workflow
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

@@ -132,6 +132,41 @@ export type BackupRevealResult = {
   manifestPath: string;
 };
 
+export type BackupDeletePreviewRequest = {
+  entryId: string;
+};
+
+export type BackupDeletePreview = {
+  previewId: string;
+  entryId: string;
+  backupId: string;
+  class: "portable" | "local" | "legacy";
+  backupPath: string;
+  sizeBytes: number;
+  entryCount: number;
+  sensitiveConfigRisk: boolean;
+  plannedEffects: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type BackupDeleteApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: BackupDeletePreviewRequest;
+};
+
+export type BackupDeleteApplyResult = {
+  previewId: string;
+  entryId: string;
+  deleted: boolean;
+  affectedPaths: string[];
+  warnings: string[];
+  journalPath: string;
+};
+
 export type ApplyResult = {
   mode: ApplyMode;
   ok: boolean;
@@ -225,6 +260,7 @@ export type DesktopSettings = {
   scanRoots: string[];
   maxDepth: number;
   backupBeforeApply: boolean;
+  backupWarningThresholdBytes: number;
   planOnlyByDefault: boolean;
   gitDefaultBranch: string;
   gitRemote: string;

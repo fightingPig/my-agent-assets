@@ -48,7 +48,7 @@ pub fn list_backups(home: &Path) -> Vec<BackupHistoryEntry> {
     entries
 }
 
-pub fn resolve_backup_manifest(home: &Path, entry_id: &str) -> Result<PathBuf> {
+pub fn resolve_backup_entry(home: &Path, entry_id: &str) -> Result<BackupHistoryEntry> {
     if entry_id.is_empty()
         || entry_id.contains('/')
         || entry_id.contains('\\')
@@ -72,7 +72,32 @@ pub fn resolve_backup_manifest(home: &Path, entry_id: &str) -> Result<PathBuf> {
     if !manifest.starts_with(&backup_root) {
         return Err(MaaError::new("backup manifest escapes the backup root"));
     }
-    Ok(manifest)
+    let directory = manifest
+        .parent()
+        .ok_or_else(|| MaaError::new("backup manifest has no parent directory"))?;
+    let metadata = fs::symlink_metadata(directory)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(MaaError::new("backup entry must be a real directory"));
+    }
+    if !directory.starts_with(&backup_root) {
+        return Err(MaaError::new("backup entry escapes the backup root"));
+    }
+    Ok(entry)
+}
+
+pub fn resolve_backup_manifest(home: &Path, entry_id: &str) -> Result<PathBuf> {
+    resolve_backup_entry(home, entry_id)?
+        .manifest_path
+        .canonicalize()
+        .map_err(Into::into)
+}
+
+pub fn resolve_backup_directory(home: &Path, entry_id: &str) -> Result<PathBuf> {
+    resolve_backup_entry(home, entry_id)?
+        .manifest_path
+        .parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| MaaError::new("backup manifest has no parent directory"))
 }
 
 fn scan_class(root: &Path, class: BackupClass, output: &mut Vec<BackupHistoryEntry>) {

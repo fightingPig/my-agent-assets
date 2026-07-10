@@ -29,6 +29,8 @@ const {
   listProjects,
   listBackups,
   revealBackupManifest,
+  backupDeletePreview,
+  backupDeleteApply,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -49,6 +51,8 @@ const {
   listProjects: vi.fn(),
   listBackups: vi.fn(),
   revealBackupManifest: vi.fn(),
+  backupDeletePreview: vi.fn(),
+  backupDeleteApply: vi.fn(),
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
   settingsSave: vi.fn(),
@@ -71,6 +75,8 @@ vi.mock("../app/data-api", () => ({
   listProjects,
   listBackups,
   revealBackupManifest,
+  backupDeletePreview,
+  backupDeleteApply,
   gitStatus,
   settingsLoad,
   settingsSave,
@@ -118,6 +124,29 @@ beforeEach(() => {
   } satisfies ProjectSummary]);
   revealBackupManifest.mockResolvedValue({
     manifestPath: "/tmp/backups/restore-20260627/manifest.json",
+  });
+  backupDeletePreview.mockResolvedValue({
+    previewId: "backup-delete:test",
+    entryId: "backup-20260621-1842",
+    backupId: "backup-20260621-1842",
+    class: "local",
+    backupPath: "/tmp/backups/local/backup-20260621-1842",
+    sizeBytes: 24 * 1024,
+    entryCount: 2,
+    sensitiveConfigRisk: false,
+    plannedEffects: ["permanently delete backup directory /tmp/backups/local/backup-20260621-1842"],
+    warnings: ["删除后将失去这份备份的手动恢复材料。"],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 700,
+  });
+  backupDeleteApply.mockResolvedValue({
+    previewId: "backup-delete:test",
+    entryId: "backup-20260621-1842",
+    deleted: true,
+    affectedPaths: ["/tmp/backups/local/backup-20260621-1842"],
+    warnings: [],
+    journalPath: "/tmp/operations/backup-delete.yaml",
   });
   listMountTargets.mockResolvedValue([
     {
@@ -332,6 +361,43 @@ describe("read-only UI integration", () => {
       entryId: "restore-20260627",
     }));
     expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
+  });
+
+  it("previews and confirms high-risk backup deletion without adding Restore", async () => {
+    render(<BackupRestorePage />);
+
+    await screen.findByRole("option", { name: "backup-20260621-1842" });
+    fireEvent.click(screen.getByRole("button", { name: "预览删除影响" }));
+    await waitFor(() => expect(backupDeletePreview).toHaveBeenCalledWith({
+      entryId: "backup-20260621-1842",
+    }));
+    expect(screen.getByText("删除计划")).toBeInTheDocument();
+    expect(screen.getByText(/手动恢复材料/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "确认永久删除" }));
+    await waitFor(() => expect(backupDeleteApply).toHaveBeenCalledWith({
+      previewId: "backup-delete:test",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { entryId: "backup-20260621-1842" },
+    }));
+    expect(screen.queryByRole("button", { name: /恢复/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the configurable backup capacity reminder without auto-cleanup", async () => {
+    settingsLoad.mockResolvedValue(settingsFixture({ backupWarningThresholdBytes: 1 }));
+    listBackups.mockResolvedValue([{
+      id: "local:oversized",
+      label: "Large local backup",
+      createdAtEpochSeconds: 100,
+      sizeBytes: 2048,
+      entryCount: 1,
+    }]);
+
+    render(<BackupRestorePage />);
+
+    expect(await screen.findByText("备份总量超过提醒阈值")).toBeInTheDocument();
+    expect(screen.getByText(/应用不会自动清理/)).toBeInTheDocument();
+    expect(screen.getByText(/最早：/)).toBeInTheDocument();
   });
 
   it("displays read-only GitStatus fields and keeps Pull and Push disabled", async () => {
@@ -932,6 +998,7 @@ function settingsFixture(overrides: Partial<DesktopSettings> = {}): DesktopSetti
     scanRoots: ["~/.claude", "~/workspace", "~/code"],
     maxDepth: 5,
     backupBeforeApply: true,
+    backupWarningThresholdBytes: 1024 * 1024 * 1024,
     planOnlyByDefault: true,
     gitDefaultBranch: "main",
     gitRemote: "origin",

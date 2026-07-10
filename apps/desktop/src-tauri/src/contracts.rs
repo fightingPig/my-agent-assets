@@ -384,6 +384,7 @@ pub struct DesktopSettings {
     pub scan_roots: Vec<String>,
     pub max_depth: u32,
     pub backup_before_apply: bool,
+    pub backup_warning_threshold_bytes: u64,
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,

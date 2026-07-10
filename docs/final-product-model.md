@@ -191,7 +191,7 @@ Machine-local state, logs, locks, journals, live-config backups, and target bind
 
 Local backups protect runtime writes on the current device. Portable backups contain canonical asset snapshots suitable for Git synchronization.
 
-The application provides backup history, file-location access, and a manual restore guide. It does not expose a general automatic Restore operation. Automatic rollback of an unfinished operation journal is transaction recovery, not user-facing historical restore.
+The application provides backup history, file-location access, and a manual restore guide. It does not expose a general automatic Restore operation. Users may preview and explicitly delete one selected backup; this is blocked for a backup referenced by an incomplete operation journal. Automatic rollback of an unfinished operation journal is transaction recovery, not user-facing historical restore.
 
 Canonical MCP files may contain sensitive values in this version. Remote Push is therefore blocked unless the configured GitHub repository is authenticated and verified as `PRIVATE` immediately before Push. The application does not provide GitHub login or OAuth.
 

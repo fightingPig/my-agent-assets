@@ -8,6 +8,10 @@ use my_agent_assets_core::asset_access::{
     load_canonical_asset_content, resolve_asset_open_target, AssetOpenAction, AssetOpenRequest,
     CanonicalAssetContent,
 };
+use my_agent_assets_core::backup_delete::{
+    apply_backup_delete, preview_backup_delete, BackupDeleteApplyRequest, BackupDeleteApplyResult,
+    BackupDeletePreview, BackupDeletePreviewRequest,
+};
 use my_agent_assets_core::backup_history::{
     list_backups, resolve_backup_manifest, BackupHistoryEntry,
 };
@@ -195,6 +199,22 @@ pub fn reveal_backup_manifest_command(
     Ok(BackupRevealResult {
         manifest_path: manifest.to_string_lossy().into_owned(),
     })
+}
+
+pub fn backup_delete_preview_command(
+    input: BackupDeletePreviewRequest,
+) -> Result<BackupDeletePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; backup deletion preview skipped.".to_string())?;
+    preview_backup_delete(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn backup_delete_apply_command(
+    input: BackupDeleteApplyRequest,
+) -> Result<BackupDeleteApplyResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; backup deletion apply blocked.".to_string())?;
+    apply_backup_delete(&home, &input).map_err(|error| error.to_string())
 }
 
 fn platform_reveal_command(path: &Path) -> Result<(OsString, Vec<OsString>), String> {

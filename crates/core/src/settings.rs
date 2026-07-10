@@ -10,6 +10,9 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const SETTINGS_SCHEMA_VERSION: u32 = 1;
+pub const DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024 * 1024;
+const MIN_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024;
+const MAX_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppearanceTheme {
@@ -52,6 +55,7 @@ pub struct Settings {
     pub scan_roots: Vec<String>,
     pub max_depth: u32,
     pub backup_before_apply: bool,
+    pub backup_warning_threshold_bytes: u64,
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,
@@ -73,6 +77,7 @@ impl Settings {
             ],
             max_depth: 5,
             backup_before_apply: true,
+            backup_warning_threshold_bytes: DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES,
             plan_only_by_default: true,
             git_default_branch: "main".into(),
             git_remote: "origin".into(),
@@ -152,6 +157,8 @@ struct SettingsFile {
     scan_roots: Vec<String>,
     max_depth: u32,
     backup_before_apply: bool,
+    #[serde(default = "default_backup_warning_threshold_bytes")]
+    backup_warning_threshold_bytes: u64,
     plan_only_by_default: bool,
     git_default_branch: String,
     git_remote: String,
@@ -282,6 +289,7 @@ impl SettingsFile {
             scan_roots: settings.scan_roots.clone(),
             max_depth: settings.max_depth,
             backup_before_apply: settings.backup_before_apply,
+            backup_warning_threshold_bytes: settings.backup_warning_threshold_bytes,
             plan_only_by_default: settings.plan_only_by_default,
             git_default_branch: settings.git_default_branch.clone(),
             git_remote: settings.git_remote.clone(),
@@ -299,6 +307,7 @@ impl SettingsFile {
             scan_roots: self.scan_roots,
             max_depth: self.max_depth,
             backup_before_apply: self.backup_before_apply,
+            backup_warning_threshold_bytes: self.backup_warning_threshold_bytes,
             plan_only_by_default: self.plan_only_by_default,
             git_default_branch: self.git_default_branch,
             git_remote: self.git_remote,
@@ -319,12 +328,20 @@ fn normalize_settings(home: &Path, mut settings: Settings) -> Settings {
         settings.scan_roots = defaults.scan_roots;
     }
     settings.max_depth = settings.max_depth.clamp(1, 20);
+    settings.backup_warning_threshold_bytes = settings.backup_warning_threshold_bytes.clamp(
+        MIN_BACKUP_WARNING_THRESHOLD_BYTES,
+        MAX_BACKUP_WARNING_THRESHOLD_BYTES,
+    );
     settings.log_retention_days = settings.log_retention_days.clamp(1, 365);
     settings.git_default_branch =
         non_empty_or_default(settings.git_default_branch, defaults.git_default_branch);
     settings.git_remote = non_empty_or_default(settings.git_remote, defaults.git_remote);
     settings.cli_path = non_empty_or_default(settings.cli_path, defaults.cli_path);
     settings
+}
+
+fn default_backup_warning_threshold_bytes() -> u64 {
+    DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES
 }
 
 fn normalize_scan_roots(home: &Path, roots: Vec<String>) -> Vec<String> {
@@ -493,6 +510,7 @@ mod tests {
             String::new(),
         ];
         settings.max_depth = 99;
+        settings.backup_warning_threshold_bytes = 0;
         settings.log_retention_days = 0;
         settings.git_default_branch = " ".into();
         settings.git_remote = " upstream ".into();
@@ -506,6 +524,10 @@ mod tests {
             display_path(&home.join(".my-agent-assets"))
         );
         assert_eq!(saved.max_depth, 20);
+        assert_eq!(
+            saved.backup_warning_threshold_bytes,
+            MIN_BACKUP_WARNING_THRESHOLD_BYTES
+        );
         assert_eq!(saved.log_retention_days, 1);
         assert_eq!(saved.git_default_branch, "main");
         assert_eq!(saved.git_remote, "upstream");
@@ -515,6 +537,26 @@ mod tests {
         assert!(!text.contains("assetCenterPath"));
         assert!(!text.contains("ignored-asset-center"));
         assert!(!text.contains(".tmp-"));
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn old_config_without_backup_threshold_uses_the_default() {
+        let home = fake_home("legacy-threshold");
+        let path = settings_path(&home);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            "schemaVersion: 1\nscanRoots: []\nmaxDepth: 5\nbackupBeforeApply: true\nplanOnlyByDefault: true\ngitDefaultBranch: main\ngitRemote: origin\nappearanceTheme: system\ndensity: compact\nlogLevel: info\nlogRetentionDays: 14\ncliPath: maa\n",
+        )
+        .unwrap();
+
+        let settings = load(&home).unwrap();
+
+        assert_eq!(
+            settings.backup_warning_threshold_bytes,
+            DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES
+        );
         fs::remove_dir_all(home).unwrap();
     }
 

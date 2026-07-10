@@ -2,6 +2,11 @@ use my_agent_assets_core::adopt::{
     apply_adopt, preview_adopt, AdoptApplyRequest, AdoptPreviewRequest, AdoptSelection,
 };
 use my_agent_assets_core::asset_registry::{inspect_content, load as load_assets};
+use my_agent_assets_core::backup_delete::{
+    apply_backup_delete, preview_backup_delete, BackupDeleteApplyRequest,
+    BackupDeletePreviewRequest,
+};
+use my_agent_assets_core::backup_history::list_backups;
 use my_agent_assets_core::delete::{
     apply_delete, preview_delete, DeleteApplyRequest, DeleteMode, DeletePreviewRequest,
 };
@@ -158,6 +163,7 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
             }
         }
         "target" => handle_target(&home, &mut args, apply)?,
+        "backup" => handle_backup(&home, &mut args, apply)?,
         "mount" => {
             let request = MountPreviewRequest {
                 asset_id: next_arg(&mut args, "asset ID")?,
@@ -360,6 +366,39 @@ fn handle_target(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()>
     }
 }
 
+fn handle_backup(home: &Path, args: &mut Vec<String>, apply: bool) -> Result<()> {
+    match next_arg(args, "backup operation")?.as_str() {
+        "list" => {
+            reject_apply(apply, "backup list is read-only")?;
+            print_json(&list_backups(home))
+        }
+        "delete" => {
+            let request = BackupDeletePreviewRequest {
+                entry_id: next_arg(args, "backup entry ID")?,
+            };
+            let preview = preview_backup_delete(home, &request)?;
+            if apply {
+                ensure_can_apply(preview.can_apply, &preview.warnings)?;
+                print_json(&apply_backup_delete(
+                    home,
+                    &BackupDeleteApplyRequest {
+                        preview_id: preview.preview_id.clone(),
+                        preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                        request,
+                    },
+                )?)
+            } else {
+                print_json(&preview)?;
+                println!("Run the same command with --apply to permanently delete this backup.");
+                Ok(())
+            }
+        }
+        operation => Err(MaaError::new(format!(
+            "unknown backup operation: {operation}; expected list or delete"
+        ))),
+    }
+}
+
 fn parse_discovery_scope(home: &Path, args: &mut Vec<String>) -> Result<DiscoveryScope> {
     let scope = take_option(args, "--scope").unwrap_or_else(|| "user".into());
     match scope.as_str() {
@@ -505,7 +544,7 @@ fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
 Usage:\n  maa [--home <home>] <command> [options]\n\n\
-Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  list\n  status\n  doctor\n  sync pull|push [--apply]\n\n\
+Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  backup list\n  backup delete <entry-id> [--apply]\n  list\n  status\n  doctor\n  sync pull|push [--apply]\n\n\
 Scope options:\n  --scope user\n  --scope project --project <path>\n  --scope custom --path <path> --type skill|command|mcp \\\n    --format skill-directory|markdown|claude-mcp-json|codex-mcp-toml\n\n\
 Conflict resolution:\n  --resolution unresolved|skip|overwrite|rename [--rename-to <name>]\n\n\
 Writes always show a preview unless --apply is explicitly supplied. Push requires a live GitHub Private visibility check. Automatic historical Restore is disabled.\n"
@@ -526,6 +565,9 @@ fn print_command_help(command: &str) {
         "mount" => println!("Usage: maa mount <asset-id> --target <target-id> [--apply]"),
         "target" => println!(
             "Usage:\n  maa target list\n  maa target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  maa target remove <target-id> [--apply]"
+        ),
+        "backup" => println!(
+            "Usage:\n  maa backup list\n  maa backup delete <entry-id> [--apply]\nBackup deletion is preview-bound and does not restore historical files."
         ),
         _ => print_help(),
     }

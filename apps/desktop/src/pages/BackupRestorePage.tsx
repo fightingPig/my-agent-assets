@@ -1,14 +1,22 @@
 import { AlertTriangle, Archive, BookOpenCheck, FileJson, FolderKanban, FolderOpen, History } from "lucide-react";
 import { useEffect, useState } from "react";
-import { listBackups, revealBackupManifest } from "../app/data-api";
-import type { BackupSummary } from "../app/contracts";
+import {
+  backupDeleteApply,
+  backupDeletePreview,
+  listBackups,
+  revealBackupManifest,
+  settingsLoad,
+} from "../app/data-api";
+import type { BackupDeletePreview, BackupSummary } from "../app/contracts";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type BackupItem = {
   id: string;
   title: string;
   created: string;
+  createdAtEpochSeconds: number | null;
   size: string;
+  sizeBytes: number;
   entryCount: number;
   manifestPath: string;
   runtimeRoot: string;
@@ -24,7 +32,9 @@ const staticBackups: readonly BackupItem[] = [
     id: "backup-20260621-1842",
     title: "扫描导入前",
     created: "今天 18:42",
+    createdAtEpochSeconds: null,
     size: "24 KB",
+    sizeBytes: 24 * 1024,
     entryCount: 3,
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260621-1842/manifest.json",
     runtimeRoot: "~",
@@ -38,7 +48,9 @@ const staticBackups: readonly BackupItem[] = [
     id: "backup-20260620-0915",
     title: "挂载变更前",
     created: "昨天 09:15",
+    createdAtEpochSeconds: null,
     size: "18 KB",
+    sizeBytes: 18 * 1024,
     entryCount: 2,
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json",
     runtimeRoot: "~",
@@ -52,7 +64,9 @@ const staticBackups: readonly BackupItem[] = [
     id: "backup-20260618-1630",
     title: "资产移除前",
     created: "3 天前",
+    createdAtEpochSeconds: null,
     size: "8 KB",
+    sizeBytes: 8 * 1024,
     entryCount: 1,
     manifestPath: "~/.my-agent-assets/backups/local/backup-20260618-1630/manifest.json",
     runtimeRoot: "~",
@@ -69,8 +83,17 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
   const [selectedId, setSelectedId] = useState(demoMode ? staticBackups[0].id : "");
   const [listState, setListState] = useState("读取中");
   const [revealState, setRevealState] = useState("");
+  const [deletePreview, setDeletePreview] = useState<BackupDeletePreview | null>(null);
+  const [deleteState, setDeleteState] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [warningThresholdBytes, setWarningThresholdBytes] = useState(1024 * 1024 * 1024);
   const selected = backups.find((backup) => backup.id === selectedId) ?? backups[0];
-  const totalSize = backups.reduce((sum, backup) => sum + parseDisplayBytes(backup.size), 0);
+  const totalSize = backups.reduce((sum, backup) => sum + backup.sizeBytes, 0);
+  const oldest = backups
+    .filter((backup) => backup.createdAtEpochSeconds !== null)
+    .sort((left, right) => (left.createdAtEpochSeconds ?? 0) - (right.createdAtEpochSeconds ?? 0))[0];
+  const overCapacity = totalSize >= warningThresholdBytes;
 
   useEffect(() => {
     let cancelled = false;
@@ -78,12 +101,16 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
       setBackups(staticBackups);
       setSelectedId(staticBackups[0].id);
       setListState("Visual QA 示例数据");
+      setDeletePreview(null);
+      setDeleteState("");
       return undefined;
     }
 
     setBackups([]);
     setSelectedId("");
     setListState("读取中");
+    setDeletePreview(null);
+    setDeleteState("");
     listBackups()
       .then((loaded) => {
         if (cancelled) return;
@@ -104,6 +131,26 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
     return () => {
       cancelled = true;
     };
+  }, [demoMode, refreshKey]);
+
+  useEffect(() => {
+    if (demoMode) {
+      setWarningThresholdBytes(1024 * 1024 * 1024);
+      return;
+    }
+    let cancelled = false;
+    settingsLoad()
+      .then((settings) => {
+        if (!cancelled && Number.isFinite(settings.backupWarningThresholdBytes)) {
+          setWarningThresholdBytes(settings.backupWarningThresholdBytes);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setWarningThresholdBytes(1024 * 1024 * 1024);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [demoMode]);
 
   const handleRevealManifest = async () => {
@@ -117,6 +164,42 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
     }
   };
 
+  const handlePreviewDelete = async () => {
+    if (!selected || demoMode) return;
+    setDeleteBusy(true);
+    setDeleteState("正在生成删除影响预览…");
+    try {
+      const preview = await backupDeletePreview({ entryId: selected.id });
+      setDeletePreview(preview);
+      setDeleteState(preview.canApply ? "删除计划已生成，请确认高风险影响。" : "删除计划被安全检查阻止。");
+    } catch (error) {
+      setDeletePreview(null);
+      setDeleteState(`无法生成删除计划：${errorMessage(error)}`);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const handleApplyDelete = async () => {
+    if (!deletePreview?.canApply || !selected || demoMode) return;
+    setDeleteBusy(true);
+    setDeleteState("正在永久删除选中的备份…");
+    try {
+      const result = await backupDeleteApply({
+        previewId: deletePreview.previewId,
+        previewGeneratedAtEpochSeconds: deletePreview.generatedAtEpochSeconds,
+        request: { entryId: selected.id },
+      });
+      setDeletePreview(null);
+      setDeleteState(result.warnings[0] ?? "选中的备份已删除。");
+      setRefreshKey((current) => current + 1);
+    } catch (error) {
+      setDeleteState(`删除失败：${errorMessage(error)}`);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <div className="master-detail-workspace backup-workspace">
       <section className="panel master-list-panel">
@@ -125,8 +208,14 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
             <h3>备份历史</h3>
             <p>Portable / Local backup manifest · {listState}</p>
           </div>
-          <span>{backups.length} 份 · {formatBytes(totalSize)}</span>
+          <span>{backups.length} 份 · {formatBytes(totalSize)} · 最早：{oldest?.created ?? "暂无"}</span>
         </div>
+        {overCapacity ? (
+          <div className="operation-warning">
+            <AlertTriangle size={17} />
+            <div><strong>备份总量超过提醒阈值</strong><span>当前 {formatBytes(totalSize)}，阈值 {formatBytes(warningThresholdBytes)}。请人工检查并删除不再需要的备份；应用不会自动清理。</span></div>
+          </div>
+        ) : null}
         <div className="master-select-list" role="listbox" aria-label="备份选择">
           {backups.map((backup) => (
             <button
@@ -135,7 +224,11 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
               className={selectedId === backup.id ? "selected" : ""}
               data-no-drag="true"
               key={backup.id}
-              onClick={() => setSelectedId(backup.id)}
+              onClick={() => {
+                setSelectedId(backup.id);
+                setDeletePreview(null);
+                setDeleteState("");
+              }}
               role="option"
               style={NO_DRAG_REGION_STYLE}
               type="button"
@@ -185,6 +278,51 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
               ) : null}
             </div>
             {revealState ? <p className="backup-reveal-state" role="status">{revealState}</p> : null}
+
+            {!demoMode ? (
+              <section className="backup-delete-panel">
+                <div className="operation-warning">
+                  <AlertTriangle size={17} />
+                  <div>
+                    <strong>删除这份备份</strong>
+                    <span>会永久移除 manifest 和备份内容，应用内没有自动 Restore。请先查看受影响路径和手动恢复说明。</span>
+                  </div>
+                </div>
+                <div className="operation-actions">
+                  <button
+                    className="asset-secondary-action"
+                    data-no-drag="true"
+                    disabled={deleteBusy}
+                    onClick={handlePreviewDelete}
+                    style={NO_DRAG_REGION_STYLE}
+                    type="button"
+                  >
+                    预览删除影响
+                  </button>
+                  {deletePreview ? (
+                    <button
+                      className="asset-business-action danger-action"
+                      data-no-drag="true"
+                      disabled={deleteBusy || !deletePreview.canApply}
+                      onClick={handleApplyDelete}
+                      style={NO_DRAG_REGION_STYLE}
+                      type="button"
+                    >
+                      确认永久删除
+                    </button>
+                  ) : null}
+                </div>
+                {deletePreview ? (
+                  <div className={`backup-delete-preview ${deletePreview.canApply ? "" : "blocked"}`}>
+                    <strong>{deletePreview.canApply ? "删除计划" : "删除已阻止"}</strong>
+                    <span>{deletePreview.backupPath} · {formatBytes(deletePreview.sizeBytes)} · {deletePreview.entryCount} 项</span>
+                    {deletePreview.plannedEffects.map((effect) => <p key={effect}>{effect}</p>)}
+                    {deletePreview.warnings.map((warning) => <p className="warning-text" key={warning}>提示：{warning}</p>)}
+                  </div>
+                ) : null}
+                {deleteState ? <p className="backup-reveal-state" role="status">{deleteState}</p> : null}
+              </section>
+            ) : null}
 
             <section className="affected-paths">
               <h4>记录的文件路径</h4>
@@ -250,7 +388,9 @@ function toBackupItem(backup: BackupSummary): BackupItem {
     id: backup.id,
     title: backup.label,
     created,
+    createdAtEpochSeconds: backup.createdAtEpochSeconds ?? null,
     size: formatBytes(backup.sizeBytes),
+    sizeBytes: backup.sizeBytes,
     entryCount: backup.entryCount,
     manifestPath: backup.manifestPath ?? `~/.my-agent-assets/backups/${backup.id}/manifest.json`,
     runtimeRoot: backup.runtimeRoot ?? "请查看 manifest",
@@ -266,12 +406,4 @@ function formatBytes(sizeBytes: number) {
   if (sizeBytes >= 1024 * 1024) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
   if (sizeBytes >= 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
   return `${sizeBytes} B`;
-}
-
-function parseDisplayBytes(value: string) {
-  const amount = Number.parseFloat(value);
-  if (!Number.isFinite(amount)) return 0;
-  if (value.endsWith("MB")) return amount * 1024 * 1024;
-  if (value.endsWith("KB")) return amount * 1024;
-  return amount;
 }

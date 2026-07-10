@@ -1376,6 +1376,48 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.backup-delete-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.backup-delete-panel .operation-actions {
+  justify-content: flex-end;
+}
+
+.backup-delete-preview {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--subtle-border);
+  padding: 10px 12px;
+  background: #fff9f5;
+  font-size: 11px;
+}
+
+.backup-delete-preview.blocked {
+  border-color: #e6a46a;
+  background: #fff3ec;
+}
+
+.backup-delete-preview > span {
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+
+.backup-delete-preview p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.danger-action {
+  background: #b83232;
+}
+
+.danger-action:hover:not(:disabled) {
+  background: #982828;
+}
+
 .manual-restore-steps {
   display: grid;
   gap: 7px;
