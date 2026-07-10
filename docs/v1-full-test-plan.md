@@ -123,6 +123,16 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | G-07 | Backup deletion preview/apply | Preview deletion of one fake-HOME backup in GUI or `maa backup delete`, then confirm | Selected backup is removed only after preview; stale preview and journal references are blocked | PASS |
 | G-08 | Backup capacity reminder | Load a configurable fake-HOME threshold and list oversized history | UI shows count, total size, oldest backup, and a manual-cleanup reminder; it never auto-deletes | PASS |
 
+## Gate G1: Diagnostics And Local Audit Logs
+
+| ID | Test | Procedure | Expected | Status |
+| --- | --- | --- | --- | --- |
+| G1-01 | Redacted operation log | Complete a fake-HOME transaction and read its audit entry | Entry contains only operation type, outcome, and timestamp; no paths, MCP values, credentials, errors, or user content | PASS |
+| G1-02 | Log retention | Add an expired regular log file and append a new entry | Expired log is removed according to the configured retention window; unrelated files and symlinks are not followed | PASS |
+| G1-03 | Diagnostic export Preview | Run `maa doctor export` or Dashboard Preview | No package is written; logical source categories are shown before confirmation | PASS |
+| G1-04 | Diagnostic export apply | Confirm export in fake HOME | Package contains only allowlisted metadata, redacted entries, and path-free status; runtime/canonical/backup/settings content is excluded | PASS |
+| G1-05 | Export stale binding | Change logs or registry after Preview then apply | Apply is rejected and writes no package | PASS |
+
 ## Gate H: Settings And Git Sync
 
 | ID | Test | Procedure | Expected | Status |

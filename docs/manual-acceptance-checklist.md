@@ -84,6 +84,7 @@ paths, and resulting backup manifest paths with the acceptance record.
 | F-22 | Restart persistence | Quit and relaunch the app | Assets, targets, mounts, settings, and backup history remain correct |
 | F-23 | No fake data | Inspect all production pages | Empty/error states or real data are shown; static demo fixtures are not default production data |
 | F-24 | No invalid buttons | Inspect all write-capable pages | No clickable no-op business buttons are shown; writes use preview plus ordinary confirmation |
+| F-25 | Diagnostic export | In Dashboard, preview then confirm a diagnostic export | Preview lists only logs/status/version categories; exported package has no asset content, live config, backup, settings, credentials, or absolute runtime paths |
 
 ## Windows Stable Checklist
 
