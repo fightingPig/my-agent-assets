@@ -5,6 +5,7 @@ import { DashboardPage } from "./DashboardPage";
 const {
   listAssets,
   listProjects,
+  listAuditLog,
   gitStatus,
   recoveryStatus,
   doctorReport,
@@ -17,6 +18,7 @@ const {
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   listProjects: vi.fn(),
+  listAuditLog: vi.fn(),
   gitStatus: vi.fn(),
   recoveryStatus: vi.fn(),
   doctorReport: vi.fn(),
@@ -31,6 +33,7 @@ const {
 vi.mock("../app/data-api", () => ({
   listAssets,
   listProjects,
+  listAuditLog,
   gitStatus,
   recoveryStatus,
   doctorReport,
@@ -47,6 +50,7 @@ describe("Dashboard recovery status", () => {
     vi.clearAllMocks();
     listAssets.mockResolvedValue([]);
     listProjects.mockResolvedValue([]);
+    listAuditLog.mockResolvedValue([]);
     gitStatus.mockResolvedValue({
       repositoryPath: "/tmp/home/.my-agent-assets",
       isRepository: true,
@@ -108,6 +112,32 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText("事务恢复")).toBeInTheDocument();
     expect(screen.getByText("写入已阻止")).toBeInTheDocument();
     expect(screen.getByText(/检测到 1 个未完成事务/)).toBeInTheDocument();
+  });
+
+  it("shows redacted local audit entries as recent activity", async () => {
+    recoveryStatus.mockResolvedValue({
+      writesBlocked: false,
+      journals: [],
+      recentRecoveries: [],
+      message: "没有未完成事务。",
+    });
+    listAuditLog.mockResolvedValue([{
+      schemaVersion: 1,
+      occurredAtEpochSeconds: 1_700_000_000,
+      operationType: "mcp_save",
+      outcome: "completed",
+    }]);
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect(await screen.findByText("保存 MCP")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
   });
 
   it("requires preview and explicit confirmation before initialization apply", async () => {

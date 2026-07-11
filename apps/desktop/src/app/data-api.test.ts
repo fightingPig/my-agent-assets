@@ -126,6 +126,10 @@ describe("read-only desktop data api", () => {
     await api.recoveryStatus();
     expect(invoke).toHaveBeenLastCalledWith("recovery_status");
 
+    invoke.mockResolvedValueOnce([]);
+    await api.listAuditLog();
+    expect(invoke).toHaveBeenLastCalledWith("list_audit_log");
+
     invoke.mockResolvedValueOnce({
       assetCenterPath: "/tmp/home/.my-agent-assets",
       initialized: true,

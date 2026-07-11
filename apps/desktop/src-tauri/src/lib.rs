@@ -40,6 +40,11 @@ fn recovery_status() -> Result<my_agent_assets_core::operation::RecoveryStatus, 
 }
 
 #[tauri::command]
+fn list_audit_log() -> Result<Vec<my_agent_assets_core::audit_log::AuditLogEntry>, String> {
+    shared_core::list_audit_log_command()
+}
+
+#[tauri::command]
 fn doctor_report() -> Result<my_agent_assets_core::diagnostics::DoctorReport, String> {
     shared_core::doctor_report_command()
 }
@@ -305,6 +310,7 @@ pub fn run() {
             settings_save,
             git_status,
             recovery_status,
+            list_audit_log,
             doctor_report,
             consistency_repair_preview,
             consistency_repair_apply,

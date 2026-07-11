@@ -219,6 +219,15 @@ export type RecoveryStatus = {
   message: string;
 };
 
+export type AuditOutcome = "completed" | "rollback_required" | "recovered";
+
+export type AuditLogEntry = {
+  schemaVersion: number;
+  occurredAtEpochSeconds: number;
+  operationType: string;
+  outcome: AuditOutcome;
+};
+
 export type CanonicalContentState = "ready" | "missing_content" | "unregistered" | "invalid_content";
 
 export type ContentDiagnostic = {

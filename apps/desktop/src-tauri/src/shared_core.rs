@@ -8,6 +8,7 @@ use my_agent_assets_core::asset_access::{
     load_canonical_asset_content, resolve_asset_open_target, AssetOpenAction, AssetOpenRequest,
     CanonicalAssetContent,
 };
+use my_agent_assets_core::audit_log::{read_audit_entries, AuditLogEntry};
 use my_agent_assets_core::backup_delete::{
     apply_backup_delete, preview_backup_delete, BackupDeleteApplyRequest, BackupDeleteApplyResult,
     BackupDeletePreview, BackupDeletePreviewRequest,
@@ -74,6 +75,12 @@ pub fn initialization_preview_command() -> Result<InitializationPreview, String>
     let home = home_dir()
         .ok_or_else(|| "HOME is unavailable; initialization preview skipped.".to_string())?;
     preview_initialization(&home).map_err(|error| error.to_string())
+}
+
+pub fn list_audit_log_command() -> Result<Vec<AuditLogEntry>, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; audit log lookup skipped.".to_string())?;
+    read_audit_entries(&home).map_err(|error| error.to_string())
 }
 
 pub fn doctor_report_command() -> Result<DoctorReport, String> {

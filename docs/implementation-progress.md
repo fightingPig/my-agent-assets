@@ -89,6 +89,9 @@ Implemented:
   contain only operation type, outcome, and timestamp, use the Settings log
   retention value, and never contain paths, assets contents, MCP values,
   credentials, errors, or backup payloads
+- connected the Dashboard recent-activity panel to the same read-only,
+  redacted audit-log transport; the production UI now shows operation/outcome/
+  timestamp only and keeps the existing empty state when no local activity exists
 - implemented Preview-bound diagnostic export in `logs/diagnostics/`; the
   package allowlists only schema-valid audit entries, version/platform metadata,
   and path-free status summary, while excluding assets, live configs, backups,

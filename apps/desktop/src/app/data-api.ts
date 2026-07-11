@@ -63,6 +63,7 @@ import type {
   CanonicalAssetContent,
   AssetOpenInput,
   AssetOpenResult,
+  AuditLogEntry,
   DoctorReport,
   ConsistencyRepairPreviewRequest,
   ConsistencyRepairPreview,
@@ -224,6 +225,11 @@ export async function recoveryStatus(): Promise<RecoveryStatus> {
     Array.isArray(status.recentRecoveries)
     ? status as RecoveryStatus
     : fallback;
+}
+
+export async function listAuditLog(): Promise<AuditLogEntry[]> {
+  const entries = await invokeRead<unknown>("list_audit_log", undefined, []);
+  return Array.isArray(entries) ? entries as AuditLogEntry[] : [];
 }
 
 export async function doctorReport(): Promise<DoctorReport> {

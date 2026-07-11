@@ -19,12 +19,14 @@ import {
   diagnosticExportPreview,
   initializationApply,
   initializationPreview,
+  listAuditLog,
   listAssets,
   listProjects,
   recoveryStatus,
 } from "../app/data-api";
 import type {
   AppInfo,
+  AuditLogEntry,
   AssetSummary,
   ConsistencyRepairAction,
   ConsistencyRepairPreview,
@@ -84,6 +86,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
   const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
+  const [auditEntries, setAuditEntries] = useState<readonly AuditLogEntry[]>([]);
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
   const [repairPreview, setRepairPreview] = useState<ConsistencyRepairPreview | null>(null);
   const [repairMessage, setRepairMessage] = useState("");
@@ -111,15 +114,17 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       listProjects(),
       gitStatus(),
       recoveryStatus(),
+      listAuditLog(),
       initializationPreview(),
       doctorReport(),
     ])
-      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedInitialization, loadedDoctor]) => {
+      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedAuditEntries, loadedInitialization, loadedDoctor]) => {
         if (cancelled) return;
         setAssets(loadedAssets);
         setProjects(loadedProjects);
         setRepository(loadedRepository);
         setRecovery(loadedRecovery);
+        setAuditEntries(loadedAuditEntries);
         setInitialization(loadedInitialization);
         setDoctor(loadedDoctor);
         setStateLabel("只读真实数据");
@@ -130,6 +135,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         setProjects([]);
         setRepository(emptyGitStatus);
         setRecovery(healthyRecoveryStatus);
+        setAuditEntries([]);
         setInitialization(null);
         setDoctor(null);
         setStateLabel(`读取失败：${errorMessage(error)}`);
@@ -245,6 +251,15 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       assets: project.assetCounts.total,
       state: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : "正常",
     }));
+  const recentActivities = demoMode
+    ? demoRecentActivity
+    : auditEntries.slice(-5).reverse().map((entry) => ({
+      title: auditOperationLabel(entry.operationType),
+      meta: auditOutcomeLabel(entry.outcome),
+      time: formatAuditTime(entry.occurredAtEpochSeconds),
+      icon: entry.outcome === "completed" ? CircleCheck : AlertTriangle,
+      tone: entry.outcome === "completed" ? "green" : "amber",
+    }));
   const systemChecks = demoMode ? demoSystemChecks : [
     {
       label: "资产中心",
@@ -295,7 +310,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         <section className="panel activity-panel">
           <div className="panel-header"><div><h2>最近活动</h2><p>资产中心的最新变更</p></div></div>
           <div className="activity-list">
-            {(demoMode ? demoRecentActivity : []).map((item) => {
+            {recentActivities.map((item) => {
               const Icon = item.icon;
               return (
                 <div className="activity-item" key={item.title}>
@@ -305,7 +320,7 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
                 </div>
               );
             })}
-            {!demoMode && (
+            {!demoMode && recentActivities.length === 0 && (
               <div className="asset-empty-state">
                 <Activity size={22} />
                 <strong>暂无活动记录</strong>
@@ -477,6 +492,40 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       </div>
     </>
   );
+}
+
+function auditOperationLabel(operation: string) {
+  const labels: Record<string, string> = {
+    import: "导入资产",
+    batch_import: "批量导入资产",
+    adopt: "导入并接管资产",
+    mount: "挂载资产",
+    unmount: "解除挂载",
+    delete_asset: "删除资产",
+    mcp_save: "保存 MCP",
+    settings_save: "保存设置",
+    git_sync: "Git 同步",
+    target_add: "添加目标",
+    target_remove: "移除目标",
+    backup_delete: "删除备份",
+    consistency_repair: "修复资产一致性",
+    diagnostic_export: "导出诊断包",
+  };
+  return labels[operation] ?? "本地资产操作";
+}
+
+function auditOutcomeLabel(outcome: AuditLogEntry["outcome"]) {
+  return outcome === "completed" ? "已完成" : outcome === "recovered" ? "已恢复" : "需要恢复";
+}
+
+function formatAuditTime(epochSeconds: number) {
+  if (!Number.isFinite(epochSeconds) || epochSeconds <= 0) return "刚刚";
+  return new Date(epochSeconds * 1000).toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function realStats(assets: readonly AssetSummary[], projects: readonly ProjectSummary[]): DashboardStat[] {
