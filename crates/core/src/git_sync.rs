@@ -3,7 +3,7 @@ use crate::asset_registry::{
 };
 use crate::mount::copy_any;
 use crate::operation::{GitRefRecovery, OperationJournal, OperationLock, RecoveryTarget};
-use crate::path_safety::guard_existing_path;
+use crate::path_safety::{guard_existing_path, is_link_or_junction};
 use crate::settings;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -717,7 +717,7 @@ fn fingerprint_path(path: &Path, hash: &mut Sha256) -> Result<()> {
         hash.update(b"missing");
         return Ok(());
     };
-    if metadata.file_type().is_symlink() {
+    if is_link_or_junction(&metadata) {
         hash.update(b"symlink");
         hash.update(fs::read_link(path)?.to_string_lossy().as_bytes());
     } else if metadata.is_file() {

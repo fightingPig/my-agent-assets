@@ -263,6 +263,16 @@ Implemented:
   Tauri contract and aligned the historical execution plan with Backup History
 - fixed and verified a Windows-only shared-core compile path by checking
   `my-agent-assets-core` for `x86_64-pc-windows-msvc`
+- hardened Windows junction handling across safety-sensitive paths: junction
+  reparse points are treated as links by path guards, mounts, discovery,
+  backup history, audit logs, fingerprints, imports, initialization, and Git
+  sync; removal uses a non-recursive junction removal path so it never follows
+  into canonical content
+- added a Windows-only junction regression test and expanded the Windows
+  package workflow to run shared-core and desktop Rust tests before packaging
+- aligned the Tauri macOS private-API feature allowlist with the cross-platform
+  base configuration so Windows builds no longer fail feature/config validation
+  before reaching the native Windows resource toolchain
 - added preview-bound, journal-safe manual backup deletion: selected backup
   directories can be deleted only after explicit confirmation, while stale
   previews and incomplete journal references are blocked; Backup History now

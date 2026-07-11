@@ -10,7 +10,7 @@ use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
-use crate::path_safety::{guard_write_path, validate_single_path_component};
+use crate::path_safety::{guard_write_path, is_link_or_junction, validate_single_path_component};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -478,7 +478,7 @@ fn copy_directory(source: &Path, destination: &Path) -> Result<()> {
         let entry = entry?;
         let source_path = entry.path();
         let metadata = fs::symlink_metadata(&source_path)?;
-        if metadata.file_type().is_symlink() {
+        if is_link_or_junction(&metadata) {
             return Err(MaaError::new(format!(
                 "nested symlink is not allowed in imported Skill: {}",
                 source_path.display()

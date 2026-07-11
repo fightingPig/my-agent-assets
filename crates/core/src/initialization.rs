@@ -1,6 +1,7 @@
 use crate::asset_registry::{self, AssetRegistry};
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::{self, MountRegistry};
+use crate::path_safety::is_link_or_junction;
 use crate::settings::{self, Settings};
 use crate::targets::{self, MountAdapter, ProviderState, TargetRegistry};
 use crate::{MaaError, Result};
@@ -227,7 +228,7 @@ fn build_staging(home: &Path, staging: &Path) -> Result<()> {
 
 fn validate_existing(home: &Path, root: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(root)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+    if is_link_or_junction(&metadata) || !metadata.is_dir() {
         return Err(MaaError::new("asset center path must be a real directory"));
     }
     for relative in REQUIRED_DIRECTORIES {
@@ -238,7 +239,7 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
                 path.display()
             ))
         })?;
-        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        if is_link_or_junction(&metadata) || !metadata.is_dir() {
             return Err(MaaError::new(format!(
                 "required path is not a real directory: {}",
                 path.display()
@@ -250,7 +251,7 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
         let metadata = fs::symlink_metadata(&path).map_err(|error| {
             MaaError::new(format!("missing required file {}: {error}", path.display()))
         })?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
+        if is_link_or_junction(&metadata) || !metadata.is_file() {
             return Err(MaaError::new(format!(
                 "required path is not a real file: {}",
                 path.display()
@@ -304,7 +305,7 @@ fn git_error(error: std::io::Error) -> MaaError {
 
 fn validate_home(home: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(home)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+    if is_link_or_junction(&metadata) || !metadata.is_dir() {
         return Err(MaaError::new("HOME must be an existing real directory"));
     }
     Ok(())

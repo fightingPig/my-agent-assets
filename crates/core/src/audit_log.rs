@@ -4,7 +4,7 @@
 //! credentials, backup contents, or backend error text. The log is useful for
 //! support timelines without becoming another copy of user configuration.
 
-use crate::path_safety::guard_write_path;
+use crate::path_safety::{guard_write_path, is_link_or_junction};
 use crate::settings;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -72,7 +72,7 @@ pub fn list_log_files(home: &Path) -> Result<Vec<PathBuf>> {
     for entry in fs::read_dir(&directory)? {
         let entry = entry?;
         let path = entry.path();
-        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+        if is_link_or_junction(&fs::symlink_metadata(&path)?) {
             continue;
         }
         if log_epoch_day(&path).is_some() {
@@ -122,7 +122,7 @@ fn list_directory_logs(directory: &Path) -> Result<Vec<PathBuf>> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
-        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+        if is_link_or_junction(&fs::symlink_metadata(&path)?) {
             continue;
         }
         if log_epoch_day(&path).is_some() {

@@ -2,6 +2,27 @@ use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 
+/// Treat Windows junctions as links for every safety-sensitive operation.
+/// `FileType::is_symlink` alone does not consistently identify directory
+/// junction reparse points on Windows.
+pub fn is_link_or_junction(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 pub fn display_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -99,7 +120,7 @@ fn reject_symlink_components(root: &Path, candidate: &Path) -> io::Result<()> {
         )));
     }
     if fs::symlink_metadata(root)
-        .map(|metadata| metadata.file_type().is_symlink())
+        .map(|metadata| is_link_or_junction(&metadata))
         .unwrap_or(false)
     {
         return Err(permission_denied(format!(
@@ -116,7 +137,7 @@ fn reject_symlink_components(root: &Path, candidate: &Path) -> io::Result<()> {
     {
         current.push(component.as_os_str());
         match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
+            Ok(metadata) if is_link_or_junction(&metadata) => {
                 return Err(permission_denied(format!(
                     "Symlink traversal is forbidden for safety-sensitive path: {}",
                     display_path(&current)

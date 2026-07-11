@@ -11,7 +11,7 @@ use crate::mount_registry::{
     MountBinding,
 };
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
-use crate::path_safety::guard_write_path;
+use crate::path_safety::{guard_write_path, is_link_or_junction};
 use crate::targets::{load as load_targets, MountAdapter, MountTarget, MountTargetKind};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -876,7 +876,7 @@ fn link_points_to(path: &Path, canonical: &Path) -> Result<bool> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error.into()),
     };
-    if !metadata.file_type().is_symlink() {
+    if !is_link_or_junction(&metadata) {
         return Ok(false);
     }
     let link = fs::read_link(path)?;
@@ -904,7 +904,7 @@ pub(crate) fn snapshot_runtime_path(path: &Path) -> Result<RuntimeSnapshot> {
         }
         Err(error) => return Err(error.into()),
     };
-    if metadata.file_type().is_symlink() {
+    if is_link_or_junction(&metadata) {
         Ok(RuntimeSnapshot::Symlink(fs::read_link(path)?))
     } else if metadata.is_file() {
         Ok(RuntimeSnapshot::File(fs::read(path)?))
@@ -1041,7 +1041,7 @@ fn unmount_fingerprint(
 
 pub(crate) fn copy_any(source: &Path, destination: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(source)?;
-    if metadata.file_type().is_symlink() {
+    if is_link_or_junction(&metadata) {
         let link = fs::read_link(source)?;
         if link.is_dir() {
             create_directory_link(&link, destination, MountAdapter::SymlinkDirectory)
@@ -1074,10 +1074,29 @@ pub(crate) fn remove_path_if_present(path: &Path) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error.into()),
     };
-    if metadata.file_type().is_symlink() || metadata.is_file() {
+    if is_link_or_junction(&metadata) {
+        remove_link_or_junction(path, &metadata)?;
+    } else if metadata.is_file() {
         fs::remove_file(path)?;
     } else {
         fs::remove_dir_all(path)?;
+    }
+    Ok(())
+}
+
+fn remove_link_or_junction(path: &Path, metadata: &fs::Metadata) -> Result<()> {
+    #[cfg(windows)]
+    {
+        if metadata.is_dir() {
+            fs::remove_dir(path)?;
+        } else {
+            fs::remove_file(path)?;
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = metadata;
+        fs::remove_file(path)?;
     }
     Ok(())
 }
@@ -1452,5 +1471,34 @@ mod tests {
             name,
             &serde_json::to_string_pretty(&canonical).unwrap(),
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_directory_junction_is_verified_and_removed_without_following_it() {
+        let root = std::env::temp_dir().join(format!(
+            "maa-windows-junction-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let canonical = root.join("canonical");
+        let junction = root.join("runtime-link");
+        fs::create_dir_all(&canonical).unwrap();
+        fs::write(canonical.join("SKILL.md"), "# Review").unwrap();
+
+        create_directory_link(
+            &canonical,
+            &junction,
+            MountAdapter::WindowsDirectoryJunction,
+        )
+        .unwrap();
+        assert!(link_points_to(&junction, &canonical).unwrap());
+
+        remove_path_if_present(&junction).unwrap();
+        assert!(fs::symlink_metadata(&junction).is_err());
+        assert!(canonical.join("SKILL.md").exists());
+        let _ = fs::remove_dir_all(root);
     }
 }

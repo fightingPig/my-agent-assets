@@ -1,3 +1,4 @@
+use crate::path_safety::is_link_or_junction;
 use crate::Result;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -58,7 +59,7 @@ impl PreviewFingerprint {
 
     fn add_path_content(&mut self, path: &Path) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
-        if metadata.file_type().is_symlink() {
+        if is_link_or_junction(&metadata) {
             self.add_bytes("path-kind", b"symlink");
             self.add_bytes(
                 "symlink-target",

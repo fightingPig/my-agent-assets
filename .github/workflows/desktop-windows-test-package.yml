@@ -43,6 +43,12 @@ jobs:
           npm run typecheck
           npm test -- --run
 
+      - name: Run Windows shared-core regression tests
+        working-directory: ${{ github.workspace }}
+        run: |
+          cargo test -p my-agent-assets-core
+          cargo test -p my-agent-assets-desktop
+
       - name: Build unsigned Windows test installers
         run: npm run tauri -- build --bundles msi,nsis
 
@@ -55,4 +61,3 @@ jobs:
             target/release/bundle/msi/*.msi
             target/release/bundle/nsis/*.exe
           retention-days: 14
-

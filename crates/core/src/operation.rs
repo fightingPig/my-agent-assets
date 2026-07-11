@@ -1,6 +1,6 @@
 use crate::audit_log::{append_operation, AuditOutcome};
 use crate::mount::{copy_any, remove_path_if_present};
-use crate::path_safety::{guard_existing_path, guard_write_path};
+use crate::path_safety::{guard_existing_path, guard_write_path, is_link_or_junction};
 use crate::targets::load as load_targets;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -914,7 +914,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 
 fn sync_path(path: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() {
+    if is_link_or_junction(&metadata) {
         return sync_parent(path);
     }
     if metadata.is_file() {

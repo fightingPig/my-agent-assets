@@ -3,7 +3,7 @@ use crate::discovery::{discover, DiscoveryScope};
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, BindingStatus, MountRegistry,
 };
-use crate::path_safety::{display_path, expand_tilde};
+use crate::path_safety::{display_path, expand_tilde, is_link_or_junction};
 use crate::settings;
 use crate::targets::{
     load as load_targets, registry_path as target_registry_path, AssetKind, TargetRegistry,
@@ -290,7 +290,7 @@ fn should_skip(path: &Path) -> bool {
 
 fn is_symlink(path: &Path) -> bool {
     fs::symlink_metadata(path)
-        .map(|metadata| metadata.file_type().is_symlink())
+        .map(|metadata| is_link_or_junction(&metadata))
         .unwrap_or(false)
 }
 

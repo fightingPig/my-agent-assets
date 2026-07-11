@@ -1,3 +1,4 @@
+use crate::path_safety::is_link_or_junction;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value as YamlValue;
@@ -64,7 +65,7 @@ pub fn resolve_backup_entry(home: &Path, entry_id: &str) -> Result<BackupHistory
         .find(|entry| entry.id == entry_id)
         .ok_or_else(|| MaaError::new(format!("backup history entry not found: {entry_id}")))?;
     let metadata = fs::symlink_metadata(&entry.manifest_path)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
+    if is_link_or_junction(&metadata) || !metadata.is_file() {
         return Err(MaaError::new("backup manifest must be a real file"));
     }
     let backup_root = home.join(".my-agent-assets/backups").canonicalize()?;
@@ -76,7 +77,7 @@ pub fn resolve_backup_entry(home: &Path, entry_id: &str) -> Result<BackupHistory
         .parent()
         .ok_or_else(|| MaaError::new("backup manifest has no parent directory"))?;
     let metadata = fs::symlink_metadata(directory)?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+    if is_link_or_junction(&metadata) || !metadata.is_dir() {
         return Err(MaaError::new("backup entry must be a real directory"));
     }
     if !directory.starts_with(&backup_root) {
@@ -109,7 +110,7 @@ fn scan_class(root: &Path, class: BackupClass, output: &mut Vec<BackupHistoryEnt
         let Ok(metadata) = fs::symlink_metadata(&path) else {
             continue;
         };
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        if !metadata.is_dir() || is_link_or_junction(&metadata) {
             continue;
         }
         let manifest = path.join("manifest.yaml");
@@ -132,7 +133,7 @@ fn scan_legacy_root(root: &Path, output: &mut Vec<BackupHistoryEntry>) {
         let Ok(metadata) = fs::symlink_metadata(&path) else {
             continue;
         };
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        if !metadata.is_dir() || is_link_or_junction(&metadata) {
             continue;
         }
         let manifest = path.join("manifest.json");
@@ -144,7 +145,7 @@ fn scan_legacy_root(root: &Path, output: &mut Vec<BackupHistoryEntry>) {
 
 fn is_real_file(path: &Path) -> bool {
     fs::symlink_metadata(path)
-        .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        .is_ok_and(|metadata| metadata.is_file() && !is_link_or_junction(&metadata))
 }
 
 fn read_yaml_entry(backup_root: &Path, manifest: &Path, class: BackupClass) -> BackupHistoryEntry {
@@ -316,7 +317,7 @@ fn directory_size(path: &Path) -> u64 {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return 0;
     };
-    if metadata.file_type().is_symlink() {
+    if is_link_or_junction(&metadata) {
         return 0;
     }
     if metadata.is_file() {

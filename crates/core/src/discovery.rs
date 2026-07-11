@@ -1,4 +1,4 @@
-use crate::path_safety::{expand_tilde, validate_single_path_component};
+use crate::path_safety::{expand_tilde, is_link_or_junction, validate_single_path_component};
 pub use crate::targets::{AssetKind, RuntimeProvider};
 use crate::{
     mcp::{import_claude_server, import_codex_server, CanonicalMcp},
@@ -591,7 +591,7 @@ fn read_dir_optional(directory: &Path, result: &mut DiscoveryResult) -> Option<V
 
 fn link_metadata(path: &Path, warnings: &mut Vec<String>) -> (bool, Option<PathBuf>) {
     match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => match fs::read_link(path) {
+        Ok(metadata) if is_link_or_junction(&metadata) => match fs::read_link(path) {
             Ok(target) => {
                 let target = if target.is_absolute() {
                     target
