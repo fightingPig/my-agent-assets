@@ -72,11 +72,11 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `c6e58cb` (`codex/final-product-v1`)
+- source commit: `c06d15d` (`codex/final-product-v1`)
 - build command: `cd apps/desktop && npm run build`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `88a7dc4f57939bdca0312d2002424a295e6ef6a280bb7831b1db359401340dc1`
+- DMG SHA-256: `c0460c00f4ae97aa94ce298dd934cae1789a2e038aa463e6a95634ae1358c44e`
 - Fake HOME launch smoke: passed; the packaged binary started and left the
   disposable HOME uninitialized
 - verification date: 2026-07-11
