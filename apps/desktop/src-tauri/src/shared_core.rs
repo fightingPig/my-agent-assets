@@ -80,7 +80,11 @@ pub fn initialization_preview_command() -> Result<InitializationPreview, String>
 pub fn list_audit_log_command() -> Result<Vec<AuditLogEntry>, String> {
     let home =
         home_dir().ok_or_else(|| "HOME is unavailable; audit log lookup skipped.".to_string())?;
-    read_audit_entries(&home).map_err(|error| error.to_string())
+    list_audit_log_for_home(&home)
+}
+
+pub fn list_audit_log_for_home(home: &Path) -> Result<Vec<AuditLogEntry>, String> {
+    read_audit_entries(home).map_err(|error| error.to_string())
 }
 
 pub fn doctor_report_command() -> Result<DoctorReport, String> {
@@ -514,6 +518,26 @@ mod tests {
         let projects = list_projects_for_home(&home).unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "project-a");
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn audit_log_adapter_returns_only_shared_core_redacted_entries() {
+        let home = test_home("audit-log");
+        initialize(&home);
+        my_agent_assets_core::audit_log::append_operation(
+            &home,
+            "mount",
+            my_agent_assets_core::audit_log::AuditOutcome::Completed,
+        )
+        .unwrap();
+        let entries = list_audit_log_for_home(&home).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].operation_type, "mount");
+        assert_eq!(
+            entries[0].outcome,
+            my_agent_assets_core::audit_log::AuditOutcome::Completed
+        );
         let _ = fs::remove_dir_all(home);
     }
 
