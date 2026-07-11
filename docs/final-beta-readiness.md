@@ -81,6 +81,19 @@ Latest automated macOS package verification:
   disposable HOME uninitialized
 - verification date: 2026-07-11
 
+Installed-app native evidence on 2026-07-11:
+
+- the candidate app was installed from the generated bundle into
+  `~/Applications/My Agent Assets.app` and passed `codesign --verify --deep --strict`
+  at that installed location
+- the macOS Accessibility tree exposed the native close, minimize, and zoom
+  controls, the sidebar navigation, and readable empty-state content; it did
+  not expose React-rendered traffic-light controls
+- Computer Use cannot retain `MY_AGENT_ASSETS_HOME` when its bridge relaunches
+  the target application, so that bridge result is installation/window-shell
+  evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
+  suite and needs a human desktop session for final installed-app flows.
+
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact
 candidate build.
