@@ -182,9 +182,9 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | K-05 | DMG integrity | Run `hdiutil verify` | Checksum valid | PASS |
 | K-06 | Packaged process | Launch bundled executable with fake HOME | Process remains running until intentionally terminated | PASS |
 | K-07 | Native traffic lights | Observe app window | Native red/yellow/green controls appear | PASS |
-| K-08 | Continuous drag | Drag top 28px repeatedly | Every drag moves window without refocus workaround | PASS |
-| K-09 | Window lifecycle | Minimize, zoom, resize, close, relaunch | Native behavior remains stable | PASS |
-| K-10 | Installed app | Mount DMG, copy to Applications, launch | App installs and launches from installation path | PASS |
+| K-08 | Continuous drag | Drag top 28px repeatedly | Every drag moves window without refocus workaround | MANUAL |
+| K-09 | Window lifecycle | Minimize, zoom, resize, close, relaunch | Native behavior remains stable | MANUAL |
+| K-10 | Installed app | Mount DMG, copy to Applications, launch | App installs and launches from installation path | MANUAL |
 | K-11 | Gatekeeper clean-machine | Open on another Mac | Expected warning/launch behavior documented | MANUAL |
 
 ## Gate L: Windows Manual Qualification
@@ -212,24 +212,22 @@ This section must be updated with actual command output and evidence after each 
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
 | Release build/signature/DMG | PASS | arm64 app, valid ad-hoc signature, valid DMG checksum |
-| Native window interaction | PASS | Accessibility/CoreGraphics: native buttons, two consecutive drags, minimize/restore, 1180×760 resize, full screen, close and relaunch |
-| Installed application | PASS | Rebuilt from `b7208e9`, reinstalled from verified DMG to `~/Applications/My Agent Assets.app`, and launched with fake HOME |
+| Native window interaction | PARTIAL | Current candidate Accessibility inspection exposes native close/minimize/zoom controls, navigation, and readable empty states; continuous drag, resize, full-screen, and relaunch require current-package manual acceptance |
+| Installed application | PARTIAL | Current candidate `.app`/`.dmg` is ad-hoc signed and DMG-verified; exact-package install and fake-HOME launch remain in the manual checklist |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
 | Windows | MANUAL | Requires Windows 10/11 environment |
 
 ### Native UI Evidence
 
-- Installed application: `~/Applications/My Agent Assets.app`
-- Previous installed application backup: `/tmp/My Agent Assets.pre-b7208e9.20260628142334.app`
-- Disposable runtime root: `/tmp/my-agent-assets-installed-gui-test`
-- Minimum-size native screenshot: `/tmp/my-agent-assets-installed-1180x760.png`
-- Native scan screenshot: `/tmp/maa-native-scan.png`
-- Latest signed-build Accessibility screenshot: `/tmp/maa-b7208e9-accessibility.png`
-- First drag moved the window from `(240, 76)` to `(390, 146)`.
-- Second consecutive drag moved it from `(390, 146)` to `(290, 206)`.
-- The window exposed enabled native close, full-screen and minimize buttons.
-- Minimize/restore and full-screen enter/exit both returned the expected accessibility state.
-- Closing terminated the installed process; relaunch created one `1440×901` window from the installed binary.
+- Historical native interaction records for commit `b7208e9` remain useful for
+  regression context, but are not release evidence for the current candidate.
+- The current candidate package evidence, exact source commit, signature result,
+  DMG checksum, and Accessibility inspection scope are maintained in
+  `docs/final-beta-readiness.md`.
+- Computer Use inspection confirms an installed ad-hoc candidate's native
+  close/minimize/zoom controls, sidebar navigation, and readable empty states.
+  The bridge cannot retain `MY_AGENT_ASSETS_HOME` when it relaunches the app,
+  so it cannot replace the fake-HOME installed-app workflow checklist.
 
 ### Beta Regression
 
