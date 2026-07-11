@@ -1,6 +1,8 @@
 # V1 Tauri Command Contract
 
-This document defines the future JSON boundary between the desktop React frontend and the Tauri Rust backend. It does not imply that contract-only commands are registered or implemented.
+This document defines the JSON boundary between the desktop React frontend and
+the Tauri Rust backend. Individual command entries identify whether a command
+is implemented or remains contract-only.
 
 ## Transport Rules
 
@@ -10,7 +12,11 @@ This document defines the future JSON boundary between the desktop React fronten
 - Timestamp fields use ISO 8601 strings; unavailable timestamps are `null`.
 - Commands with input receive one Tauri argument named `input`: `invoke(command, { input })`.
 - Preview commands are stateless. They do not depend on a scan session, `scanId`, or backend session lookup.
-- This milestone defines successful request and response shapes only. A shared error envelope will be designed when real commands are implemented.
+- Failed desktop commands return `DesktopCommandError { code, message, parameters }`.
+  `code` is the stable machine-readable branch point; React must not inspect
+  `message`. `message` is safe Simplified Chinese guidance and `parameters` is
+  a path-free string map. Raw core errors, paths, configuration values, and
+  credentials are not serialized through this transport.
 
 ## Enum Wire Values
 
@@ -31,6 +37,7 @@ These values are part of the public JSON contract and must not be inferred only 
 | `ApplyMode` | `planOnly`, `apply` |
 | `ApplyStepStatus` | `pending`, `skipped`, `success`, `failed` |
 | `SyncDirection` | `pull`, `push` |
+| `DesktopCommandErrorCode` | `environmentUnavailable`, `stalePreview`, `validationFailed`, `notInitialized`, `operationBlocked`, `notFound`, `operationFailed` |
 | `CanonicalContentState` | `ready`, `missing_content`, `unregistered`, `invalid_content` |
 | `ConsistencyRepairAction` | `remove_missing_registry_record`, `register_unregistered_content`, `delete_unregistered_content` |
 

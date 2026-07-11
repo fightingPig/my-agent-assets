@@ -96,6 +96,10 @@ Implemented:
   Chinese guidance rather than rendering raw backend error strings, avoiding
   accidental display of local paths or configuration values; frontend behavior
   does not branch by parsing backend text
+- added a stable Tauri desktop error envelope with explicit wire codes,
+  path-free parameters, and safe Simplified Chinese guidance; the transport
+  never serializes raw core error strings, so frontend callers can branch on
+  `code` without parsing localized messages
 - implemented Preview-bound diagnostic export in `logs/diagnostics/`; the
   package allowlists only schema-valid audit entries, version/platform metadata,
   and path-free status summary, while excluding assets, live configs, backups,

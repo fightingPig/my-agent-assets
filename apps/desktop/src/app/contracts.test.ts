@@ -6,6 +6,7 @@ import {
   ASSET_STATUSES,
   ASSET_TYPES,
   DENSITY_PREFERENCES,
+  DESKTOP_COMMAND_ERROR_CODES,
   LOG_LEVELS,
   PLAN_STEP_KINDS,
   PROJECT_STATUSES,
@@ -38,6 +39,15 @@ describe("Tauri command contracts", () => {
     expect(APPLY_MODES).toEqual(["planOnly", "apply"]);
     expect(APPLY_STEP_STATUSES).toEqual(["pending", "skipped", "success", "failed"]);
     expect(SYNC_DIRECTIONS).toEqual(["pull", "push"]);
+    expect(DESKTOP_COMMAND_ERROR_CODES).toEqual([
+      "environmentUnavailable",
+      "stalePreview",
+      "validationFailed",
+      "notInitialized",
+      "operationBlocked",
+      "notFound",
+      "operationFailed",
+    ]);
     expect(RUNTIME_PROVIDERS).toEqual(["claude_code", "codex", "custom"]);
     expect(RUNTIME_SOURCE_FORMATS).toEqual([
       "skill_directory",

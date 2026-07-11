@@ -31,6 +31,23 @@ export type ApplyStepStatus = (typeof APPLY_STEP_STATUSES)[number];
 export const SYNC_DIRECTIONS = ["pull", "push"] as const;
 export type SyncDirection = (typeof SYNC_DIRECTIONS)[number];
 
+export const DESKTOP_COMMAND_ERROR_CODES = [
+  "environmentUnavailable",
+  "stalePreview",
+  "validationFailed",
+  "notInitialized",
+  "operationBlocked",
+  "notFound",
+  "operationFailed",
+] as const;
+export type DesktopCommandErrorCode = (typeof DESKTOP_COMMAND_ERROR_CODES)[number];
+
+export type DesktopCommandError = {
+  code: DesktopCommandErrorCode;
+  message: string;
+  parameters: Record<string, string>;
+};
+
 export type AppInfo = {
   name: string;
   version: string;
