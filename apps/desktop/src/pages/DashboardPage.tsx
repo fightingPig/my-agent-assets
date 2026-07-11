@@ -539,6 +539,6 @@ function realStats(assets: readonly AssetSummary[], projects: readonly ProjectSu
   ];
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法读取本地概览数据。";
+function errorMessage(_error: unknown) {
+  return "本地概览操作未完成。请查看系统状态或导出诊断包后重试。";
 }

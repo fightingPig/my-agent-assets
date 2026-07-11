@@ -492,7 +492,8 @@ describe("read-only UI integration", () => {
     render(<SettingsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "保存设置" }));
 
-    expect(await screen.findByText(/保存失败：permission denied/)).toBeInTheDocument();
+    expect(await screen.findByText(/保存失败：设置操作未完成。请查看系统状态或导出诊断包后重试。/)).toBeInTheDocument();
+    expect(screen.queryByText(/permission denied/)).not.toBeInTheDocument();
     expect(screen.queryByText("设置已写入本地配置，并已从后端重新读取确认。")).not.toBeInTheDocument();
     expect(settingsLoad).toHaveBeenCalledTimes(1);
   });

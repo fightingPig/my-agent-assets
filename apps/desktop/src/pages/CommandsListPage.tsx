@@ -148,8 +148,8 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
   );
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法读取本地 Command。";
+function errorMessage(_error: unknown) {
+  return "本地 Command 操作未完成。请查看系统状态或导出诊断包后重试。";
 }
 
 function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {

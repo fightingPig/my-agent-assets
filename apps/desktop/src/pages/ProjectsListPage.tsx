@@ -95,8 +95,8 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: Proj
   );
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法读取本地项目。";
+function errorMessage(_error: unknown) {
+  return "本地项目读取未完成。请查看系统状态或导出诊断包后重试。";
 }
 
 function toStaticProject(project: ProjectSummary): StaticProject {

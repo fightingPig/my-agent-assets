@@ -266,8 +266,8 @@ export function ScanImportPage({
   );
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用导入操作。";
+function errorMessage(_error: unknown) {
+  return "导入操作未完成。请查看系统状态或导出诊断包后重试。";
 }
 
 function toScanScope(selectedScope: (typeof scopes)[number]["id"]): RuntimeDiscoveryScope {

@@ -140,6 +140,21 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText("已完成")).toBeInTheDocument();
   });
 
+  it("does not render raw backend errors that could contain local details", async () => {
+    listAssets.mockRejectedValue(new Error("token=secret-value /tmp/private"));
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect(await screen.findByText(/本地概览操作未完成/)).toBeInTheDocument();
+    expect(screen.queryByText(/secret-value|\/tmp\/private/)).not.toBeInTheDocument();
+  });
+
   it("requires preview and explicit confirmation before initialization apply", async () => {
     recoveryStatus.mockResolvedValue({
       writesBlocked: false,

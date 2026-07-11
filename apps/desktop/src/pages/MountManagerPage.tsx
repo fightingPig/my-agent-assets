@@ -162,8 +162,8 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
   );
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用挂载操作。";
+function errorMessage(_error: unknown) {
+  return "挂载操作未完成。请查看系统状态或导出诊断包后重试。";
 }
 
 function toPreviewMountInput(asset: AssetOption, target: TargetOption): CanonicalMountPreviewRequest {

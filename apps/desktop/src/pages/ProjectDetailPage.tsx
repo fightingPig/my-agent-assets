@@ -187,8 +187,8 @@ function toProjectDetail(project: ProjectSummary): ProjectDetailContext {
   };
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用项目挂载操作。";
+function errorMessage(_error: unknown) {
+  return "项目挂载未完成。请查看系统状态或导出诊断包后重试。";
 }
 
 function toApplyResult(

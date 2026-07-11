@@ -183,6 +183,6 @@ function toApplyResult(
   };
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用同步操作。";
+function errorMessage(_error: unknown) {
+  return "同步操作未完成。请查看系统状态或导出诊断包后重试。";
 }

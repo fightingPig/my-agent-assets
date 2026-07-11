@@ -353,6 +353,6 @@ function toApplyResult(
   };
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法调用冲突处理操作。";
+function errorMessage(_error: unknown) {
+  return "冲突处理未完成。请查看系统状态或导出诊断包后重试。";
 }

@@ -200,6 +200,6 @@ function previewText(content: string, truncated: boolean) {
   return truncated ? `${content}\n\n[预览已截断]` : content;
 }
 
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "无法读取本地 Skill。";
+function errorMessage(_error: unknown) {
+  return "本地 Skill 操作未完成。请查看系统状态或导出诊断包后重试。";
 }
