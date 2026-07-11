@@ -837,14 +837,19 @@ fn create_directory_link(canonical: &Path, target: &Path, _: MountAdapter) -> Re
 fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter) -> Result<()> {
     match adapter {
         MountAdapter::WindowsDirectoryJunction => {
-            let status = std::process::Command::new("cmd")
+            // Keep the command text constant. Runtime paths are positional
+            // PowerShell parameters, so cmd.exe metacharacters in an approved
+            // Windows path cannot be interpreted as another command.
+            let status = std::process::Command::new("powershell.exe")
                 .args([
-                    "/c",
-                    "mklink",
-                    "/J",
-                    &target.to_string_lossy(),
-                    &canonical.to_string_lossy(),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "& { param([string] $junctionPath, [string] $canonicalPath) New-Item -ItemType Junction -LiteralPath $junctionPath -Target $canonicalPath -ErrorAction Stop | Out-Null }",
                 ])
+                .arg(target)
+                .arg(canonical)
                 .status()?;
             if !status.success() {
                 return Err(MaaError::new("failed to create Windows directory junction"));
@@ -1483,8 +1488,8 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let canonical = root.join("canonical");
-        let junction = root.join("runtime-link");
+        let canonical = root.join("canonical & %literal%");
+        let junction = root.join("runtime link & %literal%");
         fs::create_dir_all(&canonical).unwrap();
         fs::write(canonical.join("SKILL.md"), "# Review").unwrap();
 

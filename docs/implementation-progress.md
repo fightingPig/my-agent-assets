@@ -268,6 +268,11 @@ Implemented:
   backup history, audit logs, fingerprints, imports, initialization, and Git
   sync; removal uses a non-recursive junction removal path so it never follows
   into canonical content
+- replaced the Windows `cmd /c mklink` junction invocation with a constant
+  PowerShell script block and separately passed `-LiteralPath`/target
+  parameters; approved paths containing spaces or shell metacharacters are now
+  covered by the Windows-only junction regression without cmd metacharacter
+  interpretation
 - added a Windows-only junction regression test and expanded the Windows
   package workflow to run shared-core and desktop Rust tests before packaging
 - aligned the Tauri macOS private-API feature allowlist with the cross-platform
