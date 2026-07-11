@@ -1,6 +1,6 @@
 # Final Beta Readiness
 
-Date: 2026-07-09
+Date: 2026-07-11
 
 This document summarizes the current release boundary for the final V1 goal.
 It does not replace `docs/v1-full-test-plan.md`; it points to the evidence and
@@ -72,14 +72,14 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `6a6ef84` (`codex/final-product-v1`)
+- source commit: `ecaebee` (`codex/final-product-v1`)
 - build command: `cd apps/desktop && npm run build`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `f1984623a7e7d2181c8149ccba467590a386350afd6e4c6ce8c2b62b64af001e`
+- DMG SHA-256: `028181be6fae68fad8cdb80e7fca9584be16ff3a549af6c153371954eb6d2c84`
 - Fake HOME launch smoke: passed; the packaged binary started and left the
   disposable HOME uninitialized
-- verification date: 2026-07-10
+- verification date: 2026-07-11
 
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact
