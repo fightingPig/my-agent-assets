@@ -72,11 +72,11 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `ecaebee` (`codex/final-product-v1`)
+- source commit: `c6e58cb` (`codex/final-product-v1`)
 - build command: `cd apps/desktop && npm run build`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `028181be6fae68fad8cdb80e7fca9584be16ff3a549af6c153371954eb6d2c84`
+- DMG SHA-256: `88a7dc4f57939bdca0312d2002424a295e6ef6a280bb7831b1db359401340dc1`
 - Fake HOME launch smoke: passed; the packaged binary started and left the
   disposable HOME uninitialized
 - verification date: 2026-07-11
@@ -93,6 +93,16 @@ Installed-app native evidence on 2026-07-11:
   the target application, so that bridge result is installation/window-shell
   evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
   suite and needs a human desktop session for final installed-app flows.
+
+Windows preflight evidence on 2026-07-11:
+
+- `cargo check -p my-agent-assets-core --tests --target x86_64-pc-windows-msvc`
+  passed, including compilation of the Windows-only junction regression test.
+- Desktop cross-check reached Tauri's Windows resource-build stage after the
+  configuration feature allowlist was corrected. It cannot complete on this
+  macOS host because `llvm-rc` is unavailable; the Windows GitHub Actions
+  workflow is configured to perform the native core/desktop tests and
+  installer build.
 
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact
