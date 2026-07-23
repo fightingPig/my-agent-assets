@@ -89,6 +89,7 @@ function ConflictResolverWorkspace({
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>(
     () => defaultResolutions(items),
   );
+  const [renameValues, setRenameValues] = useState<Record<string, string>>({});
   const [resolvedPreview, setResolvedPreview] = useState<BatchImportPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [previewState, setPreviewState] = useState(
@@ -100,16 +101,26 @@ function ConflictResolverWorkspace({
 
   const selected = items.find((item) => item.id === selectedId) ?? items[0];
   const selectedResolution = selected ? resolutions[selected.id] ?? "skip" : "skip";
-  const selectedPlan = describeResolution(selectedResolution, selected?.name ?? "当前资产");
+  const selectedPlan = describeResolution(
+    selectedResolution,
+    selected?.name ?? "当前资产",
+    selected ? renameValues[selected.id] ?? "" : "",
+  );
   const selections = context
     ? context.preview.items.map((item) => ({
         sourceId: item.sourceId,
         resolution: item.conflict
-          ? toCanonicalResolution(resolutions[item.sourceId] ?? "skip", item.sourceName)
+          ? toCanonicalResolution(
+            resolutions[item.sourceId] ?? "skip",
+            renameValues[item.sourceId] ?? "",
+          )
           : { kind: "unresolved" as const },
       }))
     : [];
-  const canPlan = Boolean(context && items.length > 0 && !isPlanning);
+  const unresolvedRename = items.some((item) =>
+    resolutions[item.id] === "rename" && !(renameValues[item.id] ?? "").trim(),
+  );
+  const canPlan = Boolean(context && items.length > 0 && !isPlanning && !unresolvedRename);
   const canApply = Boolean(resolvedPreview?.canApply && resolvedPreview.previewId);
 
   const updateResolution = (resolution: Resolution) => {
@@ -222,7 +233,7 @@ function ConflictResolverWorkspace({
             ) : null}
             <div className="resolution-options">
               {(["skip", "rename", "overwrite"] as Resolution[]).map((resolution) => {
-                const option = describeResolution(resolution, selected.name);
+                const option = describeResolution(resolution, selected.name, renameValues[selected.id] ?? "");
                 return (
                   <button
                     aria-pressed={selectedResolution === resolution}
@@ -238,6 +249,25 @@ function ConflictResolverWorkspace({
                 );
               })}
             </div>
+            {selectedResolution === "rename" ? (
+              <label className="rename-conflict-field">
+                <span>新资产名称</span>
+                <input
+                  aria-label="新资产名称"
+                  data-no-drag="true"
+                  onChange={(event) => {
+                    setRenameValues((current) => ({ ...current, [selected.id]: event.target.value }));
+                    setResolvedPreview(null);
+                    setApplyResult(null);
+                    setPreviewState("请输入合法的新名称后重新生成处理计划");
+                  }}
+                  placeholder="输入新的唯一名称"
+                  style={NO_DRAG_REGION_STYLE}
+                  value={renameValues[selected.id] ?? ""}
+                />
+                <small>不会自动改名；名称必须由你明确指定。</small>
+              </label>
+            ) : null}
             <div className="operation-warning">
               <AlertTriangle size={17} />
               <div>
@@ -254,7 +284,7 @@ function ConflictResolverWorkspace({
                 style={NO_DRAG_REGION_STYLE}
                 type="button"
               >
-                {isPlanning ? "生成中" : "生成处理计划"}
+                {isPlanning ? "生成中" : unresolvedRename ? "先填写新名称" : "生成处理计划"}
               </button>
             </div>
             <ApplyConfirmationPanel
@@ -302,20 +332,22 @@ function defaultResolutions(items: readonly ConflictItem[]): Record<string, Reso
 
 function toCanonicalResolution(
   resolution: Resolution,
-  name: string,
+  newName: string,
 ): CanonicalImportResolution {
   if (resolution === "rename") {
-    return { kind: "rename", newName: `${name}-imported` };
+    return { kind: "rename", newName: newName.trim() };
   }
   return { kind: resolution };
 }
 
-function describeResolution(resolution: Resolution, name: string) {
+function describeResolution(resolution: Resolution, name: string, newName: string) {
   if (resolution === "rename") {
     return {
       label: "重命名",
       description: "以新名称导入当前内容",
-      planText: `${name} 将以 ${name}-imported 导入，资产中心现有内容保持不变`,
+      planText: newName.trim()
+        ? `${name} 将以 ${newName.trim()} 导入，资产中心现有内容保持不变`
+        : "需要先输入新的唯一资产名称",
     };
   }
   if (resolution === "overwrite") {

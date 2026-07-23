@@ -14,6 +14,7 @@ pub mod fingerprint;
 pub mod git_sync;
 pub mod import;
 pub mod initialization;
+pub mod managed_projects;
 pub mod mcp;
 pub mod mcp_management;
 pub mod mount;

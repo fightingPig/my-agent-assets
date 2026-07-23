@@ -1,4 +1,6 @@
+use crate::managed_projects::load as load_managed_projects;
 use crate::path_safety::{expand_tilde, is_link_or_junction, validate_single_path_component};
+use crate::settings;
 pub use crate::targets::{AssetKind, RuntimeProvider};
 use crate::{
     mcp::{import_claude_server, import_codex_server, CanonicalMcp},
@@ -39,6 +41,10 @@ pub enum DiscoveryScope {
     Project {
         #[serde(rename = "projectPath")]
         project_path: PathBuf,
+    },
+    ManagedProjects {
+        #[serde(rename = "projectIds", default)]
+        project_ids: Vec<String>,
     },
     Custom {
         path: PathBuf,
@@ -127,40 +133,10 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
             );
         }
         DiscoveryScope::Project { project_path } => {
-            let project = expand_input_path(&project_path, home);
-            scan_skill_dir(
-                home,
-                &project.join(".claude/skills"),
-                RuntimeProvider::ClaudeCode,
-                SourceScope::Project,
-                &mut result,
-            );
-            scan_command_dir(
-                home,
-                &project.join(".claude/commands"),
-                RuntimeProvider::ClaudeCode,
-                SourceScope::Project,
-                &mut result,
-            );
-            scan_claude_mcp(
-                home,
-                &project.join(".mcp.json"),
-                SourceScope::Project,
-                &mut result,
-            );
-            scan_skill_dir(
-                home,
-                &project.join(".agents/skills"),
-                RuntimeProvider::Codex,
-                SourceScope::Project,
-                &mut result,
-            );
-            scan_codex_mcp(
-                home,
-                &project.join(".codex/config.toml"),
-                SourceScope::Project,
-                &mut result,
-            );
+            scan_project_runtime(home, &expand_input_path(&project_path, home), &mut result);
+        }
+        DiscoveryScope::ManagedProjects { project_ids } => {
+            scan_managed_projects(home, &project_ids, &mut result);
         }
         DiscoveryScope::Custom {
             path,
@@ -213,6 +189,145 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
         ))
     });
     result
+}
+
+fn scan_project_runtime(home: &Path, project: &Path, result: &mut DiscoveryResult) {
+    scan_skill_dir(
+        home,
+        &project.join(".claude/skills"),
+        RuntimeProvider::ClaudeCode,
+        SourceScope::Project,
+        result,
+    );
+    scan_command_dir(
+        home,
+        &project.join(".claude/commands"),
+        RuntimeProvider::ClaudeCode,
+        SourceScope::Project,
+        result,
+    );
+    scan_claude_mcp(
+        home,
+        &project.join(".mcp.json"),
+        SourceScope::Project,
+        result,
+    );
+    scan_skill_dir(
+        home,
+        &project.join(".agents/skills"),
+        RuntimeProvider::Codex,
+        SourceScope::Project,
+        result,
+    );
+    scan_codex_mcp(
+        home,
+        &project.join(".codex/config.toml"),
+        SourceScope::Project,
+        result,
+    );
+}
+
+fn scan_managed_projects(home: &Path, requested_ids: &[String], result: &mut DiscoveryResult) {
+    let registry = match load_managed_projects(home) {
+        Ok(registry) => registry,
+        Err(error) => {
+            result.warnings.push(format!(
+                "managed project registry could not be read: {error}"
+            ));
+            return;
+        }
+    };
+    let settings = match settings::load(home) {
+        Ok(settings) => settings,
+        Err(error) => {
+            result
+                .warnings
+                .push(format!("scan settings could not be read: {error}"));
+            return;
+        }
+    };
+    let requested = requested_ids
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>();
+    for project in &registry.projects {
+        if !requested.is_empty() && !requested.contains(&project.id) {
+            continue;
+        }
+        if !project.path.is_dir() {
+            result.warnings.push(format!(
+                "managed project path is unavailable: {}",
+                project.path.display()
+            ));
+            continue;
+        }
+        scan_managed_project_tree(home, &project.path, 0, settings.max_depth as usize, result);
+    }
+    for requested_id in requested_ids {
+        if !registry
+            .projects
+            .iter()
+            .any(|project| &project.id == requested_id)
+        {
+            result
+                .warnings
+                .push(format!("managed project is unavailable: {requested_id}"));
+        }
+    }
+}
+
+fn scan_managed_project_tree(
+    home: &Path,
+    directory: &Path,
+    depth: usize,
+    max_depth: usize,
+    result: &mut DiscoveryResult,
+) {
+    if depth > max_depth || should_skip_project_child(directory) || is_project_symlink(directory) {
+        return;
+    }
+    scan_project_runtime(home, directory, result);
+    if depth == max_depth {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(directory) else {
+        result.warnings.push(format!(
+            "cannot read managed project directory: {}",
+            directory.display()
+        ));
+        return;
+    };
+    let mut children = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    children.sort();
+    for child in children.into_iter().filter(|child| child.is_dir()) {
+        scan_managed_project_tree(home, &child, depth + 1, max_depth, result);
+    }
+}
+
+fn should_skip_project_child(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(
+            ".git"
+                | "node_modules"
+                | "dist"
+                | "build"
+                | "target"
+                | ".venv"
+                | "__pycache__"
+                | ".claude"
+                | ".agents"
+                | ".codex"
+        )
+    )
+}
+
+fn is_project_symlink(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| is_link_or_junction(&metadata))
+        .unwrap_or(true)
 }
 
 pub fn load_mcp_source(source: &DiscoveredSource) -> Result<LoadedMcpSource> {

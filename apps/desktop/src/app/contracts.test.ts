@@ -30,7 +30,13 @@ describe("Tauri command contracts", () => {
   it("locks every enum wire value", () => {
     expect(ASSET_TYPES).toEqual(["skill", "command", "mcp"]);
     expect(ASSET_STATUSES).toEqual(["ready", "mounted", "unmounted", "conflict", "invalid"]);
-    expect(PROJECT_STATUSES).toEqual(["ready", "changed", "needsSync", "invalid"]);
+    expect(PROJECT_STATUSES).toEqual([
+      "ready",
+      "unchecked",
+      "needs_attention",
+      "missing_path",
+      "invalid",
+    ]);
     expect(RUNTIME_SCOPES).toEqual(["user", "local", "project"]);
     expect(PLAN_STEP_KINDS).toEqual(["check", "import", "mount", "compileMcp", "backup", "git", "settings"]);
     expect(APPEARANCE_THEMES).toEqual(["system", "light", "dark"]);

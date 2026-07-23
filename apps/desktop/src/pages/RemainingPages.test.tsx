@@ -36,7 +36,7 @@ describe("remaining V1 static pages", () => {
 
   it("renders project and asset detail workspaces", () => {
     const { rerender } = render(<ProjectDetailPage demoMode />);
-    for (const heading of ["项目概览", "本地环境", "已挂载资产", "最近活动", "挂载计划预览"]) {
+    for (const heading of ["项目概览", "本地环境", "已挂载资产", "最近检查", "挂载管理"]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
     rerender(<AssetDetailPage demoMode />);
@@ -48,11 +48,11 @@ describe("remaining V1 static pages", () => {
   it("updates only the local Scan scope selection", () => {
     render(<ScanImportPage demoMode />);
     const userScope = screen.getByRole("button", { name: /用户级/ });
-    const projectScope = screen.getByRole("button", { name: /项目级/ });
+    const projectScope = screen.getByRole("button", { name: /维护项目/ });
     expect(userScope).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(projectScope);
     expect(projectScope).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("当前范围：项目级")).toBeInTheDocument();
+    expect(screen.getByText("当前范围：维护项目")).toBeInTheDocument();
     expect(screen.getByRole("table", { name: "导入预览表" })).toBeInTheDocument();
     expect(screen.getByText("只读扫描预览")).toBeInTheDocument();
   });

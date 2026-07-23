@@ -46,6 +46,12 @@ use my_agent_assets_core::initialization::{
     apply_initialization, preview_initialization, InitializationApplyRequest,
     InitializationApplyResult, InitializationPreview,
 };
+use my_agent_assets_core::managed_projects::{
+    apply_add_project, apply_edit_project, apply_remove_project, preview_add_project,
+    preview_edit_project, preview_remove_project, ProjectAddApplyRequest, ProjectAddPreviewRequest,
+    ProjectChangePreview, ProjectChangeResult, ProjectEditApplyRequest, ProjectEditPreviewRequest,
+    ProjectRemoveApplyRequest, ProjectRemovePreviewRequest,
+};
 use my_agent_assets_core::mcp_management::{
     apply_mcp_save, load_mcp_asset, preview_mcp_save, McpAssetDefinition, McpSaveApplyRequest,
     McpSaveApplyResult, McpSavePreview, McpSavePreviewRequest,
@@ -59,7 +65,8 @@ use my_agent_assets_core::operation::{
     recover_incomplete, recovery_status, RecoveryReport, RecoveryStatus,
 };
 use my_agent_assets_core::query::{
-    list_assets, list_projects, AssetQueryRequest, AssetSummary, ProjectSummary,
+    inspect_projects, list_assets, list_mount_bindings, list_projects, AssetQueryRequest,
+    AssetSummary, MountBindingSummary, ProjectInspection, ProjectInspectionRequest, ProjectSummary,
 };
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
@@ -177,6 +184,69 @@ pub fn list_projects_for_home(home: &Path) -> Result<Vec<ProjectSummary>, String
     list_projects(home).map_err(|error| error.to_string())
 }
 
+pub fn inspect_projects_command(
+    input: ProjectInspectionRequest,
+) -> Result<Vec<ProjectInspection>, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project inspection skipped.".to_string())?;
+    inspect_projects_for_home(&home, input)
+}
+
+pub fn inspect_projects_for_home(
+    home: &Path,
+    input: ProjectInspectionRequest,
+) -> Result<Vec<ProjectInspection>, String> {
+    inspect_projects(home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_add_preview_command(
+    input: ProjectAddPreviewRequest,
+) -> Result<ProjectChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project registration preview skipped.".to_string())?;
+    preview_add_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_add_apply_command(
+    input: ProjectAddApplyRequest,
+) -> Result<ProjectChangeResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project registration apply blocked.".to_string())?;
+    apply_add_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_edit_preview_command(
+    input: ProjectEditPreviewRequest,
+) -> Result<ProjectChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project edit preview skipped.".to_string())?;
+    preview_edit_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_edit_apply_command(
+    input: ProjectEditApplyRequest,
+) -> Result<ProjectChangeResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project edit apply blocked.".to_string())?;
+    apply_edit_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_remove_preview_command(
+    input: ProjectRemovePreviewRequest,
+) -> Result<ProjectChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project removal preview skipped.".to_string())?;
+    preview_remove_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_remove_apply_command(
+    input: ProjectRemoveApplyRequest,
+) -> Result<ProjectChangeResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project removal apply blocked.".to_string())?;
+    apply_remove_project(&home, &input).map_err(|error| error.to_string())
+}
+
 pub fn canonical_import_preview_command(
     input: ImportPreviewRequest,
 ) -> Result<ImportPreview, String> {
@@ -199,6 +269,12 @@ pub fn list_mount_targets_command() -> Result<Vec<MountTarget>, String> {
     Ok(load_targets(&home)
         .map_err(|error| error.to_string())?
         .targets)
+}
+
+pub fn list_mount_bindings_command() -> Result<Vec<MountBindingSummary>, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; mount binding listing skipped.".to_string())?;
+    list_mount_bindings(&home).map_err(|error| error.to_string())
 }
 
 pub fn target_registration_preview_command(
@@ -512,12 +588,40 @@ mod tests {
     #[test]
     fn project_query_adapter_uses_shared_core_depth_scanning() {
         let home = test_home("project-query");
-        fs::create_dir_all(home.join("workspace/group/project-a")).unwrap();
-        fs::write(home.join("workspace/group/project-a/package.json"), "{}").unwrap();
+        initialize(&home);
+        let project_path = home.join("workspace/group/project-a");
+        fs::create_dir_all(project_path.join("packages/app/.claude/skills/review")).unwrap();
+        fs::write(
+            project_path.join("packages/app/.claude/skills/review/SKILL.md"),
+            "# Review",
+        )
+        .unwrap();
+        let request = ProjectAddPreviewRequest {
+            path: project_path,
+            name: None,
+        };
+        let preview = preview_add_project(&home, &request).unwrap();
+        apply_add_project(
+            &home,
+            &ProjectAddApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
 
         let projects = list_projects_for_home(&home).unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "project-a");
+        let inspected = inspect_projects_for_home(
+            &home,
+            ProjectInspectionRequest {
+                project_ids: vec![projects[0].id.clone()],
+            },
+        )
+        .unwrap();
+        assert_eq!(inspected[0].project.asset_counts.skills, 1);
         let _ = fs::remove_dir_all(home);
     }
 

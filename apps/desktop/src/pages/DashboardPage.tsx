@@ -249,7 +249,13 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       name: project.name,
       path: project.path,
       assets: project.assetCounts.total,
-      state: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : "正常",
+      state: project.status === "ready"
+        ? "正常"
+        : project.status === "unchecked"
+          ? "未检查"
+          : project.status === "missing_path"
+            ? "路径不可用"
+            : "需处理",
     }));
   const recentActivities = demoMode
     ? demoRecentActivity

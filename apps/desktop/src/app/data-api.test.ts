@@ -74,6 +74,10 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("list_projects");
 
     invoke.mockResolvedValueOnce([]);
+    await api.listMountBindings();
+    expect(invoke).toHaveBeenLastCalledWith("list_mount_bindings");
+
+    invoke.mockResolvedValueOnce([]);
     await api.listBackups();
     expect(invoke).toHaveBeenLastCalledWith("list_backups");
 

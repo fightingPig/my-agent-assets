@@ -1,5 +1,6 @@
 use crate::asset_registry::{self, AssetRegistry};
 use crate::fingerprint::PreviewFingerprint;
+use crate::managed_projects::ManagedProjectRegistry;
 use crate::mount_registry::{self, MountRegistry};
 use crate::path_safety::is_link_or_junction;
 use crate::settings::{self, Settings};
@@ -26,9 +27,10 @@ const REQUIRED_FILES: &[&str] = &[
     "assets.yaml",
     "targets.yaml",
     "mounts.yaml",
+    "projects.yaml",
     ".gitignore",
 ];
-const GITIGNORE: &str = "config.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\ncache/\nlogs/\nsecrets/\n";
+const GITIGNORE: &str = "config.yaml\ntargets.yaml\nmounts.yaml\nprojects.yaml\nbackups/local/\noperations/\nlocks/\ncache/\nlogs/\nsecrets/\n";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -217,6 +219,12 @@ fn build_staging(home: &Path, staging: &Path) -> Result<()> {
     write_synced(
         &staging.join("mounts.yaml"),
         serde_yaml::to_string(&MountRegistry::default())
+            .map_err(|error| MaaError::new(error.to_string()))?
+            .as_bytes(),
+    )?;
+    write_synced(
+        &staging.join("projects.yaml"),
+        serde_yaml::to_string(&ManagedProjectRegistry::default())
             .map_err(|error| MaaError::new(error.to_string()))?
             .as_bytes(),
     )?;

@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - codex/final-product-v1
+      - main
+      - "codex/**"
   pull_request:
     paths:
       - apps/desktop/**

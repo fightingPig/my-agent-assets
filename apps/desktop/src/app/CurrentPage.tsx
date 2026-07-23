@@ -5,7 +5,6 @@ import type {
   ProjectDetailContext,
 } from "./detail-context";
 import type { PageId } from "./pages";
-import type { AssetProvider } from "./provider";
 import { AssetDetailPage } from "../pages/AssetDetailPage";
 import { BackupRestorePage } from "../pages/BackupRestorePage";
 import { CommandsListPage } from "../pages/CommandsListPage";
@@ -30,7 +29,6 @@ type CurrentPageProps = {
   onOpenProjectDetail?: (detail: ProjectDetailContext) => void;
   onOpenConflicts?: (context: ConflictResolverContext) => void;
   onPageChange?: (page: PageId) => void;
-  provider?: AssetProvider;
   demoMode?: boolean;
 };
 
@@ -48,17 +46,16 @@ export function CurrentPage({
   onOpenProjectDetail,
   onOpenConflicts,
   onPageChange,
-  provider = "claude",
   demoMode = false,
 }: CurrentPageProps) {
   switch (activePage) {
     case "dashboard": return <DashboardPage appInfo={appInfo} demoMode={demoMode} />;
-    case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;
+    case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
     case "commands": return <CommandsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
-    case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;
+    case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
     case "asset-detail": return <AssetDetailPage demoMode={demoMode} detail={assetDetail ?? undefined} />;
     case "projects": return <ProjectsListPage demoMode={demoMode} onOpenProjectDetail={onOpenProjectDetail} />;
-    case "project-detail": return <ProjectDetailPage demoMode={demoMode} detail={projectDetail ?? undefined} />;
+    case "project-detail": return <ProjectDetailPage demoMode={demoMode} detail={projectDetail ?? undefined} onPageChange={onPageChange} />;
     case "scan": return <ScanImportPage demoMode={demoMode} onOpenConflicts={onOpenConflicts} />;
     case "mounts": return <MountManagerPage demoMode={demoMode} />;
     case "conflicts": return <ConflictResolverPage context={conflictContext ?? undefined} demoMode={demoMode} />;

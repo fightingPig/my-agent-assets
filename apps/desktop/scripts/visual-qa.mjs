@@ -195,6 +195,7 @@ async function main() {
 
     chrome = spawn(chromePath, [
       "--headless=new",
+      "--disable-gpu",
       "--disable-background-networking",
       "--disable-component-update",
       "--disable-default-apps",
@@ -204,6 +205,7 @@ async function main() {
       "--metrics-recording-only",
       "--no-first-run",
       "--window-size=1440,900",
+      "--remote-debugging-address=127.0.0.1",
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${chromeProfile}`,
       "about:blank",

@@ -371,7 +371,7 @@ impl MountTarget {
     }
 }
 
-fn directory_mount_adapter() -> MountAdapter {
+pub(crate) fn directory_mount_adapter() -> MountAdapter {
     if cfg!(windows) {
         MountAdapter::WindowsDirectoryJunction
     } else {

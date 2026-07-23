@@ -34,8 +34,6 @@ createRoot(document.getElementById("root")!).render(
       platform={query.platform}
       activePage={query.pageId}
       onPageChange={() => undefined}
-      provider="claude"
-      onProviderChange={() => undefined}
     >
       <PageHeader page={page} />
       <CurrentPage activePage={query.pageId} appInfo={appInfo} demoMode />

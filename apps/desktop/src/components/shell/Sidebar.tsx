@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import brandMark from "../../assets/my-agent-assets-mark.svg";
 import { getSidebarPageGroups, type PageId } from "../../app/pages";
-import { providerLabels, type AssetProvider } from "../../app/provider";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 
 // Keep detail-page entries so adding a new PageId also requires an explicit icon decision.
@@ -38,30 +37,14 @@ const pageIcons: Record<PageId, LucideIcon> = {
 type SidebarProps = {
   activePage: PageId;
   onPageChange: (page: PageId) => void;
-  provider: AssetProvider;
-  onProviderChange: (provider: AssetProvider) => void;
 };
 
-export function Sidebar({ activePage, onPageChange, provider, onProviderChange }: SidebarProps) {
+export function Sidebar({ activePage, onPageChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
         <div className="brand-mark"><img alt="" aria-hidden="true" src={brandMark} /></div>
         <span>My Agent Assets</span>
-      </div>
-      <div className="provider-switch" aria-label="资产 Provider">
-        {(["claude", "codex"] as const).map((item) => (
-          <button
-            aria-pressed={provider === item}
-            data-no-drag="true"
-            key={item}
-            onClick={() => onProviderChange(item)}
-            style={NO_DRAG_REGION_STYLE}
-            type="button"
-          >
-            {providerLabels[item]}
-          </button>
-        ))}
       </div>
       <nav aria-label="主导航">
         {getSidebarPageGroups().map(({ group, pages }) => (

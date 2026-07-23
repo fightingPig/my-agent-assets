@@ -145,27 +145,17 @@ describe("MCP canonical management", () => {
     }));
   });
 
-  it("uses explicit mount preview/apply to sync an out-of-sync target", async () => {
+  it("shows mount state but keeps target synchronization in Mount Manager", async () => {
     render(<McpServersListPage />);
     await screen.findByRole("option", { name: "filesystem" });
     fireEvent.click(screen.getByRole("button", { name: "编辑配置" }));
     await screen.findByText("out_of_sync");
 
-    fireEvent.click(screen.getByRole("button", { name: "生成同步预览" }));
-    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
-      assetId: "mcp:filesystem",
-      targetId: "claude-user-mcp",
-    }));
+    expect(screen.getByText("当前挂载")).toBeInTheDocument();
+    expect(screen.getByText(/目标启用、同步和解除挂载统一在“挂载管理”中完成/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "生成同步预览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认同步" })).not.toBeInTheDocument();
+    expect(canonicalMountPreview).not.toHaveBeenCalled();
     expect(canonicalMountApply).not.toHaveBeenCalled();
-
-    fireEvent.click(await screen.findByRole("button", { name: "确认同步" }));
-    await waitFor(() => expect(canonicalMountApply).toHaveBeenCalledWith({
-      previewId: "mount-1",
-      previewGeneratedAtEpochSeconds: 200,
-      request: {
-        assetId: "mcp:filesystem",
-        targetId: "claude-user-mcp",
-      },
-    }));
   });
 });

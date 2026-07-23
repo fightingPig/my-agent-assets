@@ -37,8 +37,11 @@ const {
   previewSync,
   syncApply,
   listMountTargets,
+  listMountBindings,
   canonicalMountPreview,
   canonicalMountApply,
+  canonicalUnmountPreview,
+  canonicalUnmountApply,
   discoverRuntimeSources,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
@@ -59,8 +62,11 @@ const {
   previewSync: vi.fn(),
   syncApply: vi.fn(),
   listMountTargets: vi.fn(),
+  listMountBindings: vi.fn(),
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
+  canonicalUnmountPreview: vi.fn(),
+  canonicalUnmountApply: vi.fn(),
   discoverRuntimeSources: vi.fn(),
   canonicalBatchImportPreview: vi.fn(),
   canonicalBatchImportApply: vi.fn(),
@@ -83,8 +89,11 @@ vi.mock("../app/data-api", () => ({
   previewSync,
   syncApply,
   listMountTargets,
+  listMountBindings,
   canonicalMountPreview,
   canonicalMountApply,
+  canonicalUnmountPreview,
+  canonicalUnmountApply,
   discoverRuntimeSources,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
@@ -119,6 +128,8 @@ beforeEach(() => {
     status: "ready",
     description: "Local project fixture",
     updatedAt: "2026-06-28T08:00:00Z",
+    pathAvailable: true,
+    warningCount: 0,
     assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
     mounts: ["review"],
   } satisfies ProjectSummary]);
@@ -173,6 +184,7 @@ beforeEach(() => {
       status: "ready",
     },
   ]);
+  listMountBindings.mockResolvedValue([]);
   canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture());
   canonicalMountApply.mockResolvedValue({
     previewId: "mount:skill-review",
@@ -182,6 +194,15 @@ beforeEach(() => {
     backupId: "mount-backup-1",
     affectedPaths: ["/tmp/home/.claude/skills/review"],
     warnings: [],
+  });
+  canonicalUnmountPreview.mockResolvedValue(canonicalUnmountPreviewFixture());
+  canonicalUnmountApply.mockResolvedValue({
+    previewId: "unmount:skill-review",
+    assetId: "skill:review",
+    targetId: "claude-user-skills",
+    unmounted: true,
+    backupId: "unmount-backup-1",
+    affectedPaths: ["/tmp/home/.claude/skills/review"],
   });
   discoverRuntimeSources.mockResolvedValue({ sources: [], warnings: [] });
   canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture());
@@ -263,28 +284,28 @@ describe("read-only UI integration", () => {
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
   });
 
-  it("keeps Skills and MCP in one canonical asset center across provider selection", async () => {
+  it("keeps Skills and MCP in one canonical asset center without global provider filtering", async () => {
     listAssets.mockResolvedValue([assetFixture("skill:canonical-review", "canonical-review", "skill")]);
-    const { rerender } = render(<SkillsListPage provider="codex" />);
+    const { rerender } = render(<SkillsListPage />);
     expect(await screen.findByRole("option", { name: "canonical-review" })).toBeInTheDocument();
     expect(screen.getByText("real canonical content for skill:canonical-review")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
     expect(discoverRuntimeSources).not.toHaveBeenCalled();
 
     listAssets.mockResolvedValue([assetFixture("mcp:canonical-files", "canonical-files", "mcp")]);
-    rerender(<McpServersListPage provider="codex" />);
+    rerender(<McpServersListPage />);
     expect(await screen.findByRole("option", { name: "canonical-files" })).toBeInTheDocument();
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
     expect(screen.getByText(/统一模型是唯一真实配置/)).toBeInTheDocument();
   });
 
-  it("shows canonical empty states independent of provider selection", async () => {
+  it("shows canonical empty states without global provider filtering", async () => {
     listAssets.mockResolvedValue([]);
-    const { rerender } = render(<SkillsListPage provider="codex" />);
+    const { rerender } = render(<SkillsListPage />);
     expect(await screen.findByText("未发现 Skills")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
-    rerender(<McpServersListPage provider="codex" />);
+    rerender(<McpServersListPage />);
     expect(await screen.findByText("未发现 MCP Servers")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
   });
@@ -298,16 +319,18 @@ describe("read-only UI integration", () => {
     expect(container.textContent).toContain("未发现本地数据");
   });
 
-  it("feeds read-only projects while preserving selection and disabled actions", async () => {
+  it("feeds explicitly maintained projects while preserving local selection", async () => {
     listProjects.mockResolvedValue([
       {
         id: "/tmp/local-app",
         name: "local-app",
         title: "Local App",
         path: "/tmp/local-app",
-        status: "changed",
+        status: "needs_attention",
         description: "Read-only project",
         updatedAt: "2026-06-25T09:00:00Z",
+        pathAvailable: true,
+        warningCount: 1,
         assetCounts: { total: 3, skills: 1, commands: 1, mcps: 1 },
         mounts: ["review"],
       } satisfies ProjectSummary,
@@ -318,7 +341,7 @@ describe("read-only UI integration", () => {
     const row = await screen.findByRole("option", { name: "local-app" });
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("/tmp/local-app")).toBeInTheDocument();
-    expect(container.textContent).toContain("只读真实数据");
+    expect(container.textContent).toContain("已维护项目");
     expect(screen.queryByRole("button", { name: "扫描项目" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "管理挂载" })).not.toBeInTheDocument();
   });
@@ -328,9 +351,9 @@ describe("read-only UI integration", () => {
 
     const { container } = render(<ProjectsListPage />);
 
-    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(await screen.findByText("尚未添加维护项目")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
-    expect(container.textContent).toContain("未发现本地项目");
+    expect(container.textContent).toContain("尚未添加维护项目");
   });
 
   it("feeds read-only backup history with manifest metadata and manual restore guidance", async () => {
@@ -467,7 +490,8 @@ describe("read-only UI integration", () => {
 
     const assetCenter = await screen.findByDisplayValue("/tmp/assets");
     expect(assetCenter).toBeInTheDocument();
-    expect(screen.getByDisplayValue("/tmp/workspace, /tmp/code")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("/tmp/workspace, /tmp/code")).not.toBeInTheDocument();
+    expect(screen.getByText(/维护项目通过“项目列表”手动添加/)).toBeInTheDocument();
     expect(screen.getByDisplayValue("trunk")).toBeInTheDocument();
     expect(screen.getByDisplayValue("upstream")).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/maa")).toBeInTheDocument();
@@ -540,18 +564,17 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalledWith({ kind: "user" }));
     expect(await screen.findByText("live-scan")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /项目级/ }));
+    fireEvent.click(screen.getByRole("button", { name: /维护项目/ }));
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith(
-      { kind: "project", projectPath: "~/workspace/project-a" },
+      { kind: "managed_projects", projectIds: ["/tmp/project-a"] },
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: /自定义路径/ }));
-    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith({
-      kind: "custom",
-      path: "~/code/design-system/.agents/skills",
-      assetKind: "skill",
-      sourceFormat: "skill_directory",
-    }));
+    fireEvent.click(screen.getByRole("button", { name: /高级自定义来源/ }));
+    expect((await screen.findAllByText("请选择自定义路径")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox", { name: "高级自定义来源路径" })).toHaveValue("尚未选择");
+    expect(discoverRuntimeSources).toHaveBeenLastCalledWith(
+      { kind: "managed_projects", projectIds: ["/tmp/project-a"] },
+    );
 
     expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "保存扫描预览" })).not.toBeInTheDocument();
@@ -565,7 +588,7 @@ describe("read-only UI integration", () => {
 
     render(<ScanImportPage />);
 
-    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
+    await screen.findByRole("checkbox", { name: "选择 live-scan" });
     fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
 
     await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalledWith({
@@ -731,6 +754,41 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
+  it("uses registered mount bindings for the current-mount view and previews removal", async () => {
+    listMountBindings.mockResolvedValue([{
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+      status: "mounted",
+      targetPath: "/tmp/home/.claude/skills/review",
+      provider: "claude_code",
+      scope: "user",
+    }]);
+
+    render(<MountManagerPage />);
+    await waitFor(() => expect(listMountBindings).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "当前挂载" }));
+
+    expect(await screen.findByText((_, element) => (
+      element?.tagName === "SMALL" && element.textContent?.includes("/tmp/home/.claude/skills/review") === true
+    ))).toBeInTheDocument();
+    expect(screen.getByText("已挂载")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "预览解除" }));
+    await waitFor(() => expect(canonicalUnmountPreview).toHaveBeenCalledWith({
+      assetId: "skill:review",
+      targetId: "claude-user-skills",
+    }));
+    expect(screen.getByRole("button", { name: "确认解除挂载" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "确认解除挂载" }));
+    await waitFor(() => expect(canonicalUnmountApply).toHaveBeenCalledWith({
+      previewId: "unmount:skill-review",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        assetId: "skill:review",
+        targetId: "claude-user-skills",
+      },
+    }));
+  });
+
   it("resolves canonical Scan conflicts through atomic batch preview and apply", async () => {
     const conflictItem = {
       ...canonicalImportItemFixture("source:review", "skill:review"),
@@ -780,6 +838,11 @@ describe("read-only UI integration", () => {
     expect(screen.getByText(/review 将被跳过/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /重命名.*以新名称导入当前内容/ }));
+    expect(screen.getByText(/需要先输入新的唯一资产名称/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "先填写新名称" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "新资产名称" }), {
+      target: { value: "review-imported" },
+    });
     expect(screen.getByText(/review 将以 review-imported 导入/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "生成处理计划" }));
@@ -886,53 +949,16 @@ describe("read-only UI integration", () => {
     }));
   });
 
-  it("uses selected real project data for project mount preview, apply, and refresh", async () => {
+  it("keeps project detail informational and routes mount changes to Mount Manager", async () => {
     const project = staticProjects[0];
-    const asset = assetFixture("skill:review", "review", "skill");
-    listAssets.mockResolvedValue([asset]);
-    listProjects.mockResolvedValue([projectFixture({
-      id: project.id,
-      name: project.name,
-      path: project.path,
-      mounts: ["review"],
-      assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
-    })]);
-    listMountTargets.mockResolvedValue([{
-      id: "project-a-skills",
-      kind: "claude_project_skills",
-      provider: "claude_code",
-      accepts: ["skill"],
-      adapter: "symlink_directory",
-      scope: "project",
-      path: "~/workspace/project-a/.claude/skills",
-      projectPath: "~/workspace/project-a",
-      providerState: "initialized",
-      status: "ready",
-    }]);
-    canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture({
-      previewId: "preview:mount:project-detail",
-      assetId: asset.id,
-      targetId: "project-a-skills",
-      affectedTargetPath: "~/workspace/project-a/.claude/skills/review",
-    }));
+    const onPageChange = vi.fn();
+    render(<ProjectDetailPage detail={project} onPageChange={onPageChange} />);
 
-    render(<ProjectDetailPage detail={project} />);
-
-    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
-      assetId: "skill:review",
-      targetId: "project-a-skills",
-    }));
-    expect(screen.getByRole("button", { name: "确认项目挂载" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
-    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
-      previewId: "preview:mount:project-detail",
-      previewGeneratedAtEpochSeconds: 100,
-      request: {
-        assetId: "skill:review",
-        targetId: "project-a-skills",
-      },
-    }));
-    await waitFor(() => expect(listProjects).toHaveBeenCalled());
+    expect(screen.getByRole("heading", { name: "挂载管理" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "前往挂载管理" }));
+    expect(onPageChange).toHaveBeenCalledWith("mounts");
+    expect(canonicalMountPreview).not.toHaveBeenCalled();
+    expect(canonicalMountApply).not.toHaveBeenCalled();
   });
 
   it("does not call apply command wrappers from Scan Import preview", async () => {
@@ -968,6 +994,8 @@ function projectFixture(overrides: Partial<ProjectSummary> = {}): ProjectSummary
     status: "ready",
     description: "Local project",
     updatedAt: "2026-06-27T00:00:00Z",
+    pathAvailable: true,
+    warningCount: 0,
     assetCounts: { total: 0, skills: 0, commands: 0, mcps: 0 },
     mounts: [],
     ...overrides,
@@ -1084,5 +1112,20 @@ function canonicalMountPreviewFixture(
     generatedAtEpochSeconds: 100,
     expiresAtEpochSeconds: 400,
     ...overrides,
+  };
+}
+
+function canonicalUnmountPreviewFixture() {
+  return {
+    previewId: "unmount:skill-review",
+    assetId: "skill:review",
+    targetId: "claude-user-skills",
+    affectedTargetPath: "/tmp/home/.claude/skills/review",
+    plannedEffects: ["移除受管理的运行时挂载"],
+    warnings: [],
+    backupRequired: true,
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
   };
 }

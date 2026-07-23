@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { canonicalAssetContent, listAssets } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
-import type { AssetProvider } from "../app/provider";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -84,13 +83,11 @@ const staticSkills: readonly SkillItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
-  provider?: AssetProvider;
 };
 
 export function SkillsListPage({
   demoMode = false,
   onOpenAssetDetail,
-  provider = "claude",
 }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly SkillItem[]>(demoMode ? staticSkills : []);
   const [stateLabel, setStateLabel] = useState("读取中");
@@ -129,7 +126,7 @@ export function SkillsListPage({
     return () => {
       cancelled = true;
     };
-  }, [demoMode, provider]);
+  }, [demoMode]);
 
   return (
     <AssetCenterLayout

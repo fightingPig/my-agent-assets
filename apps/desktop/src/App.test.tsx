@@ -209,24 +209,22 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("button", { name: "快速操作" })).not.toBeInTheDocument();
   });
 
-  it("marks provider and navigation controls as no-drag", () => {
+  it("marks navigation controls as no-drag without a global provider switch", () => {
     render(<App demoMode />);
-    expect(screen.getByRole("button", { name: "Claude Code" })).toHaveAttribute("data-no-drag", "true");
-    expect(screen.getByRole("button", { name: "Codex" })).toHaveAttribute("data-no-drag", "true");
     expect(screen.getByRole("button", { name: "首页" })).toHaveAttribute("data-no-drag", "true");
+    expect(screen.queryByRole("button", { name: "Claude Code" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
     expect(styles).toMatch(/\.nav-item\s*\{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).toMatch(/\.dropdown-menu,[^}]*-webkit-app-region:\s*no-drag;/s);
   });
 
-  it("switches providers without splitting canonical asset navigation", () => {
+  it("keeps canonical asset navigation independent of a global provider switch", () => {
     render(<App demoMode />);
     expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
     expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skills" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "MCP Servers" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Commands" }));
-    expect(screen.getByRole("heading", { name: "Commands" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
   });
 
   it("does not show demo rows across normal production pages", async () => {
@@ -244,7 +242,7 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
-    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(await screen.findByText("尚未添加维护项目")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "冲突处理" }));

@@ -1,11 +1,9 @@
-import { AlertTriangle, Blocks, Plus, RefreshCw, X } from "lucide-react";
+import { Blocks, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalMcpGet,
   canonicalMcpSaveApply,
   canonicalMcpSavePreview,
-  canonicalMountApply,
-  canonicalMountPreview,
   canonicalAssetContent,
   listAssets,
 } from "../app/data-api";
@@ -16,10 +14,8 @@ import type {
   McpSavePreview,
   McpSavePreviewRequest,
   McpTransport,
-  CanonicalMountPreview,
 } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
-import type { AssetProvider } from "../app/provider";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -119,7 +115,6 @@ const staticServers: readonly McpItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
-  provider?: AssetProvider;
 };
 
 type McpEditorState = {
@@ -142,21 +137,17 @@ type McpEditorState = {
 type McpEditorProps = {
   editor: McpEditorState;
   savePreview: McpSavePreview | null;
-  syncPreviews: Record<string, CanonicalMountPreview>;
   busy: boolean;
   message: string;
   onChange: (editor: McpEditorState) => void;
   onClose: () => void;
   onPreviewSave: () => void;
   onApplySave: () => void;
-  onPreviewTargetSync: (targetId: string) => void;
-  onApplyTargetSync: (targetId: string) => void;
 };
 
 export function McpServersListPage({
   demoMode = false,
   onOpenAssetDetail,
-  provider = "claude",
 }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly McpItem[]>(demoMode ? staticServers : []);
   const [stateLabel, setStateLabel] = useState("读取中");
@@ -165,7 +156,6 @@ export function McpServersListPage({
   const [editorMessage, setEditorMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [syncPreviews, setSyncPreviews] = useState<Record<string, CanonicalMountPreview>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -203,12 +193,11 @@ export function McpServersListPage({
     return () => {
       cancelled = true;
     };
-  }, [demoMode, provider, refreshKey]);
+  }, [demoMode, refreshKey]);
 
   const openCreate = () => {
     setEditor(emptyEditor());
     setSavePreview(null);
-    setSyncPreviews({});
     setEditorMessage("");
   };
 
@@ -219,7 +208,6 @@ export function McpServersListPage({
       const definition = await canonicalMcpGet(server.id.startsWith("mcp:") ? server.id : `mcp:${server.name}`);
       setEditor(editorFromDefinition(definition));
       setSavePreview(null);
-      setSyncPreviews({});
     } catch (error) {
       setEditorMessage(errorMessage(error));
     } finally {
@@ -272,48 +260,6 @@ export function McpServersListPage({
     }
   };
 
-  const previewTargetSync = async (targetId: string) => {
-    if (!editor?.assetId) return;
-    setBusy(true);
-    setEditorMessage("");
-    try {
-      const preview = await canonicalMountPreview({ assetId: editor.assetId, targetId });
-      setSyncPreviews((current) => ({ ...current, [targetId]: preview }));
-    } catch (error) {
-      setEditorMessage(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const applyTargetSync = async (targetId: string) => {
-    if (!editor?.assetId) return;
-    const preview = syncPreviews[targetId];
-    if (!preview?.canApply) return;
-    setBusy(true);
-    setEditorMessage("");
-    try {
-      await canonicalMountApply({
-        previewId: preview.previewId,
-        previewGeneratedAtEpochSeconds: preview.generatedAtEpochSeconds,
-        request: { assetId: editor.assetId, targetId },
-      });
-      const definition = await canonicalMcpGet(editor.assetId);
-      setEditor(editorFromDefinition(definition));
-      setSyncPreviews((current) => {
-        const next = { ...current };
-        delete next[targetId];
-        return next;
-      });
-      setEditorMessage(`目标 ${targetId} 已显式同步。`);
-      setRefreshKey((value) => value + 1);
-    } catch (error) {
-      setEditorMessage(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="mcp-page-stack">
       <div className="mcp-page-actions">
@@ -332,19 +278,14 @@ export function McpServersListPage({
           onChange={(next) => {
             setEditor(next);
             setSavePreview(null);
-            setSyncPreviews({});
           }}
           onClose={() => {
             setEditor(null);
             setSavePreview(null);
-            setSyncPreviews({});
             setEditorMessage("");
           }}
           onPreviewSave={requestSavePreview}
-          onPreviewTargetSync={previewTargetSync}
-          onApplyTargetSync={applyTargetSync}
           savePreview={savePreview}
-          syncPreviews={syncPreviews}
         />
       ) : editorMessage ? <p className="mcp-editor-message error">{editorMessage}</p> : null}
       <AssetCenterLayout
@@ -380,15 +321,12 @@ export function McpServersListPage({
 function McpEditor({
   editor,
   savePreview,
-  syncPreviews,
   busy,
   message,
   onChange,
   onClose,
   onPreviewSave,
   onApplySave,
-  onPreviewTargetSync,
-  onApplyTargetSync,
 }: McpEditorProps) {
   const update = <K extends keyof McpEditorState>(key: K, value: McpEditorState[K]) => {
     onChange({ ...editor, [key]: value });
@@ -452,21 +390,13 @@ function McpEditor({
 
       {editor.bindings.length > 0 ? (
         <div className="mcp-binding-list">
-          <strong>目标同步状态</strong>
-          {editor.bindings.map((binding) => {
-            const preview = syncPreviews[binding.targetId];
-            return (
-              <div key={binding.targetId}>
-                <span><b>{binding.targetId}</b><small>{binding.status}</small></span>
-                {preview ? (
-                  <button className="asset-business-action" data-no-drag="true" disabled={busy || !preview.canApply} onClick={() => onApplyTargetSync(binding.targetId)} style={NO_DRAG_REGION_STYLE} type="button">确认同步</button>
-                ) : (
-                  <button className="asset-secondary-action" data-no-drag="true" disabled={busy || binding.status === "mounted"} onClick={() => onPreviewTargetSync(binding.targetId)} style={NO_DRAG_REGION_STYLE} type="button"><RefreshCw size={13} />生成同步预览</button>
-                )}
-              </div>
-            );
-          })}
-          <p><AlertTriangle size={13} />只有“确认同步”会精确 patch 对应 Claude/Codex live config；保存 canonical 不会自动同步。</p>
+          <strong>当前挂载</strong>
+          {editor.bindings.map((binding) => (
+            <div key={binding.targetId}>
+              <span><b>{binding.targetId}</b><small>{binding.status}</small></span>
+            </div>
+          ))}
+          <p>目标启用、同步和解除挂载统一在“挂载管理”中完成。</p>
         </div>
       ) : null}
 

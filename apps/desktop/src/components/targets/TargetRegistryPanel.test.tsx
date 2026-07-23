@@ -8,12 +8,14 @@ const {
   targetRegistrationApply,
   targetRemovalPreview,
   targetRemovalApply,
+  openDialog,
 } = vi.hoisted(() => ({
   listMountTargets: vi.fn(),
   targetRegistrationPreview: vi.fn(),
   targetRegistrationApply: vi.fn(),
   targetRemovalPreview: vi.fn(),
   targetRemovalApply: vi.fn(),
+  openDialog: vi.fn(),
 }));
 
 vi.mock("../../app/data-api", () => ({
@@ -24,6 +26,8 @@ vi.mock("../../app/data-api", () => ({
   targetRemovalApply,
 }));
 
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: openDialog }));
+
 describe("TargetRegistryPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,18 +36,17 @@ describe("TargetRegistryPanel", () => {
       previewId: "target-add-1",
       operation: "add",
       target: {
-        id: "project-a-skills",
-        kind: "claude_project_skills",
-        provider: "claude_code",
+        id: "custom-skill-directory-skills",
+        kind: "custom_skill_directory",
+        provider: "custom",
         accepts: ["skill"],
         adapter: "symlink_directory",
-        scope: "project",
-        path: "/tmp/project-a/.claude/skills",
-        projectPath: "/tmp/project-a",
+        scope: "custom",
+        path: "/tmp/custom/skills",
         providerState: "initialized",
         status: "ready",
       },
-      affectedPaths: ["/tmp/targets.yaml", "/tmp/project-a/.claude/skills"],
+      affectedPaths: ["/tmp/targets.yaml", "/tmp/custom/skills"],
       blockingBindings: [],
       warnings: [],
       canApply: true,
@@ -53,26 +56,23 @@ describe("TargetRegistryPanel", () => {
     targetRegistrationApply.mockResolvedValue({
       previewId: "target-add-1",
       operation: "add",
-      targetId: "project-a-skills",
+      targetId: "custom-skill-directory-skills",
       registryPath: "/tmp/targets.yaml",
       backupPath: "/tmp/backups/targets.yaml",
     });
   });
 
   it("previews and confirms registration without deriving runtime paths in React", async () => {
+    openDialog.mockResolvedValue("/tmp/custom/skills");
     render(<TargetRegistryPanel />);
-    fireEvent.change(screen.getByLabelText("目标 ID"), {
-      target: { value: "project-a-skills" },
-    });
-    fireEvent.change(screen.getByLabelText("项目根目录"), {
-      target: { value: "/tmp/project-a" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "选择路径" }));
+    await waitFor(() => expect(openDialog).toHaveBeenCalledWith(expect.objectContaining({ directory: true })));
     fireEvent.click(screen.getByRole("button", { name: "预览注册" }));
 
     await waitFor(() => expect(targetRegistrationPreview).toHaveBeenCalledWith({
-      id: "project-a-skills",
-      kind: "claude_project_skills",
-      location: "/tmp/project-a",
+      id: "custom-skill-directory-skills",
+      kind: "custom_skill_directory",
+      location: "/tmp/custom/skills",
     }));
     expect(targetRegistrationPreview.mock.calls[0][0]).not.toHaveProperty("runtimePath");
 
@@ -81,14 +81,14 @@ describe("TargetRegistryPanel", () => {
       previewId: "target-add-1",
       previewGeneratedAtEpochSeconds: 100,
       request: {
-        id: "project-a-skills",
-        kind: "claude_project_skills",
-        location: "/tmp/project-a",
+        id: "custom-skill-directory-skills",
+        kind: "custom_skill_directory",
+        location: "/tmp/custom/skills",
       },
     }));
   });
 
-  it("keeps built-in user targets non-removable and previews custom removal", async () => {
+  it("hides standard targets and previews custom target removal", async () => {
     listMountTargets.mockResolvedValue([
       {
         id: "claude-user-skills",
@@ -143,8 +143,8 @@ describe("TargetRegistryPanel", () => {
     });
 
     render(<TargetRegistryPanel />);
-    expect(await screen.findByRole("button", { name: "移除目标 claude-user-skills" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "移除目标 custom-skills" }));
+    expect(screen.queryByRole("button", { name: "移除目标 claude-user-skills" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "移除目标 custom-skills" }));
     await waitFor(() => expect(targetRemovalPreview).toHaveBeenCalledWith({
       targetId: "custom-skills",
     }));

@@ -4,7 +4,7 @@ export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_STATUSES = ["ready", "mounted", "unmounted", "conflict", "invalid"] as const;
 export type AssetStatus = (typeof ASSET_STATUSES)[number];
 
-export const PROJECT_STATUSES = ["ready", "changed", "needsSync", "invalid"] as const;
+export const PROJECT_STATUSES = ["ready", "unchecked", "needs_attention", "missing_path", "invalid"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 export const RUNTIME_SCOPES = ["user", "local", "project"] as const;
@@ -104,8 +104,84 @@ export type ProjectSummary = {
   status: ProjectStatus;
   description: string;
   updatedAt: string | null;
+  lastCheckedAt?: string | null;
+  pathAvailable: boolean;
+  warningCount: number;
   assetCounts: AssetCounts;
   mounts: string[];
+};
+
+export type ProjectCheckSummary = {
+  checkedAtEpochSeconds: number;
+  assetCounts: AssetCounts;
+  warningCount: number;
+  pathAvailable: boolean;
+};
+
+export type ManagedProject = {
+  id: string;
+  name: string;
+  path: string;
+  createdAtEpochSeconds: number;
+  updatedAtEpochSeconds: number;
+  lastCheck?: ProjectCheckSummary;
+};
+
+export type ProjectAddPreviewRequest = {
+  path: string;
+  name?: string;
+};
+
+export type ProjectEditPreviewRequest = {
+  projectId: string;
+  name?: string;
+  path?: string;
+};
+
+export type ProjectRemovePreviewRequest = { projectId: string };
+
+export type ProjectChangePreview = {
+  previewId: string;
+  operation: "add" | "edit" | "remove";
+  project: ManagedProject;
+  affectedPaths: string[];
+  blockingBindings: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type ProjectAddApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ProjectAddPreviewRequest;
+};
+
+export type ProjectEditApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ProjectEditPreviewRequest;
+};
+
+export type ProjectRemoveApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ProjectRemovePreviewRequest;
+};
+
+export type ProjectChangeResult = {
+  previewId: string;
+  operation: "add" | "edit" | "remove";
+  project: ManagedProject;
+  registryPath: string;
+  affectedPaths: string[];
+};
+
+export type ProjectInspectionRequest = { projectIds: string[] };
+export type ProjectInspection = {
+  project: ProjectSummary;
+  warnings: string[];
 };
 
 export type ApplyStepResult = {
@@ -422,6 +498,7 @@ export type RuntimeSourceScope = (typeof RUNTIME_SOURCE_SCOPES)[number];
 export type RuntimeDiscoveryScope =
   | { kind: "user" }
   | { kind: "project"; projectPath: string }
+  | { kind: "managed_projects"; projectIds: string[] }
   | {
       kind: "custom";
       path: string;
@@ -551,6 +628,17 @@ export type RegisteredMountTarget = {
     | "installed_not_initialized"
     | "initialized";
   status: "ready" | "blocked" | "invalid";
+};
+
+export type MountBindingStatus = "mounted" | "out_of_sync" | "orphaned";
+
+export type MountBindingSummary = {
+  assetId: string;
+  targetId: string;
+  status: MountBindingStatus;
+  targetPath?: string;
+  provider?: RuntimeProvider;
+  scope?: "user" | "local" | "project" | "custom";
 };
 
 export type TargetRegistrationPreviewRequest = {
@@ -703,7 +791,7 @@ export type McpSaveApplyResult = {
   affectedPaths: string[];
 };
 
-export type McpBindingStatus = "mounted" | "out_of_sync" | "orphaned";
+export type McpBindingStatus = MountBindingStatus;
 
 export type McpAssetDefinition = {
   assetId: string;

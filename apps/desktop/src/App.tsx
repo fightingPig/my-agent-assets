@@ -8,7 +8,6 @@ import type {
   ProjectDetailContext,
 } from "./app/detail-context";
 import { getPageById, type PageId } from "./app/pages";
-import type { AssetProvider } from "./app/provider";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
 import {
@@ -31,7 +30,6 @@ type AppProps = {
 function App({ demoMode = false }: AppProps = {}) {
   const [appInfo, setAppInfo] = useState<AppInfo>(fallbackInfo);
   const [activePage, setActivePage] = useState<PageId>("dashboard");
-  const [provider, setProvider] = useState<AssetProvider>("claude");
   const [assetDetail, setAssetDetail] = useState<AssetDetailContext | null>(null);
   const [projectDetail, setProjectDetail] = useState<ProjectDetailContext | null>(null);
   const [conflictContext, setConflictContext] = useState<ConflictResolverContext | null>(null);
@@ -58,17 +56,11 @@ function App({ demoMode = false }: AppProps = {}) {
     setActivePage("conflicts");
   };
 
-  const changeProvider = (nextProvider: AssetProvider) => {
-    setProvider(nextProvider);
-  };
-
   return (
     <AppFrame
       activePage={activePage}
       onPageChange={setActivePage}
-      onProviderChange={changeProvider}
       platform={platform}
-      provider={provider}
     >
       <PageHeader page={currentPage} />
       <CurrentPage
@@ -80,7 +72,6 @@ function App({ demoMode = false }: AppProps = {}) {
         onOpenConflicts={openConflicts}
         onOpenProjectDetail={openProjectDetail}
         onPageChange={setActivePage}
-        provider={provider}
         projectDetail={projectDetail}
         demoMode={demoMode}
       />
