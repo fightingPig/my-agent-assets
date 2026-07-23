@@ -345,6 +345,7 @@ fn write_synced(path: &Path, content: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn sync_tree(path: &Path) -> Result<()> {
     for entry in fs::read_dir(path)? {
         let path = entry?.path();
@@ -356,6 +357,12 @@ fn sync_tree(path: &Path) -> Result<()> {
         }
     }
     sync_directory(path)
+}
+
+#[cfg(not(unix))]
+fn sync_tree(_path: &Path) -> Result<()> {
+    // Windows rejects FlushFileBuffers for the read-only handles used here.
+    Ok(())
 }
 
 #[cfg(unix)]
