@@ -1,16 +1,16 @@
 # My Agent Assets
 
-`my-agent-assets` is a local-first Claude asset manager. The V1 command line
-tool is `maa`.
+`my-agent-assets` is a local-first Claude asset manager. The V1 command line tool is `maa`.
 
-V1 manages Claude assets from fake or explicit runtime roots during tests:
+![Latest Release](https://img.shields.io/github/v/release/fightingPig/my-agent-assets)
 
-- Skills from `.claude/skills/<name>/`
-- Commands from `.claude/commands/<name>.md`
-- MCP servers from Claude MCP JSON configuration sources
+## Download Desktop App
 
-The default asset center is `~/.my-agent-assets`, but tests and examples should
-use `--home <fake-home>` or `MY_AGENT_ASSETS_HOME` to avoid touching real data.
+Latest desktop builds are published through GitHub Releases.
+
+- macOS: https://github.com/fightingPig/my-agent-assets/releases/latest
+- Windows: https://github.com/fightingPig/my-agent-assets/releases/latest
+- Linux: https://github.com/fightingPig/my-agent-assets/releases/latest
 
 ## Quick Commands
 
@@ -22,8 +22,7 @@ cargo run -p my-agent-assets-cli --bin maa -- --help
 
 ## macOS Desktop Preview
 
-The first GUI milestone is an installable, home-page-only Tauri preview. It
-uses typed Tauri commands for local Claude data and read-only Codex Skill/MCP discovery. Tests and Visual QA may enable explicit demo fixtures, but production pages show only real data, empty states, or read errors.
+The first GUI milestone is an installable, home-page-only Tauri preview. It uses typed Tauri commands for local Claude data and read-only Codex Skill/MCP discovery. Tests and Visual QA may enable explicit demo fixtures, but production pages show only real data, empty states, or read errors.
 
 ```bash
 cd apps/desktop
@@ -33,8 +32,6 @@ npm test
 npm run build
 ```
 
-Build artifacts are written to `target/release/bundle/`. The local preview can
-be installed at `~/Applications/My Agent Assets.app`.
+Build artifacts are written to `target/release/bundle/`.
 
-Layout reference screenshots are stored in `docs/screenshots/` for the default
-and minimum supported window sizes.
+Layout reference screenshots are stored in `docs/screenshots/` for the default and minimum supported window sizes.
