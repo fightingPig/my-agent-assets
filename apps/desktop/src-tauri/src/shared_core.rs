@@ -540,7 +540,9 @@ mod tests {
     use my_agent_assets_core::import::{ImportApplyStatus, ImportResolution};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_HOME_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn adapter_contract_round_trip_works_with_fake_home() {
@@ -680,12 +682,10 @@ mod tests {
     }
 
     fn test_home(name: &str) -> PathBuf {
+        let sequence = TEST_HOME_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "maa-shared-core-adapter-{name}-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            "maa-shared-core-adapter-{name}-{}-{sequence}",
+            std::process::id()
         ));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
