@@ -1,3 +1,4 @@
+use crate::fs_sync::sync_directory;
 use crate::mcp::CanonicalMcp;
 use crate::path_safety::{guard_write_path, validate_single_path_component};
 use crate::targets::AssetKind;
@@ -383,7 +384,7 @@ fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        sync_directory(parent)
     })() {
         let _ = fs::remove_file(&temporary);
         return Err(error);

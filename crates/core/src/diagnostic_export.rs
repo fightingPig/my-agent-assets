@@ -1,6 +1,7 @@
 use crate::audit_log::{list_log_files, read_audit_entries, AuditLogEntry};
 use crate::diagnostics::{doctor, DoctorCheckStatus, DoctorReport};
 use crate::fingerprint::PreviewFingerprint;
+use crate::fs_sync::sync_directory;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result};
@@ -249,7 +250,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        sync_directory(parent)
     })() {
         let _ = fs::remove_file(&temporary);
         return Err(error.into());

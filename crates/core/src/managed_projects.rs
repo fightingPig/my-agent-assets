@@ -1,4 +1,5 @@
 use crate::fingerprint::PreviewFingerprint;
+use crate::fs_sync::sync_directory;
 use crate::mount_registry::{load as load_mounts, registry_path as mount_registry_path};
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::{display_path, guard_write_path, is_link_or_junction};
@@ -686,7 +687,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);

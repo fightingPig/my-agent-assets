@@ -1,3 +1,4 @@
+use crate::fs_sync::sync_directory;
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -578,7 +579,7 @@ pub fn save(home: &Path, registry: &TargetRegistry) -> Result<()> {
         file.write_all(yaml.as_bytes())?;
         file.sync_all()?;
         fs::rename(&temporary, &path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);
@@ -760,6 +761,10 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn fixture_root() -> PathBuf {
+        std::env::temp_dir().join("maa-targets-fixture")
+    }
+
     fn custom_json_target() -> MountTarget {
         MountTarget {
             id: "custom-json".to_string(),
@@ -768,7 +773,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::JsonMcpPatch,
             scope: TargetScope::Custom,
-            path: PathBuf::from("/tmp/custom-mcp.json"),
+            path: fixture_root().join("custom-mcp.json"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -894,7 +899,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::TomlMcpPatch,
             scope: TargetScope::Custom,
-            path: PathBuf::from("/tmp/custom-mcp.toml"),
+            path: fixture_root().join("custom-mcp.toml"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -907,7 +912,7 @@ mod tests {
     fn registry_rejects_duplicate_ids_and_paths() {
         let first = custom_json_target();
         let mut duplicate_id = first.clone();
-        duplicate_id.path = PathBuf::from("/tmp/other-mcp.json");
+        duplicate_id.path = fixture_root().join("other-mcp.json");
         assert!(TargetRegistry::new(vec![first.clone(), duplicate_id]).is_err());
 
         let mut duplicate_path = first.clone();
@@ -934,9 +939,11 @@ mod tests {
         assert_eq!(restored, registry);
         assert_eq!(
             restored.resolve("custom-json").unwrap().path,
-            PathBuf::from("/tmp/custom-mcp.json")
+            fixture_root().join("custom-mcp.json")
         );
-        assert!(restored.resolve("/tmp/custom-mcp.json").is_err());
+        assert!(restored
+            .resolve(&fixture_root().join("custom-mcp.json").to_string_lossy())
+            .is_err());
         assert!(restored
             .resolve_for_apply("custom-json", AssetKind::Mcp)
             .is_ok());
@@ -948,7 +955,7 @@ mod tests {
     #[test]
     fn standard_user_targets_block_uninitialized_providers() {
         let registry = TargetRegistry::standard_user_targets(
-            Path::new("/tmp/fake-home"),
+            &fixture_root().join("fake-home"),
             ProviderState::InstalledNotInitialized,
             ProviderState::Initialized,
             MountAdapter::SymlinkDirectory,
@@ -980,8 +987,8 @@ mod tests {
             accepts: vec![AssetKind::Skill],
             adapter: MountAdapter::SymlinkDirectory,
             scope: TargetScope::Project,
-            path: PathBuf::from("/tmp/other/.claude/skills"),
-            project_path: Some(PathBuf::from("/tmp/project")),
+            path: fixture_root().join("other/.claude/skills"),
+            project_path: Some(fixture_root().join("project")),
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
         };

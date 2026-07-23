@@ -2,6 +2,7 @@ use crate::asset_registry::{
     canonical_path, load as load_assets, parse_asset_id, registry_path as asset_registry_path,
 };
 use crate::fingerprint::PreviewFingerprint;
+use crate::fs_sync::sync_directory;
 use crate::mcp::{
     patch_claude_json, patch_codex_toml, remove_from_claude_json, remove_from_codex_toml,
     CanonicalMcp, ClaudeScope, CodexScope,
@@ -838,7 +839,7 @@ fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter)
     match adapter {
         MountAdapter::WindowsDirectoryJunction => {
             // Keep the command text constant. Runtime paths are positional
-            // PowerShell parameters, so cmd.exe metacharacters in an approved
+            // PowerShell arguments, so cmd.exe metacharacters in an approved
             // Windows path cannot be interpreted as another command.
             let status = std::process::Command::new("powershell.exe")
                 .args([
@@ -846,7 +847,7 @@ fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter)
                     "-NoProfile",
                     "-NonInteractive",
                     "-Command",
-                    "& { param([string] $junctionPath, [string] $canonicalPath) New-Item -ItemType Junction -LiteralPath $junctionPath -Target $canonicalPath -ErrorAction Stop | Out-Null }",
+                    "New-Item -ItemType Junction -LiteralPath $args[0] -Target $args[1] -ErrorAction Stop | Out-Null",
                 ])
                 .arg(target)
                 .arg(canonical)
@@ -986,7 +987,7 @@ fn atomic_runtime_write(path: &Path, content: &[u8]) -> Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);

@@ -918,6 +918,7 @@ fn sync_path(path: &Path) -> Result<()> {
         return sync_parent(path);
     }
     if metadata.is_file() {
+        #[cfg(unix)]
         OpenOptions::new().read(true).open(path)?.sync_all()?;
         return sync_parent(path);
     }
