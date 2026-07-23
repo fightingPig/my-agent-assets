@@ -297,6 +297,9 @@ Implemented:
 - rebuilt the ad-hoc macOS package at `933e281`; `codesign --verify --deep
   --strict` and `hdiutil verify` passed, with DMG SHA-256
   `10c52fa6338b5edd0b625b2257d318693b642c0371c8c9aeaeac4fe19e6eb5f5`
+- launched that bundled executable with an empty disposable
+  `MY_AGENT_ASSETS_HOME`; it started and left the fake HOME empty, without
+  touching the real asset center
 - fast-forwarded the validated candidate to `main`; GitHub Actions run
   `30034252588` passed Windows tests and produced unsigned MSI/NSIS artifacts
 

@@ -78,9 +78,11 @@ Latest automated macOS package verification:
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256: `10c52fa6338b5edd0b625b2257d318693b642c0371c8c9aeaeac4fe19e6eb5f5`
 - verification date: 2026-07-24
-- This package refresh verifies signing structure and DMG integrity only. The
-  older disposable-HOME installed-app smoke below is not evidence for this
-  exact rebuilt candidate.
+- disposable-HOME package smoke: the bundled executable started with an empty
+  `/tmp` `MY_AGENT_ASSETS_HOME` and left it empty; no real asset-center path
+  was read or written
+- This is package-process evidence only. The older installed-app accessibility
+  evidence below remains the applicable native-window-shell evidence.
 
 Installed-app native evidence on 2026-07-11:
 
