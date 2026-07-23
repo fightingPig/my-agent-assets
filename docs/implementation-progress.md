@@ -284,6 +284,21 @@ Implemented:
   shows total size, oldest backup, and a configurable 1 GiB default cleanup
   reminder without automatic deletion; `maa backup list` and `maa backup
   delete <entry-id> [--apply]` call the same shared-core workflow
+- fixed Windows atomic-write compatibility: directory durability sync remains
+  enabled on Unix, while Windows no longer calls `FlushFileBuffers` on
+  read-only directory/file handles; asset, target, mount, managed-project,
+  diagnostic, and runtime atomic writes now share the same platform policy
+- made Windows fixture paths portable and added a Windows-safe directory
+  junction invocation; the native Windows regression workflow passed core and
+  desktop tests before producing unsigned MSI/NSIS test packages
+- refreshed full validation on `933e281`: TypeScript, 91 Vitest tests,
+  renderer build, Visual QA (26 screenshots, zero severe/warnings), Rust fmt,
+  core (127), desktop (21), CLI (10), Clippy, and fake-HOME E2E passed
+- rebuilt the ad-hoc macOS package at `933e281`; `codesign --verify --deep
+  --strict` and `hdiutil verify` passed, with DMG SHA-256
+  `10c52fa6338b5edd0b625b2257d318693b642c0371c8c9aeaeac4fe19e6eb5f5`
+- fast-forwarded the validated candidate to `main`; GitHub Actions run
+  `30034252588` passed Windows tests and produced unsigned MSI/NSIS artifacts
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

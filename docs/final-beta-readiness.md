@@ -1,6 +1,6 @@
 # Final Beta Readiness
 
-Date: 2026-07-11
+Date: 2026-07-24
 
 This document summarizes the current release boundary for the final V1 goal.
 It does not replace `docs/v1-full-test-plan.md`; it points to the evidence and
@@ -72,14 +72,15 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `c06d15d` (`codex/final-product-v1`)
-- build command: `cd apps/desktop && npm run build`
+- source commit: `933e281` (`main`)
+- build command: `cd apps/desktop && npm run tauri -- build --config src-tauri/tauri.macos.conf.json`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `c0460c00f4ae97aa94ce298dd934cae1789a2e038aa463e6a95634ae1358c44e`
-- Fake HOME launch smoke: passed; the packaged binary started and left the
-  disposable HOME uninitialized
-- verification date: 2026-07-11
+- DMG SHA-256: `10c52fa6338b5edd0b625b2257d318693b642c0371c8c9aeaeac4fe19e6eb5f5`
+- verification date: 2026-07-24
+- This package refresh verifies signing structure and DMG integrity only. The
+  older disposable-HOME installed-app smoke below is not evidence for this
+  exact rebuilt candidate.
 
 Installed-app native evidence on 2026-07-11:
 
@@ -94,15 +95,17 @@ Installed-app native evidence on 2026-07-11:
   evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
   suite and needs a human desktop session for final installed-app flows.
 
-Windows preflight evidence on 2026-07-11:
+Windows package evidence on 2026-07-24:
 
-- `cargo check -p my-agent-assets-core --tests --target x86_64-pc-windows-msvc`
-  passed, including compilation of the Windows-only junction regression test.
-- Desktop cross-check reached Tauri's Windows resource-build stage after the
-  configuration feature allowlist was corrected. It cannot complete on this
-  macOS host because `llvm-rc` is unavailable; the Windows GitHub Actions
-  workflow is configured to perform the native core/desktop tests and
-  installer build.
+- GitHub Actions run `30034252588` for source commit `933e281` passed frontend
+  contracts, Windows shared-core/desktop tests, and installer packaging.
+- The unsigned artifact contains:
+  - `My Agent Assets_0.1.0_x64_en-US.msi`
+    (`6a20b522c6a21f6a9cfb5d642fcd3d6c040b11fa4ae611295f9bc6b431c8579e`)
+  - `My Agent Assets_0.1.0_x64-setup.exe`
+    (`3b44683b66f65b2eab72278b9e2f19955e2458687cc0f25c3bf74a3282bf81e7`)
+- The workflow artifacts remain unsigned test packages and are not Stable
+  release artifacts.
 
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact
