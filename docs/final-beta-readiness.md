@@ -81,6 +81,9 @@ Latest automated macOS package verification:
 - disposable-HOME package smoke: the bundled executable started with an empty
   `/tmp` `MY_AGENT_ASSETS_HOME` and left it empty; no real asset-center path
   was read or written
+- Tauri dev smoke: the current desktop target started with a separate empty
+  `/tmp` `MY_AGENT_ASSETS_HOME`; Vite and the native process reached running
+  state, then both smoke-test processes were stopped cleanly
 - This is package-process evidence only. The older installed-app accessibility
   evidence below remains the applicable native-window-shell evidence.
 

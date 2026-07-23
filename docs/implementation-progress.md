@@ -300,6 +300,9 @@ Implemented:
 - launched that bundled executable with an empty disposable
   `MY_AGENT_ASSETS_HOME`; it started and left the fake HOME empty, without
   touching the real asset center
+- ran Tauri dev smoke with a second empty disposable `MY_AGENT_ASSETS_HOME`;
+  the Vite server and native desktop process both reached running state and
+  were then stopped without creating an asset center
 - fast-forwarded the validated candidate to `main`; GitHub Actions run
   `30034252588` passed Windows tests and produced unsigned MSI/NSIS artifacts
 
