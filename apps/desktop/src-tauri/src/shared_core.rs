@@ -540,12 +540,17 @@ mod tests {
     use my_agent_assets_core::import::{ImportApplyStatus, ImportResolution};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    };
 
     static TEST_HOME_COUNTER: AtomicU64 = AtomicU64::new(0);
+    static SHARED_CORE_GIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn adapter_contract_round_trip_works_with_fake_home() {
+        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
         let home = test_home("round-trip");
         initialize(&home);
         fs::create_dir_all(home.join(".claude/skills/review")).unwrap();
@@ -589,6 +594,7 @@ mod tests {
 
     #[test]
     fn project_query_adapter_uses_shared_core_depth_scanning() {
+        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
         let home = test_home("project-query");
         initialize(&home);
         let project_path = home.join("workspace/group/project-a");
@@ -629,6 +635,7 @@ mod tests {
 
     #[test]
     fn audit_log_adapter_returns_only_shared_core_redacted_entries() {
+        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
         let home = test_home("audit-log");
         initialize(&home);
         my_agent_assets_core::audit_log::append_operation(
