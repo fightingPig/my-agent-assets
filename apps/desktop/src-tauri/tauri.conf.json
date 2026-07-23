@@ -31,7 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": ["all"],
     "category": "DeveloperTool",
     "shortDescription": "Manage local Claude assets",
     "copyright": "Copyright © 2026 My Agent Assets",
