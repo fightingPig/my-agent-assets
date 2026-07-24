@@ -67,10 +67,14 @@ Build artifacts:
 - The macOS build is ad-hoc signed and not notarized. Gatekeeper behavior on another Mac still requires manual validation.
 - Windows packaging, native titlebar behavior, DPI scaling, path handling, and symlink permissions were not validated in this macOS run.
 - Automated Visual QA runs in headless Chrome. It does not validate native traffic lights, overlay dragging, Dock behavior, or OS window shadows.
-- Final shared-core integration expanded project discovery to configured scan roots and `max_depth`.
+- Project List only shows explicitly managed existing local directories; the
+  project registry is the single maintenance entry point. `max_depth` remains
+  configurable for CLI/custom recursive scans and defaults to 5.
 - Asset content shown in details is read from canonical asset files through shared-core Tauri commands.
 - Automatic historical Restore remains out of scope; Backup History is manual-restore-only.
-- Git Pull is fast-forward only. Git Push requires a verifiable GitHub Private repository and stages only the canonical sync whitelist.
+- Git Pull is fast-forward only. Git Push defaults to a verifiable GitHub
+  Private repository and stages only the canonical sync whitelist; a local
+  explicit high-risk setting can allow public or unverifiable remotes.
 - There is no updater, notarized distribution channel, telemetry, account service, or cloud service.
 
 ## Manual Beta Checklist

@@ -58,6 +58,11 @@ use my_agent_assets_core::mount::{
 use my_agent_assets_core::operation::{
     recover_incomplete, recovery_status, RecoveryReport, RecoveryStatus,
 };
+use my_agent_assets_core::project_registry::{
+    apply_remove_project, apply_save_project, preview_remove_project, preview_save_project,
+    ProjectChangePreview, ProjectChangeResult, ProjectRemoveApplyRequest, ProjectRemoveRequest,
+    ProjectSaveApplyRequest, ProjectSaveRequest,
+};
 use my_agent_assets_core::query::{
     list_assets, list_projects, AssetQueryRequest, AssetSummary, ProjectSummary,
 };
@@ -175,6 +180,38 @@ pub fn list_assets_for_home(
 
 pub fn list_projects_for_home(home: &Path) -> Result<Vec<ProjectSummary>, String> {
     list_projects(home).map_err(|error| error.to_string())
+}
+
+pub fn project_save_preview_command(
+    input: ProjectSaveRequest,
+) -> Result<ProjectChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project save preview skipped.".to_string())?;
+    preview_save_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_save_apply_command(
+    input: ProjectSaveApplyRequest,
+) -> Result<ProjectChangeResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project save apply blocked.".to_string())?;
+    apply_save_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_remove_preview_command(
+    input: ProjectRemoveRequest,
+) -> Result<ProjectChangePreview, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project remove preview skipped.".to_string())?;
+    preview_remove_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_remove_apply_command(
+    input: ProjectRemoveApplyRequest,
+) -> Result<ProjectChangeResult, String> {
+    let home = home_dir()
+        .ok_or_else(|| "HOME is unavailable; project remove apply blocked.".to_string())?;
+    apply_remove_project(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn canonical_import_preview_command(
@@ -510,10 +547,31 @@ mod tests {
     }
 
     #[test]
-    fn project_query_adapter_uses_shared_core_depth_scanning() {
+    fn project_query_adapter_lists_only_explicitly_registered_projects() {
         let home = test_home("project-query");
+        initialize(&home);
         fs::create_dir_all(home.join("workspace/group/project-a")).unwrap();
         fs::write(home.join("workspace/group/project-a/package.json"), "{}").unwrap();
+
+        assert!(list_projects_for_home(&home).unwrap().is_empty());
+        let request = my_agent_assets_core::project_registry::ProjectSaveRequest {
+            id: None,
+            name: "project-a".into(),
+            title: "Project A".into(),
+            path: home.join("workspace/group/project-a"),
+            description: "explicit project".into(),
+        };
+        let preview =
+            my_agent_assets_core::project_registry::preview_save_project(&home, &request).unwrap();
+        my_agent_assets_core::project_registry::apply_save_project(
+            &home,
+            &my_agent_assets_core::project_registry::ProjectSaveApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
 
         let projects = list_projects_for_home(&home).unwrap();
         assert_eq!(projects.len(), 1);

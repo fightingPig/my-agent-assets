@@ -2,7 +2,7 @@
 
 This file tracks progress toward `my_agent_assets_final_goal.md`.
 
-Gate labels are requirement ordering and verification checkpoints. Implementation proceeds continuously on `codex/final-product-v1`; a Gate does not require a pause, standalone commit, or push.
+Gate labels are requirement ordering and verification checkpoints. Current implementation proceeds continuously on `codex/final-product-v1-next`, derived from the frozen `codex/final-product-v1` baseline; a Gate does not require a pause, standalone commit, or push.
 
 ## Gate 0: Current-state audit and model correction
 
@@ -160,8 +160,8 @@ Implemented:
 - implemented shared Git status and SHA-256-bound Pull/Push preview/apply
 - Pull requires a clean worktree, creates a local canonical backup, and uses fast-forward only
 - Push uses a temporary Git index and stages only `.gitignore`, `assets/`, `assets.yaml`, and `backups/portable/`
-- Push performs live `gh api` visibility verification before preview and again under lock before apply; only `PRIVATE` is accepted
-- Push blocks public/internal/unknown/unverifiable remotes, non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity
+- Push performs live `gh api` visibility verification before preview and again under lock before apply; `PRIVATE` is required by default
+- Push blocks public/internal/unknown/unverifiable remotes unless the user explicitly enables the local public-remote setting; every opt-out preview and confirmation warns about the resulting exposure risk, while non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity remain blocked
 - Push never uses force, stash, merge, rebase, or reset; failed Push restores only the app-created branch ref
 - migrated Tauri, CLI, and Sync UI to the shared Git service
 - added shared target registration requests that expand `~`, canonicalize
@@ -192,9 +192,17 @@ Implemented:
   shared-core runtime discovery adapter
 - moved `list_assets` and `list_projects` filesystem queries into shared core;
   Desktop is now a transport adapter and CLI `list` uses the same asset query
-- unified project discovery on `config.yaml.scan_roots` and configurable
-  `max_depth` (default 5), including nested projects, fixed skip rules, and no
-  directory-symlink traversal
+- replaced automatic project-list discovery with explicit project management in
+  `projects.yaml`: users add existing local directories, edit metadata/path,
+  or remove only management records; project directories are never created or
+  deleted by this feature, and active mount bindings block unsafe path changes
+  or removal
+- project scans now select an explicitly managed project; configured
+  `max_depth` remains the CLI/custom recursive scan limit (default 5)
+- changed V1 Skills to directory-only `skills/<name>/SKILL.md` sources and
+  canonical directories; direct Markdown Skills are ignored
+- MCP deletion now preserves enabled Target live configuration by default and
+  offers an explicit high-risk opt-in to remove corresponding Target entries
 - migrated Import, Batch Import, Adopt, Mount, Unmount, Delete, and Target
   Registry preview fingerprints from FNV/DefaultHasher to one domain-separated
   SHA-256 implementation that includes normalized request data, timestamp, and

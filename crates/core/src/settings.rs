@@ -59,6 +59,7 @@ pub struct Settings {
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,
+    pub allow_public_remote_push: bool,
     pub appearance_theme: AppearanceTheme,
     pub density: DensityPreference,
     pub log_level: LogLevel,
@@ -81,6 +82,7 @@ impl Settings {
             plan_only_by_default: true,
             git_default_branch: "main".into(),
             git_remote: "origin".into(),
+            allow_public_remote_push: false,
             appearance_theme: AppearanceTheme::System,
             density: DensityPreference::Compact,
             log_level: LogLevel::Info,
@@ -162,6 +164,8 @@ struct SettingsFile {
     plan_only_by_default: bool,
     git_default_branch: String,
     git_remote: String,
+    #[serde(default)]
+    allow_public_remote_push: bool,
     appearance_theme: AppearanceTheme,
     density: DensityPreference,
     log_level: LogLevel,
@@ -293,6 +297,7 @@ impl SettingsFile {
             plan_only_by_default: settings.plan_only_by_default,
             git_default_branch: settings.git_default_branch.clone(),
             git_remote: settings.git_remote.clone(),
+            allow_public_remote_push: settings.allow_public_remote_push,
             appearance_theme: settings.appearance_theme,
             density: settings.density,
             log_level: settings.log_level,
@@ -311,6 +316,7 @@ impl SettingsFile {
             plan_only_by_default: self.plan_only_by_default,
             git_default_branch: self.git_default_branch,
             git_remote: self.git_remote,
+            allow_public_remote_push: self.allow_public_remote_push,
             appearance_theme: self.appearance_theme,
             density: self.density,
             log_level: self.log_level,
@@ -557,6 +563,7 @@ mod tests {
             settings.backup_warning_threshold_bytes,
             DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES
         );
+        assert!(!settings.allow_public_remote_push);
         fs::remove_dir_all(home).unwrap();
     }
 

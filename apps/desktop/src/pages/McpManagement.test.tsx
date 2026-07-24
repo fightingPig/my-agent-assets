@@ -10,6 +10,8 @@ const {
   canonicalMcpSaveApply,
   canonicalMountPreview,
   canonicalMountApply,
+  canonicalDeletePreview,
+  canonicalDeleteApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
   canonicalAssetContent: vi.fn(),
@@ -18,6 +20,8 @@ const {
   canonicalMcpSaveApply: vi.fn(),
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
+  canonicalDeletePreview: vi.fn(),
+  canonicalDeleteApply: vi.fn(),
 }));
 
 vi.mock("../app/data-api", () => ({
@@ -28,6 +32,8 @@ vi.mock("../app/data-api", () => ({
   canonicalMcpSaveApply,
   canonicalMountPreview,
   canonicalMountApply,
+  canonicalDeletePreview,
+  canonicalDeleteApply,
 }));
 
 describe("MCP canonical management", () => {
@@ -121,6 +127,36 @@ describe("MCP canonical management", () => {
       affectedPaths: ["/tmp/home/.claude.json"],
       warnings: [],
     });
+    canonicalDeletePreview.mockImplementation(async (input: { removeMcpTargetEntries: boolean }) => ({
+      previewId: "delete-mcp-1",
+      assetId: "mcp:filesystem",
+      canonicalPath: "/tmp/home/.my-agent-assets/assets/mcps/filesystem.json",
+      removeMcpTargetEntries: input.removeMcpTargetEntries,
+      bindings: [{
+        targetId: "claude-user-mcp",
+        targetPath: "/tmp/home/.claude.json",
+        canUnmount: input.removeMcpTargetEntries,
+        willRemoveTargetEntry: input.removeMcpTargetEntries,
+        warnings: [],
+      }],
+      plannedEffects: input.removeMcpTargetEntries
+        ? ["unmount claude-user-mcp"]
+        : ["preserve target live config"],
+      warnings: [],
+      backupRequired: true,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    }));
+    canonicalDeleteApply.mockResolvedValue({
+      previewId: "delete-mcp-1",
+      assetId: "mcp:filesystem",
+      deleted: true,
+      portableBackupId: "portable-1",
+      localBackupId: "local-1",
+      affectedPaths: [],
+      journalPath: "/tmp/delete-journal",
+    });
   });
 
   it("requires preview then ordinary confirmation to edit canonical data", async () => {
@@ -167,5 +203,26 @@ describe("MCP canonical management", () => {
         targetId: "claude-user-mcp",
       },
     }));
+  });
+
+  it("preserves MCP target live config by default and requires an explicit opt-in to remove it", async () => {
+    render(<McpServersListPage />);
+    await screen.findByRole("option", { name: "filesystem" });
+
+    fireEvent.click(screen.getByRole("button", { name: "删除 MCP" }));
+    await waitFor(() => expect(canonicalDeletePreview).toHaveBeenLastCalledWith({
+      assetId: "mcp:filesystem",
+      mode: "require_unmounted",
+      removeMcpTargetEntries: false,
+    }));
+    expect(screen.getByText(/Target live config 将被保留/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /同时从已启用 Target 配置中移除/ }));
+    await waitFor(() => expect(canonicalDeletePreview).toHaveBeenLastCalledWith({
+      assetId: "mcp:filesystem",
+      mode: "unmount_all",
+      removeMcpTargetEntries: true,
+    }));
+    expect(screen.getByText(/将删除 canonical MCP 和列出的 Target live config entry/)).toBeInTheDocument();
   });
 });

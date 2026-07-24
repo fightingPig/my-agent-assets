@@ -19,6 +19,7 @@ const savedSettings: DesktopSettings = {
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
+  allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
   logLevel: "info",
@@ -72,6 +73,38 @@ describe("read-only desktop data api", () => {
     invoke.mockResolvedValueOnce([]);
     await api.listProjects();
     expect(invoke).toHaveBeenLastCalledWith("list_projects");
+
+    const projectSave = {
+      name: "project-a",
+      title: "Project A",
+      path: "/tmp/project-a",
+      description: "explicit project",
+    };
+    invoke.mockResolvedValueOnce({ previewId: "project-save-1", canApply: true });
+    await api.projectSavePreview(projectSave);
+    expect(invoke).toHaveBeenLastCalledWith("project_save_preview", { input: projectSave });
+
+    const projectSaveApply = {
+      previewId: "project-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: projectSave,
+    };
+    invoke.mockResolvedValueOnce({ projectId: "project-a" });
+    await api.projectSaveApply(projectSaveApply);
+    expect(invoke).toHaveBeenLastCalledWith("project_save_apply", { input: projectSaveApply });
+
+    invoke.mockResolvedValueOnce({ previewId: "project-remove-1", canApply: true });
+    await api.projectRemovePreview({ id: "project-a" });
+    expect(invoke).toHaveBeenLastCalledWith("project_remove_preview", { input: { id: "project-a" } });
+
+    const projectRemoveApply = {
+      previewId: "project-remove-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { id: "project-a" },
+    };
+    invoke.mockResolvedValueOnce({ projectId: "project-a" });
+    await api.projectRemoveApply(projectRemoveApply);
+    expect(invoke).toHaveBeenLastCalledWith("project_remove_apply", { input: projectRemoveApply });
 
     invoke.mockResolvedValueOnce([]);
     await api.listBackups();
@@ -487,6 +520,7 @@ describe("read-only desktop data api", () => {
     const deletePreviewRequest = {
       assetId: "skill:review",
       mode: "unmount_all",
+      removeMcpTargetEntries: false,
     } as const;
     invoke.mockResolvedValueOnce({ previewId: "delete-1" });
     await api.canonicalDeletePreview(deletePreviewRequest);

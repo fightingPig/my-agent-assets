@@ -1186,6 +1186,43 @@ h1 {
 .settings-toggle-list span { display: flex; flex-direction: column; gap: 2px; }
 .settings-toggle-list strong { font-size: 9px; }
 .settings-toggle-list small { color: var(--secondary); font-size: 7px; }
+.settings-path-guidance { margin: 8px 0 0; color: var(--secondary); font-size: 11px; line-height: 1.55; }
+.project-management-panel { grid-column: 1 / -1; }
+.scan-project-picker,
+.scan-custom-source {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.scan-project-picker {
+  max-width: 620px;
+}
+
+.scan-custom-source {
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+}
+
+.scan-project-picker,
+.scan-custom-source label {
+  display: grid;
+  gap: 5px;
+  color: var(--secondary);
+  font-size: 11px;
+}
+
+.scan-project-picker select,
+.scan-custom-source input,
+.scan-custom-source select {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .scan-custom-source {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.settings-control-wide { grid-column: 1 / -1; }
 .settings-actions { margin-top: 11px; display: flex; justify-content: flex-end; gap: 8px; }
 
 .asset-secondary-action,

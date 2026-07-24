@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, previewSync, syncApply } from "../app/data-api";
-import type { ApplyResult, GitStatus, SyncDirection, SyncPreview } from "../app/contracts";
+import { gitStatus, previewSync, settingsLoad, settingsSave, syncApply } from "../app/data-api";
+import type { ApplyResult, DesktopSettings, GitStatus, SyncDirection, SyncPreview } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -41,25 +41,45 @@ const emptyGitStatus: GitStatus = {
 
 export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
   const [status, setStatus] = useState<GitStatus>(demoMode ? fallbackGitStatus : emptyGitStatus);
+  const [settings, setSettings] = useState<DesktopSettings | null>(null);
   const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [stateLabel, setStateLabel] = useState("读取中");
   const [planningDirection, setPlanningDirection] = useState<SyncDirection | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [isSavingPushPolicy, setIsSavingPushPolicy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     if (demoMode) {
       setStatus(fallbackGitStatus);
+      setSettings({
+        assetCenterPath: "~/.my-agent-assets",
+        scanRoots: [],
+        maxDepth: 5,
+        backupBeforeApply: true,
+        backupWarningThresholdBytes: 1024 * 1024 * 1024,
+        planOnlyByDefault: true,
+        gitDefaultBranch: "main",
+        gitRemote: "origin",
+        allowPublicRemotePush: false,
+        appearanceTheme: "system",
+        density: "compact",
+        logLevel: "info",
+        logRetentionDays: 14,
+        cliPath: "maa",
+      });
       setStateLabel("Visual QA 示例数据");
       return undefined;
     }
     setStatus(emptyGitStatus);
+    setSettings(null);
     setStateLabel("读取中");
-    gitStatus()
-      .then((loaded) => {
+    Promise.all([gitStatus(), settingsLoad()])
+      .then(([loaded, loadedSettings]) => {
         if (cancelled) return;
+        setSettings(loadedSettings);
         if (loaded && typeof loaded === "object" && "repositoryPath" in loaded) {
           setStatus(loaded);
           setPreview(null);
@@ -114,6 +134,25 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
     }
   };
 
+  const handlePublicRemotePushChange = async (allowPublicRemotePush: boolean) => {
+    if (!settings) return;
+    setIsSavingPushPolicy(true);
+    setOperationError(null);
+    try {
+      const saved = await settingsSave({
+        settings: { ...settings, allowPublicRemotePush },
+      });
+      setSettings(saved);
+      setPreview(null);
+      setApplyResult(null);
+      setStateLabel(allowPublicRemotePush ? "已允许公开远程 Push" : "已恢复私有仓库保护");
+    } catch (error) {
+      setOperationError(errorMessage(error));
+    } finally {
+      setIsSavingPushPolicy(false);
+    }
+  };
+
   const handleApplySync = async () => {
     if (!preview?.previewId || !canApply) return;
 
@@ -145,8 +184,9 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
         <div className="section-heading"><div><h3>本地 Git 仓库</h3><p>{status.repositoryPath}</p></div><span className="healthy-badge"><CheckCircle2 size={13} />{cleanLabel}</span></div>
         <div className="sync-status-grid"><div><GitBranch size={17} /><span><small>当前分支</small><strong>{status.branch || "未检测到"}</strong></span></div><div><RefreshCw size={17} /><span><small>远程仓库</small><strong>{status.remoteIdentity ?? status.upstream ?? status.remoteName}</strong></span></div><div><ArrowUp size={17} /><span><small>Ahead</small><strong>{status.ahead} commits</strong></span></div><div><ArrowDown size={17} /><span><small>Behind</small><strong>{status.behind} commits</strong></span></div></div>
         <div className="sync-graph"><div className="sync-graph-line"><span className="local-dot" /><strong>本地 {status.branch || "工作区"}</strong><small>{status.statusMessage}</small></div><div className="sync-graph-line"><span /><strong>仓库状态</strong><small>{status.isRepository ? "已识别为本地 Git 仓库" : "未识别为本地 Git 仓库"}</small></div><div className="sync-graph-line"><span className="remote-dot" /><strong>远程仓库</strong><small>{status.remoteIdentity ?? status.upstream ?? `remote: ${status.remoteName}`}</small></div></div>
+        <div className="settings-toggle-list sync-policy-toggle"><label><input checked={settings?.allowPublicRemotePush ?? false} data-no-drag="true" disabled={!settings || isSavingPushPolicy} onChange={(event) => void handlePublicRemotePushChange(event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>允许推送到公开远程仓库</strong><small>默认只允许已验证的 GitHub 私有仓库。开启后可推送到任意 Git remote，并会在执行前高亮公开或未知可见性风险。</small></span></label></div>
         <div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" disabled={planningDirection !== null} onClick={() => handlePreviewSync("pull")} style={NO_DRAG_REGION_STYLE} type="button">{planningDirection === "pull" ? "生成中" : "预览 Pull"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={planningDirection !== null} onClick={() => handlePreviewSync("push")} style={NO_DRAG_REGION_STYLE} type="button">{planningDirection === "push" ? "生成中" : "预览 Push"}</button></div>
-        <ApplyConfirmationPanel actionLabel={preview?.direction === "pull" ? "执行 Pull" : "执行 Push"} canApply={canApply} description="后端会校验 previewId、远端身份与当前仓库状态；Push 仅允许 GitHub Private 仓库并只 stage canonical 白名单。" isApplying={isApplying} onApply={handleApplySync} operationError={operationError} result={applyResult} title="执行同步" />
+        <ApplyConfirmationPanel actionLabel={preview?.direction === "pull" ? "执行 Pull" : "执行 Push"} canApply={canApply} description={preview?.allowPublicRemotePush ?? settings?.allowPublicRemotePush ? "后端会校验 previewId、远端身份与当前仓库状态；已允许公开远程 Push，执行前请确认资产、portable backup 与配置可能对远程仓库访问者可见。" : "后端会校验 previewId、远端身份与当前仓库状态；Push 仅允许已验证的 GitHub 私有仓库并只 stage canonical 白名单。"} isApplying={isApplying} onApply={handleApplySync} operationError={operationError} result={applyResult} title="执行同步" />
       </section>
 
       <div className="detail-two-column sync-lower-grid">
@@ -174,7 +214,7 @@ function toApplyResult(
       message: result.pulled
         ? "已完成 fast-forward Pull。"
         : result.pushed
-          ? "已完成 Private repository Push。"
+          ? "已完成 Push。"
           : "同步完成。",
       affectedPaths: result.affectedPaths,
     }],

@@ -92,6 +92,7 @@ describe("Tauri command contracts", () => {
         blockedChanges: [],
       },
       repositoryVisibility: "unknown",
+      allowPublicRemotePush: false,
       plannedEffects: ["run git pull --ff-only origin main"],
       warnings: [],
       backupRequired: true,

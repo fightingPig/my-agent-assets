@@ -21,7 +21,7 @@ import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import { staticProjects } from "./project-data";
 
 const fallbackProject = staticProjects[0];
-const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral" } as const;
+const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral", "无效": "warning" } as const;
 
 type ProjectDetailPageProps = {
   demoMode?: boolean;
@@ -176,7 +176,7 @@ function toProjectDetail(project: ProjectSummary): ProjectDetailContext {
     name: project.name,
     title: project.title,
     path: project.path,
-    status: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : "正常",
+    status: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : project.status === "invalid" ? "无效" : "正常",
     assets: project.assetCounts.total,
     skills: project.assetCounts.skills,
     commands: project.assetCounts.commands,

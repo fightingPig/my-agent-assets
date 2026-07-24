@@ -45,6 +45,7 @@ impl From<CoreSettings> for DesktopSettings {
             plan_only_by_default: settings.plan_only_by_default,
             git_default_branch: settings.git_default_branch,
             git_remote: settings.git_remote,
+            allow_public_remote_push: settings.allow_public_remote_push,
             appearance_theme: match settings.appearance_theme {
                 CoreAppearanceTheme::System => AppearanceTheme::System,
                 CoreAppearanceTheme::Light => AppearanceTheme::Light,
@@ -77,6 +78,7 @@ impl From<DesktopSettings> for CoreSettings {
             plan_only_by_default: settings.plan_only_by_default,
             git_default_branch: settings.git_default_branch,
             git_remote: settings.git_remote,
+            allow_public_remote_push: settings.allow_public_remote_push,
             appearance_theme: match settings.appearance_theme {
                 AppearanceTheme::System => CoreAppearanceTheme::System,
                 AppearanceTheme::Light => CoreAppearanceTheme::Light,

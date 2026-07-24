@@ -38,6 +38,8 @@ pub enum DeleteMode {
 pub struct DeletePreviewRequest {
     pub asset_id: String,
     pub mode: DeleteMode,
+    #[serde(default)]
+    pub remove_mcp_target_entries: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +48,7 @@ pub struct DeleteBindingImpact {
     pub target_id: String,
     pub target_path: PathBuf,
     pub can_unmount: bool,
+    pub will_remove_target_entry: bool,
     pub warnings: Vec<String>,
 }
 
@@ -55,6 +58,7 @@ pub struct DeletePreview {
     pub preview_id: String,
     pub asset_id: String,
     pub canonical_path: PathBuf,
+    pub remove_mcp_target_entries: bool,
     pub bindings: Vec<DeleteBindingImpact>,
     pub planned_effects: Vec<String>,
     pub warnings: Vec<String>,
@@ -110,34 +114,68 @@ fn preview_delete_at(
         )));
     }
     let mounts = load_mounts(home).map_err(|error| MaaError::new(error.to_string()))?;
+    let targets = load_targets(home)?;
     let mut impacts = Vec::new();
+    let remove_target_entries =
+        kind != crate::targets::AssetKind::Mcp || request.remove_mcp_target_entries;
     for binding in mounts.for_asset(&request.asset_id) {
-        let unmount = preview_unmount(
-            home,
-            &UnmountPreviewRequest {
-                asset_id: request.asset_id.clone(),
+        if remove_target_entries {
+            let unmount = preview_unmount(
+                home,
+                &UnmountPreviewRequest {
+                    asset_id: request.asset_id.clone(),
+                    target_id: binding.target_id.clone(),
+                },
+            )?;
+            impacts.push(DeleteBindingImpact {
                 target_id: binding.target_id.clone(),
-            },
-        )?;
-        impacts.push(DeleteBindingImpact {
-            target_id: binding.target_id.clone(),
-            target_path: unmount.affected_target_path,
-            can_unmount: unmount.can_apply,
-            warnings: unmount.warnings,
-        });
+                target_path: unmount.affected_target_path,
+                can_unmount: unmount.can_apply,
+                will_remove_target_entry: true,
+                warnings: unmount.warnings,
+            });
+        } else {
+            let (target_path, warnings) = match targets.resolve(&binding.target_id) {
+                Ok(target) => (
+                    target.path.clone(),
+                    vec![
+                        "MCP Target live config will be preserved and becomes unmanaged after canonical deletion"
+                            .into(),
+                    ],
+                ),
+                Err(error) => (
+                    PathBuf::from("[unavailable Target]"),
+                    vec![format!(
+                        "MCP Target binding will be removed without editing its live config; target could not be resolved: {error}"
+                    )],
+                ),
+            };
+            impacts.push(DeleteBindingImpact {
+                target_id: binding.target_id.clone(),
+                target_path,
+                can_unmount: false,
+                will_remove_target_entry: false,
+                warnings,
+            });
+        }
     }
     impacts.sort_by(|left, right| left.target_id.cmp(&right.target_id));
 
     let mut warnings = Vec::new();
     let can_apply = match request.mode {
-        DeleteMode::RequireUnmounted if !impacts.is_empty() => {
+        DeleteMode::RequireUnmounted
+            if impacts.iter().any(|impact| impact.will_remove_target_entry) =>
+        {
             warnings.push(format!(
                 "{} active binding(s) must be unmounted before direct deletion",
                 impacts.len()
             ));
             false
         }
-        DeleteMode::UnmountAll => impacts.iter().all(|impact| impact.can_unmount),
+        DeleteMode::UnmountAll => impacts
+            .iter()
+            .filter(|impact| impact.will_remove_target_entry)
+            .all(|impact| impact.can_unmount),
         DeleteMode::RequireUnmounted => true,
     };
     for impact in &impacts {
@@ -146,11 +184,19 @@ fn preview_delete_at(
     let mut planned_effects = impacts
         .iter()
         .map(|impact| {
-            format!(
-                "unmount '{}' at {}",
-                impact.target_id,
-                impact.target_path.display()
-            )
+            if impact.will_remove_target_entry {
+                format!(
+                    "unmount '{}' at {}",
+                    impact.target_id,
+                    impact.target_path.display()
+                )
+            } else {
+                format!(
+                    "remove local binding '{}' while preserving MCP live config at {}",
+                    impact.target_id,
+                    impact.target_path.display()
+                )
+            }
         })
         .collect::<Vec<_>>();
     planned_effects.push(format!("delete canonical content {}", canonical.display()));
@@ -166,6 +212,7 @@ fn preview_delete_at(
         preview_id,
         asset_id: request.asset_id.clone(),
         canonical_path: canonical,
+        remove_mcp_target_entries: request.remove_mcp_target_entries,
         bindings: impacts,
         planned_effects,
         warnings,
@@ -231,9 +278,18 @@ fn apply_delete_inner(
         RecoveryTarget::asset_center(preview.canonical_path.clone()),
         RecoveryTarget::asset_center(staging.clone()),
     ];
-    recovery_targets.extend(preview.bindings.iter().map(|impact| {
-        RecoveryTarget::registered_target(impact.target_id.clone(), impact.target_path.clone())
-    }));
+    recovery_targets.extend(
+        preview
+            .bindings
+            .iter()
+            .filter(|impact| impact.will_remove_target_entry)
+            .map(|impact| {
+                RecoveryTarget::registered_target(
+                    impact.target_id.clone(),
+                    impact.target_path.clone(),
+                )
+            }),
+    );
     let mut journal =
         OperationJournal::start_recoverable(home, &operation_id, "delete_asset", recovery_targets)?;
     let original_assets = fs::read(asset_registry_path(home))?;
@@ -250,7 +306,11 @@ fn apply_delete_inner(
 
     let targets = load_targets(home)?;
     let mut snapshots = BTreeMap::<PathBuf, RuntimeSnapshot>::new();
-    for impact in &preview.bindings {
+    for impact in preview
+        .bindings
+        .iter()
+        .filter(|impact| impact.will_remove_target_entry)
+    {
         let target = targets.resolve(&impact.target_id)?;
         guard_target_path(target, &impact.target_path)?;
         if !snapshots.contains_key(&impact.target_path) {
@@ -264,7 +324,12 @@ fn apply_delete_inner(
     let mut canonical_moved = false;
     let result = (|| -> Result<(Vec<PathBuf>, crate::asset_registry::AssetRegistry, crate::mount_registry::MountRegistry)> {
         let mut affected = Vec::new();
-        for (index, impact) in preview.bindings.iter().enumerate() {
+        for (index, impact) in preview
+            .bindings
+            .iter()
+            .filter(|impact| impact.will_remove_target_entry)
+            .enumerate()
+        {
             let target = targets.resolve(&impact.target_id)?;
             remove_runtime_mount(&impact.target_path, target, kind, &name)?;
             affected.push(impact.target_path.clone());
@@ -470,6 +535,7 @@ mod tests {
             &DeletePreviewRequest {
                 asset_id: "skill:review".into(),
                 mode: DeleteMode::RequireUnmounted,
+                remove_mcp_target_entries: false,
             },
         )
         .unwrap();
@@ -479,6 +545,7 @@ mod tests {
         let request = DeletePreviewRequest {
             asset_id: "skill:review".into(),
             mode: DeleteMode::UnmountAll,
+            remove_mcp_target_entries: false,
         };
         let preview = preview_delete(&home, &request).unwrap();
         let result = apply_delete(
@@ -513,6 +580,7 @@ mod tests {
         let request = DeletePreviewRequest {
             asset_id: "skill:review".into(),
             mode: DeleteMode::UnmountAll,
+            remove_mcp_target_entries: false,
         };
         let preview = preview_delete(&home, &request).unwrap();
         crate::fingerprint::assert_sha256_preview_id(&preview.preview_id, "delete-");
@@ -542,6 +610,7 @@ mod tests {
         let request = DeletePreviewRequest {
             asset_id: "skill:review".into(),
             mode: DeleteMode::RequireUnmounted,
+            remove_mcp_target_entries: false,
         };
         let preview = preview_delete(&home, &request).unwrap();
         let canonical = canonical_path(&home, AssetKind::Skill, "review");
@@ -575,6 +644,71 @@ mod tests {
             .get(AssetKind::Skill, "review")
             .is_some());
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn mcp_delete_preserves_live_target_config_by_default_and_can_explicitly_remove_it() {
+        let preserved_home = initialized_home("mcp-preserve-live-config");
+        register_mcp(&preserved_home, "filesystem");
+        mount_mcp(&preserved_home, "filesystem", "claude-user-mcp");
+        let live_config = preserved_home.join(".claude.json");
+        let before = fs::read_to_string(&live_config).unwrap();
+        assert!(before.contains("filesystem"));
+
+        let preserve_request = DeletePreviewRequest {
+            asset_id: "mcp:filesystem".into(),
+            mode: DeleteMode::RequireUnmounted,
+            remove_mcp_target_entries: false,
+        };
+        let preserve_preview = preview_delete(&preserved_home, &preserve_request).unwrap();
+        assert!(preserve_preview.can_apply);
+        assert_eq!(preserve_preview.bindings.len(), 1);
+        assert!(!preserve_preview.bindings[0].will_remove_target_entry);
+        assert!(preserve_preview.planned_effects[0].contains("preserving MCP live config"));
+        apply_delete(
+            &preserved_home,
+            &DeleteApplyRequest {
+                preview_id: preserve_preview.preview_id,
+                preview_generated_at_epoch_seconds: preserve_preview.generated_at_epoch_seconds,
+                request: preserve_request,
+            },
+        )
+        .unwrap();
+        assert!(fs::read_to_string(&live_config)
+            .unwrap()
+            .contains("filesystem"));
+        assert!(load_mounts(&preserved_home)
+            .unwrap()
+            .for_asset("mcp:filesystem")
+            .is_empty());
+        assert!(!canonical_path(&preserved_home, AssetKind::Mcp, "filesystem").exists());
+        let _ = fs::remove_dir_all(preserved_home);
+
+        let cleanup_home = initialized_home("mcp-cleanup-live-config");
+        register_mcp(&cleanup_home, "filesystem");
+        mount_mcp(&cleanup_home, "filesystem", "claude-user-mcp");
+        let cleanup_config = cleanup_home.join(".claude.json");
+        let cleanup_request = DeletePreviewRequest {
+            asset_id: "mcp:filesystem".into(),
+            mode: DeleteMode::UnmountAll,
+            remove_mcp_target_entries: true,
+        };
+        let cleanup_preview = preview_delete(&cleanup_home, &cleanup_request).unwrap();
+        assert!(cleanup_preview.can_apply, "{:?}", cleanup_preview.warnings);
+        assert!(cleanup_preview.bindings[0].will_remove_target_entry);
+        apply_delete(
+            &cleanup_home,
+            &DeleteApplyRequest {
+                preview_id: cleanup_preview.preview_id,
+                preview_generated_at_epoch_seconds: cleanup_preview.generated_at_epoch_seconds,
+                request: cleanup_request,
+            },
+        )
+        .unwrap();
+        assert!(!fs::read_to_string(&cleanup_config)
+            .unwrap()
+            .contains("filesystem"));
+        let _ = fs::remove_dir_all(cleanup_home);
     }
 
     fn initialized_home(name: &str) -> PathBuf {
@@ -622,9 +756,45 @@ mod tests {
         fs::write(path.join("SKILL.md"), "# Review").unwrap();
     }
 
+    fn register_mcp(home: &Path, name: &str) {
+        let mut assets = load_assets(home).unwrap();
+        assets
+            .upsert(AssetRecord::new(AssetKind::Mcp, name).unwrap())
+            .unwrap();
+        save_assets(home, &assets).unwrap();
+        let canonical = serde_json::json!({
+            "schemaVersion": 1,
+            "name": name,
+            "spec": { "type": "stdio", "command": "npx", "args": ["-y", "example-mcp"] },
+            "providerExtensions": {}
+        });
+        fs::write(
+            canonical_path(home, AssetKind::Mcp, name),
+            serde_json::to_vec_pretty(&canonical).unwrap(),
+        )
+        .unwrap();
+    }
+
     fn mount_skill(home: &Path, name: &str, target_id: &str) {
         let request = MountPreviewRequest {
             asset_id: format!("skill:{name}"),
+            target_id: target_id.into(),
+        };
+        let preview = preview_mount(home, &request).unwrap();
+        apply_mount(
+            home,
+            &MountApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
+    }
+
+    fn mount_mcp(home: &Path, name: &str, target_id: &str) {
+        let request = MountPreviewRequest {
+            asset_id: format!("mcp:{name}"),
             target_id: target_id.into(),
         };
         let preview = preview_mount(home, &request).unwrap();

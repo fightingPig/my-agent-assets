@@ -1,4 +1,4 @@
-import { AlertTriangle, Blocks, Plus, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Blocks, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalMcpGet,
@@ -7,11 +7,15 @@ import {
   canonicalMountApply,
   canonicalMountPreview,
   canonicalAssetContent,
+  canonicalDeleteApply,
+  canonicalDeletePreview,
   listAssets,
 } from "../app/data-api";
 import type {
   AssetSummary,
   CanonicalMcp,
+  CanonicalDeletePreview,
+  CanonicalDeletePreviewRequest,
   McpAssetDefinition,
   McpSavePreview,
   McpSavePreviewRequest,
@@ -28,6 +32,7 @@ import {
   InspectorTags,
   type AssetCenterItem,
 } from "../components/assets/AssetCenterLayout";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type McpItem = AssetCenterItem & {
@@ -166,6 +171,10 @@ export function McpServersListPage({
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [syncPreviews, setSyncPreviews] = useState<Record<string, CanonicalMountPreview>>({});
+  const [deletePreview, setDeletePreview] = useState<CanonicalDeletePreview | null>(null);
+  const [deleteServer, setDeleteServer] = useState<McpItem | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -314,6 +323,54 @@ export function McpServersListPage({
     }
   };
 
+  const previewDelete = async (server: McpItem, removeMcpTargetEntries: boolean) => {
+    setDeleteServer(server);
+    setDeletePreview(null);
+    setDeleteMessage("生成删除影响预览中");
+    try {
+      const request: CanonicalDeletePreviewRequest = {
+        assetId: canonicalAssetId(server),
+        mode: removeMcpTargetEntries ? "unmount_all" : "require_unmounted",
+        removeMcpTargetEntries,
+      };
+      const preview = await canonicalDeletePreview(request);
+      setDeletePreview(preview);
+      setDeleteMessage(
+        preview.canApply
+          ? removeMcpTargetEntries
+            ? "删除计划已生成：将同时清理已启用 Target 配置。"
+            : "删除计划已生成：Target live config 会保留为外部未管理配置。"
+          : "删除计划被安全检查阻止。",
+      );
+    } catch (error) {
+      setDeleteMessage(errorMessage(error));
+    }
+  };
+
+  const applyDelete = async () => {
+    if (!deletePreview?.canApply || !deleteServer) return;
+    setIsDeleting(true);
+    try {
+      await canonicalDeleteApply({
+        previewId: deletePreview.previewId,
+        previewGeneratedAtEpochSeconds: deletePreview.generatedAtEpochSeconds,
+        request: {
+          assetId: canonicalAssetId(deleteServer),
+          mode: deletePreview.removeMcpTargetEntries ? "unmount_all" : "require_unmounted",
+          removeMcpTargetEntries: deletePreview.removeMcpTargetEntries,
+        },
+      });
+      setDeleteMessage("MCP canonical 配置已删除。");
+      setDeletePreview(null);
+      setDeleteServer(null);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setDeleteMessage(errorMessage(error));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="mcp-page-stack">
       <div className="mcp-page-actions">
@@ -359,9 +416,10 @@ export function McpServersListPage({
       onOpenDetail={onOpenAssetDetail
         ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览"))
         : undefined}
-      renderActions={(server) => !demoMode ? (
-        <button className="asset-business-action" data-no-drag="true" disabled={busy} onClick={() => void openEdit(server)} style={NO_DRAG_REGION_STYLE} type="button">编辑配置</button>
-      ) : null}
+      renderActions={(server) => !demoMode ? <>
+        <button className="asset-business-action" data-no-drag="true" disabled={busy || isDeleting} onClick={() => void openEdit(server)} style={NO_DRAG_REGION_STYLE} type="button">编辑配置</button>
+        <button className="asset-danger-action" data-no-drag="true" disabled={busy || isDeleting} onClick={() => void previewDelete(server, false)} style={NO_DRAG_REGION_STYLE} type="button"><Trash2 size={14} />删除 MCP</button>
+      </> : null}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[
@@ -373,8 +431,13 @@ export function McpServersListPage({
         </>
       )}
       />
+      {deleteServer ? <section className="panel mcp-delete-preview"><div className="section-heading"><div><h3>删除 MCP：{deleteServer.name}</h3><p>默认只删除资产中心 canonical 配置和本机管理关系，不修改现有 Target live config。</p></div></div><label className="settings-toggle-list"><span><input checked={deletePreview?.removeMcpTargetEntries ?? false} data-no-drag="true" disabled={isDeleting} onChange={(event) => void previewDelete(deleteServer, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>同时从已启用 Target 配置中移除</strong><small>开启后会精准删除对应 live config entry；关闭时配置继续生效，但会成为未受资产中心管理的外部配置。</small></span></span></label>{deletePreview ? <div className="plan-lines">{deletePreview.plannedEffects.map((effect) => <span key={effect}>{effect}</span>)}{deletePreview.warnings.map((warning) => <span className="warning-text" key={warning}>{warning}</span>)}</div> : null}<ApplyConfirmationPanel actionLabel="确认删除 MCP" canApply={Boolean(deletePreview?.canApply)} description={deletePreview?.removeMcpTargetEntries ? "将删除 canonical MCP 和列出的 Target live config entry。" : "将删除 canonical MCP 与本机管理关系；Target live config 将被保留。"} isApplying={isDeleting} onApply={() => void applyDelete()} operationError={deletePreview?.canApply ? null : deleteMessage} result={null} title="执行高风险删除" /></section> : null}
     </div>
   );
+}
+
+function canonicalAssetId(server: McpItem) {
+  return server.id.startsWith("mcp:") ? server.id : `mcp:${server.name}`;
 }
 
 function McpEditor({

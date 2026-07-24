@@ -27,6 +27,10 @@ const {
   canonicalAssetContent,
   canonicalAssetOpen,
   listProjects,
+  projectSavePreview,
+  projectSaveApply,
+  projectRemovePreview,
+  projectRemoveApply,
   listBackups,
   revealBackupManifest,
   backupDeletePreview,
@@ -49,6 +53,10 @@ const {
   canonicalAssetContent: vi.fn(),
   canonicalAssetOpen: vi.fn(),
   listProjects: vi.fn(),
+  projectSavePreview: vi.fn(),
+  projectSaveApply: vi.fn(),
+  projectRemovePreview: vi.fn(),
+  projectRemoveApply: vi.fn(),
   listBackups: vi.fn(),
   revealBackupManifest: vi.fn(),
   backupDeletePreview: vi.fn(),
@@ -73,6 +81,10 @@ vi.mock("../app/data-api", () => ({
   canonicalAssetContent,
   canonicalAssetOpen,
   listProjects,
+  projectSavePreview,
+  projectSaveApply,
+  projectRemovePreview,
+  projectRemoveApply,
   listBackups,
   revealBackupManifest,
   backupDeletePreview,
@@ -122,6 +134,43 @@ beforeEach(() => {
     assetCounts: { total: 1, skills: 1, commands: 0, mcps: 0 },
     mounts: ["review"],
   } satisfies ProjectSummary]);
+  projectSavePreview.mockResolvedValue({
+    previewId: "project-save:test",
+    operation: "save",
+    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    migratedTargetIds: [],
+    blockingBindings: [],
+    warnings: [],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  });
+  projectSaveApply.mockResolvedValue({
+    previewId: "project-save:test",
+    operation: "save",
+    projectId: "project-local-app-1234",
+    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
+    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+  });
+  projectRemovePreview.mockResolvedValue({
+    previewId: "project-remove:test",
+    operation: "remove",
+    project: { id: "/tmp/project-a", name: "project-a", title: "Project A", path: "/tmp/project-a", description: "Local project fixture" },
+    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    migratedTargetIds: [],
+    blockingBindings: [],
+    warnings: ["project directory is preserved"],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  });
+  projectRemoveApply.mockResolvedValue({
+    previewId: "project-remove:test",
+    operation: "remove",
+    projectId: "/tmp/project-a",
+    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
+    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+  });
   revealBackupManifest.mockResolvedValue({
     manifestPath: "/tmp/backups/restore-20260627/manifest.json",
   });
@@ -223,6 +272,7 @@ beforeEach(() => {
     direction: "push",
     status: gitStatusFixture({ isRepository: true }),
     repositoryVisibility: "private",
+    allowPublicRemotePush: false,
     plannedEffects: ["stage canonical whitelist", "git push origin main"],
     warnings: [],
     backupRequired: false,
@@ -298,7 +348,7 @@ describe("read-only UI integration", () => {
     expect(container.textContent).toContain("未发现本地数据");
   });
 
-  it("feeds read-only projects while preserving selection and disabled actions", async () => {
+  it("feeds explicitly managed projects while preserving selection", async () => {
     listProjects.mockResolvedValue([
       {
         id: "/tmp/local-app",
@@ -319,7 +369,7 @@ describe("read-only UI integration", () => {
     expect(row).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("/tmp/local-app")).toBeInTheDocument();
     expect(container.textContent).toContain("只读真实数据");
-    expect(screen.queryByRole("button", { name: "扫描项目" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加项目" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "管理挂载" })).not.toBeInTheDocument();
   });
 
@@ -328,9 +378,21 @@ describe("read-only UI integration", () => {
 
     const { container } = render(<ProjectsListPage />);
 
-    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(await screen.findByText("尚未维护项目")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
-    expect(container.textContent).toContain("未发现本地项目");
+    expect(container.textContent).toContain("尚未维护项目");
+  });
+
+  it("previews and saves an explicit existing project without touching its directory", async () => {
+    render(<ProjectsListPage />);
+    await screen.findByRole("option", { name: "project-a" });
+    fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
+    fireEvent.change(screen.getByLabelText("显示名称"), { target: { value: "local-app" } });
+    fireEvent.change(screen.getByLabelText("已有本地目录"), { target: { value: "/tmp/local-app" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
+    await waitFor(() => expect(projectSavePreview).toHaveBeenCalledWith(expect.objectContaining({ name: "local-app", path: "/tmp/local-app" })));
+    fireEvent.click(await screen.findByRole("button", { name: "确认保存项目" }));
+    await waitFor(() => expect(projectSaveApply).toHaveBeenCalled());
   });
 
   it("feeds read-only backup history with manifest metadata and manual restore guidance", async () => {
@@ -467,7 +529,8 @@ describe("read-only UI integration", () => {
 
     const assetCenter = await screen.findByDisplayValue("/tmp/assets");
     expect(assetCenter).toBeInTheDocument();
-    expect(screen.getByDisplayValue("/tmp/workspace, /tmp/code")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("/tmp/workspace, /tmp/code")).not.toBeInTheDocument();
+    expect(screen.getByText(/已维护项目仅在“项目列表”中添加/)).toBeInTheDocument();
     expect(screen.getByDisplayValue("trunk")).toBeInTheDocument();
     expect(screen.getByDisplayValue("upstream")).toBeInTheDocument();
     expect(screen.getByDisplayValue("/tmp/maa")).toBeInTheDocument();
@@ -546,9 +609,13 @@ describe("read-only UI integration", () => {
     ));
 
     fireEvent.click(screen.getByRole("button", { name: /自定义路径/ }));
+    expect(screen.getAllByText("请选择自定义来源类型并输入路径")).not.toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("自定义来源路径"), {
+      target: { value: "/tmp/custom-skills" },
+    });
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith({
       kind: "custom",
-      path: "~/code/design-system/.agents/skills",
+      path: "/tmp/custom-skills",
       assetKind: "skill",
       sourceFormat: "skill_directory",
     }));
@@ -1003,6 +1070,7 @@ function settingsFixture(overrides: Partial<DesktopSettings> = {}): DesktopSetti
     planOnlyByDefault: true,
     gitDefaultBranch: "main",
     gitRemote: "origin",
+    allowPublicRemotePush: false,
     appearanceTheme: "system",
     density: "compact",
     logLevel: "info",

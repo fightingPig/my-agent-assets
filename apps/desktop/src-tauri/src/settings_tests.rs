@@ -54,6 +54,7 @@ fn custom_settings(home: &Path) -> DesktopSettings {
         plan_only_by_default: false,
         git_default_branch: "trunk".into(),
         git_remote: "upstream".into(),
+        allow_public_remote_push: false,
         appearance_theme: AppearanceTheme::Dark,
         density: DensityPreference::Comfortable,
         log_level: LogLevel::Debug,

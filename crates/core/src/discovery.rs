@@ -169,8 +169,7 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
         } => {
             let path = expand_input_path(&path, home);
             match (asset_kind, source_format) {
-                (AssetKind::Skill, SourceFormat::SkillDirectory)
-                | (AssetKind::Skill, SourceFormat::Markdown) => scan_skill_dir(
+                (AssetKind::Skill, SourceFormat::SkillDirectory) => scan_skill_dir(
                     home,
                     &path,
                     RuntimeProvider::Custom,
@@ -314,17 +313,10 @@ fn scan_skill_dir(
                 result,
             );
         } else if is_extension(&path, "md") {
-            let name = file_stem_or_name(&path);
-            push_file_source(
-                home,
-                path,
-                provider,
-                scope,
-                AssetKind::Skill,
-                name,
-                SourceFormat::Markdown,
-                result,
-            );
+            result.warnings.push(format!(
+                "ignored direct Markdown Skill {}; V1 Skills must be directories containing SKILL.md",
+                path.display()
+            ));
         }
     }
 }
@@ -762,6 +754,47 @@ mod tests {
             .sources
             .iter()
             .all(|source| !source.source_path.starts_with(&other)));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn direct_markdown_skills_are_ignored_for_user_project_and_custom_scopes() {
+        let home = test_dir("direct-markdown-skills");
+        let project = home.join("workspace/project-a");
+        let custom = home.join("custom-skills");
+        for path in [
+            home.join(".claude/skills/legacy.md"),
+            project.join(".claude/skills/project-legacy.md"),
+            custom.join("custom-legacy.md"),
+        ] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "# Legacy Skill").unwrap();
+        }
+
+        let user = discover(&home, DiscoveryScope::User);
+        assert!(user.sources.is_empty());
+        assert_eq!(user.warnings.len(), 1);
+        assert!(user.warnings[0].contains("ignored direct Markdown Skill"));
+
+        let project = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project,
+            },
+        );
+        assert!(project.sources.is_empty());
+        assert_eq!(project.warnings.len(), 1);
+
+        let custom = discover(
+            &home,
+            DiscoveryScope::Custom {
+                path: custom,
+                asset_kind: AssetKind::Skill,
+                source_format: SourceFormat::SkillDirectory,
+            },
+        );
+        assert!(custom.sources.is_empty());
+        assert_eq!(custom.warnings.len(), 1);
         let _ = fs::remove_dir_all(home);
     }
 

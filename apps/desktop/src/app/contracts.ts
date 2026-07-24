@@ -108,6 +108,59 @@ export type ProjectSummary = {
   mounts: string[];
 };
 
+export type ProjectSaveRequest = {
+  id?: string;
+  name: string;
+  title: string;
+  path: string;
+  description: string;
+};
+
+export type ProjectRemoveRequest = {
+  id: string;
+};
+
+export type ManagedProject = {
+  id: string;
+  name: string;
+  title: string;
+  path: string;
+  description: string;
+};
+
+export type ProjectChangePreview = {
+  previewId: string;
+  operation: "save" | "remove";
+  project?: ManagedProject;
+  affectedPaths: string[];
+  migratedTargetIds: string[];
+  blockingBindings: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type ProjectSaveApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ProjectSaveRequest;
+};
+
+export type ProjectRemoveApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: ProjectRemoveRequest;
+};
+
+export type ProjectChangeResult = {
+  previewId: string;
+  operation: "save" | "remove";
+  projectId: string;
+  registryPath: string;
+  affectedPaths: string[];
+};
+
 export type ApplyStepResult = {
   stepId: string;
   kind: PlanStepKind;
@@ -363,6 +416,7 @@ export type SyncPreview = {
   direction: SyncDirection;
   status: GitStatus;
   repositoryVisibility: "private" | "public" | "internal" | "unknown";
+  allowPublicRemotePush: boolean;
   plannedEffects: string[];
   warnings: string[];
   backupRequired: boolean;
@@ -380,6 +434,7 @@ export type DesktopSettings = {
   planOnlyByDefault: boolean;
   gitDefaultBranch: string;
   gitRemote: string;
+  allowPublicRemotePush: boolean;
   appearanceTheme: AppearanceTheme;
   density: DensityPreference;
   logLevel: LogLevel;
@@ -753,12 +808,14 @@ export type CanonicalUnmountApplyResult = {
 export type CanonicalDeletePreviewRequest = {
   assetId: string;
   mode: "require_unmounted" | "unmount_all";
+  removeMcpTargetEntries: boolean;
 };
 
 export type CanonicalDeleteBindingImpact = {
   targetId: string;
   targetPath: string;
   canUnmount: boolean;
+  willRemoveTargetEntry: boolean;
   warnings: string[];
 };
 
@@ -766,6 +823,7 @@ export type CanonicalDeletePreview = {
   previewId: string;
   assetId: string;
   canonicalPath: string;
+  removeMcpTargetEntries: boolean;
   bindings: CanonicalDeleteBindingImpact[];
   plannedEffects: string[];
   warnings: string[];

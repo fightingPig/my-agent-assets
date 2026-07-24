@@ -3,15 +3,14 @@ use crate::discovery::{discover, DiscoveryScope};
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, BindingStatus, MountRegistry,
 };
-use crate::path_safety::{display_path, expand_tilde, is_link_or_junction};
-use crate::settings;
+use crate::path_safety::display_path;
+use crate::project_registry::load as load_projects;
 use crate::targets::{
     load as load_targets, registry_path as target_registry_path, AssetKind, TargetRegistry,
 };
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -169,28 +168,24 @@ pub fn list_assets(home: &Path, request: &AssetQueryRequest) -> Result<Vec<Asset
 }
 
 pub fn list_projects(home: &Path) -> Result<Vec<ProjectSummary>> {
-    let settings = settings::load(home).map_err(|error| MaaError::new(error.to_string()))?;
     let targets = load_targets_or_empty(home)?;
     let mounts = load_mounts_or_empty(home)?;
-    let mut project_paths = BTreeSet::new();
-    for root in settings
-        .scan_roots
-        .iter()
-        .map(|root| expand_tilde(root, home))
-        .filter(|root| root.is_dir())
-    {
-        discover_projects(&root, 0, settings.max_depth as usize, &mut project_paths);
-    }
-
     let mut projects = Vec::new();
-    for path in project_paths {
-        let discovery = discover(
-            home,
-            DiscoveryScope::Project {
-                project_path: path.clone(),
-            },
-        );
-        let counts = count_sources(&discovery.sources);
+    for project in load_projects(home)?.projects {
+        let path = project.path.clone();
+        let project_exists = path.is_dir();
+        let discovery = project_exists.then(|| {
+            discover(
+                home,
+                DiscoveryScope::Project {
+                    project_path: path.clone(),
+                },
+            )
+        });
+        let counts = discovery
+            .as_ref()
+            .map(|result| count_sources(&result.sources))
+            .unwrap_or_default();
         let project_target_ids = targets
             .targets
             .iter()
@@ -205,18 +200,17 @@ pub fn list_projects(home: &Path) -> Result<Vec<ProjectSummary>> {
             .collect::<Vec<_>>();
         mounted_assets.sort();
         mounted_assets.dedup();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("project")
-            .to_string();
         projects.push(ProjectSummary {
-            id: display_path(&path),
-            name: name.clone(),
-            title: name,
+            id: project.id,
+            name: project.name,
+            title: project.title,
             path: path.clone(),
-            status: project_status(&path),
-            description: "由共享 Rust Core 从配置的扫描根目录发现。".into(),
+            status: if project_exists {
+                project_status(&path)
+            } else {
+                ProjectQueryStatus::Invalid
+            },
+            description: project.description,
             updated_at: modified_time(&path),
             asset_counts: counts,
             mounts: mounted_assets,
@@ -238,60 +232,6 @@ fn load_mounts_or_empty(home: &Path) -> Result<MountRegistry> {
         return Ok(MountRegistry::default());
     }
     load_mounts(home).map_err(|error| MaaError::new(error.to_string()))
-}
-
-fn discover_projects(
-    path: &Path,
-    depth: usize,
-    max_depth: usize,
-    projects: &mut BTreeSet<PathBuf>,
-) {
-    if depth > max_depth || should_skip(path) || is_symlink(path) {
-        return;
-    }
-    if depth > 0 && is_project(path) {
-        projects.insert(path.to_path_buf());
-    }
-    let Ok(entries) = fs::read_dir(path) else {
-        return;
-    };
-    let mut children = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .collect::<Vec<_>>();
-    children.sort();
-    for child in children {
-        if child.is_dir() {
-            discover_projects(&child, depth + 1, max_depth, projects);
-        }
-    }
-}
-
-fn is_project(path: &Path) -> bool {
-    [
-        "package.json",
-        "Cargo.toml",
-        ".git",
-        ".claude",
-        ".agents",
-        ".mcp.json",
-        ".codex",
-    ]
-    .iter()
-    .any(|marker| path.join(marker).exists())
-}
-
-fn should_skip(path: &Path) -> bool {
-    matches!(
-        path.file_name().and_then(|name| name.to_str()),
-        Some(".git" | "node_modules" | "dist" | "build" | "target" | ".venv" | "__pycache__")
-    )
-}
-
-fn is_symlink(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| is_link_or_junction(&metadata))
-        .unwrap_or(false)
 }
 
 fn project_status(path: &Path) -> ProjectQueryStatus {
@@ -322,7 +262,7 @@ fn count_sources(sources: &[crate::discovery::DiscoveredSource]) -> AssetCounts 
 }
 
 fn modified_time(path: &Path) -> Option<String> {
-    fs::symlink_metadata(path)
+    std::fs::symlink_metadata(path)
         .and_then(|metadata| metadata.modified())
         .ok()
         .map(|time| humantime::format_rfc3339_seconds(time).to_string())
@@ -342,6 +282,7 @@ mod tests {
     use crate::asset_registry::{save as save_assets, AssetRecord, AssetRegistry};
     use crate::mount_registry::{save as save_mounts, MountRegistry};
     use crate::targets::{save as save_targets, TargetRegistry};
+    use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn home(label: &str) -> PathBuf {
@@ -389,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn discovers_nested_projects_to_configured_depth_without_following_symlinks() {
+    fn lists_only_explicitly_managed_projects_without_scanning_roots() {
         let home = home("projects");
         let root = home.join("workspace");
         fs::create_dir_all(root.join("group/project-a/.claude/skills/review")).unwrap();
@@ -400,10 +341,24 @@ mod tests {
         .unwrap();
         fs::create_dir_all(root.join("too/deep/project-b")).unwrap();
         fs::write(root.join("too/deep/project-b/package.json"), "{}").unwrap();
-        let mut settings = settings::Settings::defaults_for_home(&home);
-        settings.scan_roots = vec![display_path(&root)];
-        settings.max_depth = 2;
-        settings::save(&home, &settings).unwrap();
+        let project_path = root.join("group/project-a");
+        let request = crate::project_registry::ProjectSaveRequest {
+            id: None,
+            name: "project-a".into(),
+            title: "Project A".into(),
+            path: project_path,
+            description: "explicit project".into(),
+        };
+        let preview = crate::project_registry::preview_save_project(&home, &request).unwrap();
+        crate::project_registry::apply_save_project(
+            &home,
+            &crate::project_registry::ProjectSaveApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
 
         let projects = list_projects(&home).unwrap();
         assert_eq!(projects.len(), 1);
@@ -413,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn project_query_uses_defaults_before_asset_center_initialization() {
+    fn project_query_is_empty_before_an_explicit_project_is_registered() {
         let home = std::env::temp_dir().join(format!(
             "maa-query-uninitialized-{}",
             SystemTime::now()
@@ -425,8 +380,7 @@ mod tests {
         fs::write(home.join("workspace/project-a/package.json"), "{}").unwrap();
 
         let projects = list_projects(&home).unwrap();
-        assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].name, "project-a");
+        assert!(projects.is_empty());
         assert!(!home.join(".my-agent-assets").exists());
         let _ = fs::remove_dir_all(home);
     }

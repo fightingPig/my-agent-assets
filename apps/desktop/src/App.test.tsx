@@ -244,7 +244,7 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
-    expect(await screen.findByText("未发现本地项目")).toBeInTheDocument();
+    expect(await screen.findByText("尚未维护项目")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "冲突处理" }));

@@ -15,6 +15,12 @@ import type {
   ListAssetsInput,
   PreviewSyncInput,
   ProjectSummary,
+  ProjectChangePreview,
+  ProjectChangeResult,
+  ProjectRemoveApplyRequest,
+  ProjectRemoveRequest,
+  ProjectSaveApplyRequest,
+  ProjectSaveRequest,
   SettingsSaveInput,
   SyncApplyInput,
   SyncApplyResult,
@@ -83,6 +89,7 @@ const fallbackSettings: DesktopSettings = {
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
+  allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
   logLevel: "info",
@@ -147,6 +154,42 @@ export async function canonicalAssetOpen(input: AssetOpenInput): Promise<AssetOp
 export async function listProjects(): Promise<ProjectSummary[]> {
   const projects = await invokeRead<unknown>("list_projects", undefined, []);
   return Array.isArray(projects) ? projects as ProjectSummary[] : [];
+}
+
+export async function projectSavePreview(input: ProjectSaveRequest): Promise<ProjectChangePreview> {
+  if (!isTauriRuntime()) throw new Error("project_save_preview requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_save_preview", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || typeof result.canApply !== "boolean") {
+    throw new Error("project_save_preview returned an invalid response.");
+  }
+  return result as ProjectChangePreview;
+}
+
+export async function projectSaveApply(input: ProjectSaveApplyRequest): Promise<ProjectChangeResult> {
+  if (!isTauriRuntime()) throw new Error("project_save_apply requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_save_apply", { input });
+  if (!isRecord(result) || typeof result.projectId !== "string") {
+    throw new Error("project_save_apply returned an invalid response.");
+  }
+  return result as ProjectChangeResult;
+}
+
+export async function projectRemovePreview(input: ProjectRemoveRequest): Promise<ProjectChangePreview> {
+  if (!isTauriRuntime()) throw new Error("project_remove_preview requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_remove_preview", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || typeof result.canApply !== "boolean") {
+    throw new Error("project_remove_preview returned an invalid response.");
+  }
+  return result as ProjectChangePreview;
+}
+
+export async function projectRemoveApply(input: ProjectRemoveApplyRequest): Promise<ProjectChangeResult> {
+  if (!isTauriRuntime()) throw new Error("project_remove_apply requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_remove_apply", { input });
+  if (!isRecord(result) || typeof result.projectId !== "string") {
+    throw new Error("project_remove_apply returned an invalid response.");
+  }
+  return result as ProjectChangeResult;
 }
 
 export async function listBackups(): Promise<BackupSummary[]> {
@@ -597,6 +640,7 @@ export async function canonicalDeletePreview(
     previewId: "canonical-delete-unavailable",
     assetId: input.assetId,
     canonicalPath: "",
+    removeMcpTargetEntries: input.removeMcpTargetEntries,
     bindings: [],
     plannedEffects: [],
     warnings: ["Tauri runtime is unavailable; canonical delete preview skipped."],
@@ -726,6 +770,7 @@ export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview>
     direction: input.direction,
     status: fallbackGitStatus,
     repositoryVisibility: "unknown",
+    allowPublicRemotePush: false,
     plannedEffects: [],
     warnings: ["Tauri runtime is unavailable; sync preview skipped."],
     backupRequired: input.direction === "pull",

@@ -1,4 +1,4 @@
-export type ProjectStatus = "正常" | "有变更" | "待同步";
+export type ProjectStatus = "正常" | "有变更" | "待同步" | "无效";
 
 export type StaticProject = {
   id: string;

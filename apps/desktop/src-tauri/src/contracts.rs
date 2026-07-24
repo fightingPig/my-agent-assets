@@ -388,6 +388,7 @@ pub struct DesktopSettings {
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,
+    pub allow_public_remote_push: bool,
     pub appearance_theme: AppearanceTheme,
     pub density: DensityPreference,
     pub log_level: LogLevel,

@@ -124,6 +124,34 @@ fn list_projects() -> CommandResult<Vec<my_agent_assets_core::query::ProjectSumm
 }
 
 #[tauri::command]
+fn project_save_preview(
+    input: my_agent_assets_core::project_registry::ProjectSaveRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangePreview> {
+    command_result(shared_core::project_save_preview_command(input))
+}
+
+#[tauri::command]
+fn project_save_apply(
+    input: my_agent_assets_core::project_registry::ProjectSaveApplyRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangeResult> {
+    command_result(shared_core::project_save_apply_command(input))
+}
+
+#[tauri::command]
+fn project_remove_preview(
+    input: my_agent_assets_core::project_registry::ProjectRemoveRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangePreview> {
+    command_result(shared_core::project_remove_preview_command(input))
+}
+
+#[tauri::command]
+fn project_remove_apply(
+    input: my_agent_assets_core::project_registry::ProjectRemoveApplyRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangeResult> {
+    command_result(shared_core::project_remove_apply_command(input))
+}
+
+#[tauri::command]
 fn list_backups() -> CommandResult<Vec<my_agent_assets_core::backup_history::BackupHistoryEntry>> {
     command_result(shared_core::list_backup_history_command())
 }
@@ -330,6 +358,10 @@ pub fn run() {
             canonical_asset_content,
             canonical_asset_open,
             list_projects,
+            project_save_preview,
+            project_save_apply,
+            project_remove_preview,
+            project_remove_apply,
             list_backups,
             reveal_backup_manifest,
             backup_delete_preview,

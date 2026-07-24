@@ -446,10 +446,6 @@ fn stage_source(source: &DiscoveredSource, destination: &Path) -> Result<()> {
             fs::create_dir_all(destination)?;
             match source.source_format {
                 SourceFormat::SkillDirectory => copy_directory(&source.source_path, destination),
-                SourceFormat::Markdown => {
-                    fs::copy(&source.source_path, destination.join("SKILL.md"))?;
-                    Ok(())
-                }
                 _ => Err(MaaError::new("unsupported Skill source format")),
             }
         }

@@ -72,6 +72,7 @@ pub struct SyncPreview {
     pub direction: SyncDirection,
     pub status: GitStatus,
     pub repository_visibility: RepositoryVisibility,
+    pub allow_public_remote_push: bool,
     pub planned_effects: Vec<String>,
     pub warnings: Vec<String>,
     pub backup_required: bool,
@@ -240,21 +241,34 @@ fn preview_sync_at(
             ));
         }
         SyncDirection::Push => {
-            match verifier.verify(&remote_url) {
-                Ok((verified, identity)) => {
-                    visibility = verified;
-                    status.remote_identity = Some(identity);
-                    if visibility != RepositoryVisibility::Private {
-                        warnings.push(format!(
-                            "Push requires GitHub visibility PRIVATE; received {:?}",
-                            visibility
-                        ));
+            if !remote_url.is_empty() {
+                match verifier.verify(&remote_url) {
+                    Ok((verified, identity)) => {
+                        visibility = verified;
+                        status.remote_identity = Some(identity);
+                        if !settings.allow_public_remote_push
+                            && visibility != RepositoryVisibility::Private
+                        {
+                            warnings.push(format!(
+                                "Push requires GitHub visibility PRIVATE; received {:?}",
+                                visibility
+                            ));
+                            can_apply = false;
+                        }
+                    }
+                    Err(error) if settings.allow_public_remote_push => warnings.push(format!(
+                        "Remote visibility could not be verified; public remote Push is enabled: {error}"
+                    )),
+                    Err(error) => {
+                        warnings.push(error.to_string());
                         can_apply = false;
                     }
                 }
-                Err(error) => {
-                    warnings.push(error.to_string());
-                    can_apply = false;
+                if settings.allow_public_remote_push {
+                    warnings.push(
+                        "Public remote Push is enabled. Canonical assets and portable backups may be visible to remote repository readers."
+                            .into(),
+                    );
                 }
             }
             if !status.blocked_changes.is_empty() {
@@ -318,12 +332,20 @@ fn preview_sync_at(
         }
     }
 
-    let preview_id = fingerprint_preview(&repository, request, &status, visibility, generated_at)?;
+    let preview_id = fingerprint_preview(
+        &repository,
+        request,
+        &status,
+        visibility,
+        settings.allow_public_remote_push,
+        generated_at,
+    )?;
     Ok(SyncPreview {
         preview_id,
         direction: request.direction,
         status,
         repository_visibility: visibility,
+        allow_public_remote_push: settings.allow_public_remote_push,
         planned_effects,
         warnings,
         backup_required: request.direction == SyncDirection::Pull,
@@ -698,12 +720,19 @@ fn fingerprint_preview(
     request: &SyncPreviewRequest,
     status: &GitStatus,
     visibility: RepositoryVisibility,
+    allow_public_remote_push: bool,
     generated_at: u64,
 ) -> Result<String> {
     let mut hash = Sha256::new();
     hash.update(
-        serde_json::to_vec(&(request, status, visibility, generated_at))
-            .map_err(|error| MaaError::new(error.to_string()))?,
+        serde_json::to_vec(&(
+            request,
+            status,
+            visibility,
+            allow_public_remote_push,
+            generated_at,
+        ))
+        .map_err(|error| MaaError::new(error.to_string()))?,
     );
     for path in sync_paths(repository) {
         fingerprint_path(&path, &mut hash)?;
@@ -1024,6 +1053,13 @@ mod tests {
         }
     }
 
+    struct UnavailableVerifier;
+    impl VisibilityVerifier for UnavailableVerifier {
+        fn verify(&self, _remote_url: &str) -> Result<(RepositoryVisibility, String)> {
+            Err(MaaError::new("visibility API is unavailable"))
+        }
+    }
+
     fn test_home(label: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!(
             "maa-git-sync-{label}-{}-{}",
@@ -1146,6 +1182,55 @@ mod tests {
         .unwrap();
         assert!(!public.can_apply);
         assert_eq!(public.repository_visibility, RepositoryVisibility::Public);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn public_remote_push_setting_allows_public_and_unverifiable_remotes_with_warning() {
+        let (home, _) = setup("public-remote-setting");
+        let repository = home.join(".my-agent-assets");
+        fs::write(
+            repository.join("assets/skills/review/SKILL.md"),
+            "# Updated",
+        )
+        .unwrap();
+        let mut settings = settings::load(&home).unwrap();
+        settings.allow_public_remote_push = true;
+        settings::save(&home, &settings).unwrap();
+
+        let public = preview_sync_with(
+            &home,
+            &SyncPreviewRequest {
+                direction: SyncDirection::Push,
+            },
+            &PublicVerifier,
+        )
+        .unwrap();
+        assert!(public.can_apply, "{:?}", public.warnings);
+        assert!(public.allow_public_remote_push);
+        assert_eq!(public.repository_visibility, RepositoryVisibility::Public);
+        assert!(public
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Public remote Push is enabled")));
+
+        let unverifiable = preview_sync_with(
+            &home,
+            &SyncPreviewRequest {
+                direction: SyncDirection::Push,
+            },
+            &UnavailableVerifier,
+        )
+        .unwrap();
+        assert!(unverifiable.can_apply, "{:?}", unverifiable.warnings);
+        assert_eq!(
+            unverifiable.repository_visibility,
+            RepositoryVisibility::Unknown
+        );
+        assert!(unverifiable
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("could not be verified")));
         let _ = fs::remove_dir_all(home);
     }
 
