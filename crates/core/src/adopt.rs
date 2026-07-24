@@ -503,12 +503,19 @@ fn epoch_seconds() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
+    #[cfg(unix)]
     use crate::asset_registry::{load as load_assets, save as save_assets, AssetRegistry};
+    #[cfg(unix)]
     use crate::mount_registry::{load as load_mounts, save as save_mounts, MountRegistry};
+    #[cfg(unix)]
     use crate::operation::{crash_test, recover_incomplete};
+    #[cfg(unix)]
     use crate::targets::{save as save_targets, MountAdapter, ProviderState, TargetRegistry};
+    #[cfg(unix)]
     use serde_json::Value as JsonValue;
+    #[cfg(unix)]
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]
@@ -672,6 +679,7 @@ mod tests {
         let _ = fs::remove_dir_all(home);
     }
 
+    #[cfg(unix)]
     fn initialized_home(name: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!(
             "maa-adopt-{name}-{}",
@@ -706,6 +714,7 @@ mod tests {
         home
     }
 
+    #[cfg(unix)]
     fn create_sources(home: &Path) {
         fs::create_dir_all(home.join(".claude/skills/review")).unwrap();
         fs::write(home.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
@@ -730,6 +739,7 @@ mod tests {
         .unwrap();
     }
 
+    #[cfg(unix)]
     fn source_snapshots(_home: &Path) -> BTreeMap<&'static str, JsonValue> {
         BTreeMap::from([("claude_mcp", JsonValue::String("postgres-server".into()))])
     }

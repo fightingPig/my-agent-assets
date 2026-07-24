@@ -1127,11 +1127,13 @@ mod tests {
     use super::*;
     use crate::asset_registry::{save as save_assets, AssetRecord, AssetRegistry};
     use crate::mount_registry::MountRegistry;
+    #[cfg(unix)]
     use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{
         save as save_targets, AssetKind, MountAdapter, ProviderState, TargetRegistry,
     };
     use serde_json::json;
+    #[cfg(unix)]
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]

@@ -775,6 +775,7 @@ mod tests {
         .unwrap();
     }
 
+    #[cfg(unix)]
     fn mount_skill(home: &Path, name: &str, target_id: &str) {
         let request = MountPreviewRequest {
             asset_id: format!("skill:{name}"),

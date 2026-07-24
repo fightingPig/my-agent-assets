@@ -1,6 +1,6 @@
 # Final Beta Readiness
 
-Date: 2026-07-11
+Date: 2026-07-24
 
 This document summarizes the current release boundary for the final V1 goal.
 It does not replace `docs/v1-full-test-plan.md`; it points to the evidence and
@@ -72,16 +72,16 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `c06d15d` (`codex/final-product-v1`)
+- source commit: `9cd17bc` (`codex/final-product-v1-next`)
 - build command: `cd apps/desktop && npm run build`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `c0460c00f4ae97aa94ce298dd934cae1789a2e038aa463e6a95634ae1358c44e`
-- Fake HOME launch smoke: passed; the packaged binary started and left the
-  disposable HOME uninitialized
-- verification date: 2026-07-11
+- DMG SHA-256: `13b639723530a7bf3b59d5d7536402ce0bbd123f06d61447224758f83bc116d4`
+- Tauri dev smoke: passed with `MY_AGENT_ASSETS_HOME` set to an empty
+  disposable path; startup did not create or write that path
+- verification date: 2026-07-24
 
-Installed-app native evidence on 2026-07-11:
+Historical installed-app native evidence on 2026-07-11:
 
 - the candidate app was installed from the generated bundle into
   `~/Applications/My Agent Assets.app` and passed `codesign --verify --deep --strict`

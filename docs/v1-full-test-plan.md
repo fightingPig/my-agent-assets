@@ -58,7 +58,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
 | C-01 | Missing asset center | Call `list_assets` with empty fake HOME | Empty list, no directory creation | PASS |
-| C-02 | Skill discovery | Add directory Skill and Markdown Skill | Both returned with correct IDs and paths | PASS |
+| C-02 | Skill discovery | Add a directory Skill and a root Markdown Skill | Only `skills/<name>/SKILL.md` directory Skills are returned; root Markdown Skills are ignored | PASS |
 | C-03 | Command discovery | Add Markdown Command | Command returned with metadata | PASS |
 | C-04 | MCP discovery | Add valid and invalid MCP JSON | Valid is ready; invalid is marked invalid | PASS |
 | C-05 | Mount derivation | Add runtime symlink and MCP config reference | Asset mountTargets and mounted status are derived | PASS |
@@ -74,8 +74,8 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| D-01 | Skill file import | Apply user Skill Markdown import | Verified copy appears in asset center | PASS |
-| D-02 | Skill directory import | Apply directory Skill import | Full directory copied and verified | PASS |
+| D-01 | Root Markdown Skill boundary | Attempt user Skill Markdown import | Root `skills/<name>.md` is ignored and cannot be imported as a V1 Skill | PASS |
+| D-02 | Skill directory import | Apply directory Skill import | Full `<name>/` directory, including `SKILL.md`, is copied and verified | PASS |
 | D-03 | Project Command import | Apply project-scope Command import | Command copied to asset center | PASS |
 | D-04 | MCP extraction | Import selected MCP server | Only selected JSON object is stored; source config unchanged | PASS |
 | D-05 | Replacement backup | Import over existing destination | Old destination stored in manifest backup | PASS |
@@ -211,9 +211,9 @@ This section must be updated with actual command output and evidence after each 
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
-| Release build/signature/DMG | PASS | arm64 app, valid ad-hoc signature, valid DMG checksum |
-| Native window interaction | PARTIAL | Current candidate Accessibility inspection exposes native close/minimize/zoom controls, navigation, and readable empty states; continuous drag, resize, full-screen, and relaunch require current-package manual acceptance |
-| Installed application | PARTIAL | Current candidate `.app`/`.dmg` is ad-hoc signed and DMG-verified; exact-package install and fake-HOME launch remain in the manual checklist |
+| Release build/signature/DMG | PASS | `9cd17bc`: arm64 app, valid ad-hoc signature, valid DMG checksum `13b639723530a7bf3b59d5d7536402ce0bbd123f06d61447224758f83bc116d4` |
+| Native window interaction | PARTIAL | Historical Accessibility evidence confirms the frozen native shell; the exact `9cd17bc` package still needs current-package interaction acceptance |
+| Installed application | PARTIAL | The exact `9cd17bc` `.app`/`.dmg` is ad-hoc signed and DMG-verified; installation and fake-HOME launch remain in the manual checklist |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
 | Windows | MANUAL | Requires Windows 10/11 environment |
 
@@ -231,7 +231,7 @@ This section must be updated with actual command output and evidence after each 
 
 ### Beta Regression
 
-- Commit `b7208e9` adds user/project/custom discovery for directory Skills at `<name>/SKILL.md` while retaining direct Markdown Skills.
+- Commit `9cd17bc` enforces V1 directory Skills at `<name>/SKILL.md`; direct Markdown Skills are intentionally ignored.
 - Differing same-ID assets now increment `conflictCount`, render as conflicts, and block direct Scan Import apply.
 - Backend import apply independently rejects unresolved content conflicts.
 - Preview asset IDs use strict type and safe-component validation.

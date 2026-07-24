@@ -1065,7 +1065,14 @@ mod tests {
         fs::write(&file, "before").unwrap();
         fs::write(directory.join("SKILL.md"), "before skill").unwrap();
 
+        #[cfg(unix)]
         let mut targets = vec![
+            RecoveryTarget::asset_center(&file),
+            RecoveryTarget::asset_center(&directory),
+            RecoveryTarget::asset_center(&missing),
+        ];
+        #[cfg(not(unix))]
+        let targets = vec![
             RecoveryTarget::asset_center(&file),
             RecoveryTarget::asset_center(&directory),
             RecoveryTarget::asset_center(&missing),
