@@ -935,7 +935,7 @@ fn sync_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn sync_directory(path: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_directory(path: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         OpenOptions::new().read(true).open(path)?.sync_all()

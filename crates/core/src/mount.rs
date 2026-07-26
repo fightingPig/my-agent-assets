@@ -986,7 +986,7 @@ fn atomic_runtime_write(path: &Path, content: &[u8]) -> Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        OpenOptions::new().read(true).open(parent)?.sync_all()
+        crate::operation::sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);
