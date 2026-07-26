@@ -1,6 +1,6 @@
 # V1 Full Test Plan
 
-Date: 2026-06-27
+Last updated: 2026-07-26
 
 This plan covers the current My Agent Assets V1 desktop and CLI implementation. All automated write tests must use a disposable fake HOME. Real `~/.claude`, `~/.claude.json`, and `~/.my-agent-assets` are excluded from automated testing.
 
@@ -164,7 +164,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | J-01 | Full page manifest | Run `npm run qa:visual` | 13 registered pages rendered | PASS |
 | J-02 | Default viewport | Capture every page at 1440×900 | No severe overflow/collapse/clipping | PASS |
 | J-03 | Minimum viewport | Capture every page at 1180×760 | Local scrolling works; no severe overflow/collapse/clipping | PASS |
-| J-04 | Screenshot integrity | Inspect generated PNGs | No black/unpainted tiles; toolbar and panels paint fully | MANUAL |
+| J-04 | Screenshot integrity | Inspect generated PNGs | No black/unpainted tiles; toolbar and panels paint fully | PASS |
 | J-05 | Navigation | Run App tests | All visible pages switch and PageHeader updates | PASS |
 | J-06 | Detail navigation | Open detail from list inspector | Hidden detail pages open without sidebar routes | PASS |
 | J-07 | Search/filter/selection | Run page/component tests | Local interactions update lists and inspectors | PASS |
@@ -191,7 +191,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| L-01 | Windows build | Build MSI/EXE on Windows | Installer artifacts generated | MANUAL |
+| L-01 | Windows build | Build MSI/EXE on Windows | Installer artifacts generated | PASS |
 | L-02 | Native titlebar | Launch installed app | Native Windows titlebar; no macOS overlay or 28px gap | MANUAL |
 | L-03 | Minimum size and DPI | Test 100%, 125%, 150%, 200% scaling | No clipping or incoherent overlap | MANUAL |
 | L-04 | Path behavior | Test drive letters, spaces, Unicode, long paths | Discovery and guards behave correctly | MANUAL |
@@ -207,15 +207,17 @@ This section must be updated with actual command output and evidence after each 
 | Automated frontend | PASS | TypeScript passed; Vitest suite passed; renderer production build passed |
 | Automated Rust | PASS | Full workspace passed, including shared-core operation recovery and desktop adapter tests |
 | Windows core compile | PASS | `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` |
-| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; disposable fake HOME only |
+| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; latest disposable fake HOME `/tmp/my-agent-assets-e2e-5wXQov` |
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
-| Release build/signature/DMG | PASS | `9cd17bc`: arm64 app, valid ad-hoc signature, valid DMG checksum `13b639723530a7bf3b59d5d7536402ce0bbd123f06d61447224758f83bc116d4` |
-| Native window interaction | PARTIAL | Historical Accessibility evidence confirms the frozen native shell; the exact `9cd17bc` package still needs current-package interaction acceptance |
-| Installed application | PARTIAL | The exact `9cd17bc` `.app`/`.dmg` is ad-hoc signed and DMG-verified; installation and fake-HOME launch remain in the manual checklist |
+| Release build/signature/DMG | PASS | `82a3217`: arm64 app, valid ad-hoc signature, valid DMG checksum `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66` |
+| Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the latest installed candidate still needs the unlocked conflict-count recheck |
+| Installed application | PARTIAL | The current `.app` is installed at `~/Applications/My Agent Assets.app` and its ad-hoc signature passes; the locked desktop prevents the remaining fake-HOME workflow recheck |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
-| Windows | MANUAL | Requires Windows 10/11 environment |
+| Windows package CI | PASS | Workflow run `30194702076` passed frontend validation and 22 Desktop/shared-core tests, then produced unsigned MSI and NSIS test packages |
+| Windows artifact integrity | PASS | Archive SHA-256 `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`; MSI `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`; NSIS `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675` |
+| Windows native qualification | MANUAL | Requires Windows 10/11 installation, DPI, path, titlebar, runtime patch, upgrade, and uninstall checks |
 
 ### Native UI Evidence
 
@@ -231,7 +233,7 @@ This section must be updated with actual command output and evidence after each 
 
 ### Beta Regression
 
-- Commit `9cd17bc` enforces V1 directory Skills at `<name>/SKILL.md`; direct Markdown Skills are intentionally ignored.
+- The current branch enforces V1 directory Skills at `<name>/SKILL.md`; direct Markdown Skills are intentionally ignored.
 - Differing same-ID assets now increment `conflictCount`, render as conflicts, and block direct Scan Import apply.
 - Backend import apply independently rejects unresolved content conflicts.
 - Preview asset IDs use strict type and safe-component validation.
@@ -239,8 +241,15 @@ This section must be updated with actual command output and evidence after each 
 - Apply confirmation uses ordinary preview-bound buttons; typed `APPLY` prompts are intentionally absent.
 - Backup History is read-only and manual-restore-only; historical `preview_restore`, `restore_apply`, and `maa restore` are intentionally absent or rejected.
 - The regression suite covers directory/direct Skills, conflict detection and blocking, explicit overwrite/skip/rename, invalid preview IDs, settings write failures, and fixed asset-center behavior.
-- The latest ad-hoc-signed installed build passed direct macOS AX API validation. `System Events` did not enumerate its window, but `AXUIElement` exposed one window and all native controls without requiring a permission change.
-- Current-package AX validation covered enabled close/minimize/zoom controls, two consecutive real pointer drags, minimize/restore, full-screen enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901` window.
+- The immediately preceding ad-hoc-signed installed build passed direct macOS
+  AX API validation. `System Events` did not enumerate its window, but
+  `AXUIElement` exposed one window and all native controls without requiring a
+  permission change.
+- Native AX validation of the frozen shell covered enabled close/minimize/zoom
+  controls, two consecutive real pointer drags, minimize/restore, full-screen
+  enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901`
+  window. The latest installed candidate retains the same shell but still needs
+  the unlocked conflict-count workflow recheck.
 
 ## Human Handoff Rule
 
@@ -250,7 +259,11 @@ Use `docs/manual-acceptance-checklist.md` as the authoritative handoff checklist
 
 ## Remaining Manual Run
 
-1. Review all 26 PNG files in `apps/desktop/artifacts/visual-qa/`, especially code, diff, inspector, and settings panels at 1180×760. The automated report found no overflow, collapse, or clipping, but semantic visual quality still needs human judgment.
-2. Open Scan Import with `/tmp/my-agent-assets-beta-regression` and visually confirm `dir-skill`, `direct-skill`, and the conflict warning are visible.
-3. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the ad-hoc signed, non-notarized build.
-4. Run L-01 through L-06 on Windows 10/11, including 100%, 125%, 150%, and 200% DPI.
+1. Unlock the current Mac and recheck the latest installed candidate against the
+   disposable conflict fixture, including the exact `0 / 2` decision count.
+2. Visually confirm the current installed candidate's Dock and app-switcher icon.
+3. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the
+   ad-hoc signed, non-notarized build.
+4. Install the unsigned Windows test package from workflow run `30194702076`
+   and run L-02 through L-06 on Windows 10/11, including 100%, 125%, 150%, and
+   200% DPI. Production signing is still required before V1 Stable.
