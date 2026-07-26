@@ -126,15 +126,21 @@ Installed-app native evidence on 2026-07-26:
   exact native `0 / 2` conflict-decision count still needs a final unlocked
   installed-app recheck
 
-Windows preflight evidence on 2026-07-11:
+Windows automated package evidence on 2026-07-26:
 
 - `cargo check -p my-agent-assets-core --tests --target x86_64-pc-windows-msvc`
   passed, including compilation of the Windows-only junction regression test.
-- Desktop cross-check reached Tauri's Windows resource-build stage after the
-  configuration feature allowlist was corrected. It cannot complete on this
-  macOS host because `llvm-rc` is unavailable; the Windows GitHub Actions
-  workflow is configured to perform the native core/desktop tests and
-  installer build.
+- GitHub Actions workflow run `30194702076` passed frontend contract validation
+  and all 22 Desktop shared-core adapter tests on a native Windows runner.
+- The same run produced the unsigned test installers
+  `My Agent Assets_0.1.0_x64_en-US.msi` and
+  `My Agent Assets_0.1.0_x64-setup.exe`.
+- The artifact archive SHA-256 is
+  `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`;
+  the MSI SHA-256 is
+  `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`;
+  the NSIS SHA-256 is
+  `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675`.
 
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact

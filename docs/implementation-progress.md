@@ -328,14 +328,25 @@ Implemented:
   Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
   Visual QA for 13 pages/26 screenshots with zero issues, ad-hoc macOS signing,
   and DMG checksum verification
+- Windows workflow run `30194702076` passed frontend contract validation and
+  all 22 Desktop shared-core adapter tests on a native Windows runner, then
+  produced unsigned MSI and NSIS test installers from commit `09d2248`
+- verified the Windows artifact archive and installers:
+  - archive SHA-256:
+    `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`
+  - MSI SHA-256:
+    `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`
+  - NSIS SHA-256:
+    `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675`
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
   multi-step workflow
 - final native recheck of the latest installed build's exact two-conflict
   decision count remains pending because the macOS desktop session locked
-- Windows packaging/signing and real Windows manual qualification remain
-  external manual acceptance work before V1 Stable can be claimed
+- Windows production signing and real Windows manual qualification remain
+  external acceptance work before V1 Stable can be claimed; the generated
+  unsigned MSI/NSIS files are test packages only
 
 Next:
 - continue the requirement-by-requirement final-goal audit and close the next
