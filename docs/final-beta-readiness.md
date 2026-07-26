@@ -72,13 +72,13 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `955983b` (`codex/final-product-v1-next`)
+- source commit: `82a3217` (`codex/final-product-v1-next`)
 - build command:
   `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256:
-  `cbe8424a38adb2cb7bb35b7103f95fdc409f2dee02ab6d37c865fb8a8204675a`
+  `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
@@ -94,6 +94,9 @@ Installed-app native evidence on 2026-07-26:
 - the exact candidate app was installed from the generated bundle into
   `~/Applications/My Agent Assets.app` and passed `codesign --verify --deep --strict`
   at that installed location
+- the latest installed candidate still needs the unlocked native conflict-count
+  recheck described below; the remaining native window evidence in this section
+  was collected from the immediately preceding readability candidate
 - the macOS Accessibility tree exposed the native close, minimize, and zoom
   controls, the sidebar navigation, and readable empty-state content; it did
   not expose React-rendered traffic-light controls

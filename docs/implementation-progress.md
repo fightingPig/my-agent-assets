@@ -338,6 +338,9 @@ Implemented:
     `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`
   - NSIS SHA-256:
     `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675`
+- rebuilt and installed the current Apple Silicon candidate from `82a3217`;
+  ad-hoc signature and DMG verification passed, with DMG SHA-256
+  `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66`
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
