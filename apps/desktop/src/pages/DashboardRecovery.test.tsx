@@ -206,7 +206,7 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText("已完成")).toBeInTheDocument();
   });
 
-  it("does not render raw backend errors that could contain local details", async () => {
+  it("keeps successful summaries when one read fails without exposing raw errors", async () => {
     listAssets.mockRejectedValue(new Error("token=secret-value /tmp/private"));
 
     render(<DashboardPage appInfo={{
@@ -217,7 +217,9 @@ describe("Dashboard recovery status", () => {
       backendReady: true,
     }} />);
 
-    expect(await screen.findByText(/本地概览操作未完成/)).toBeInTheDocument();
+    expect(await screen.findByText("部分读取失败（1 项）")).toBeInTheDocument();
+    expect(screen.getAllByText("Repository ready.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("尚未维护项目").length).toBeGreaterThan(0);
     expect(screen.queryByText(/secret-value|\/tmp\/private/)).not.toBeInTheDocument();
   });
 

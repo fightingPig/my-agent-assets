@@ -113,7 +113,7 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange }: Dashb
 
     let cancelled = false;
     setStateLabel("读取中");
-    Promise.all([
+    Promise.allSettled([
       listAssets({ assetType: null }),
       listProjects(),
       listBackups(),
@@ -125,27 +125,27 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange }: Dashb
     ])
       .then(([loadedAssets, loadedProjects, loadedBackups, loadedRepository, loadedRecovery, loadedAuditEntries, loadedInitialization, loadedDoctor]) => {
         if (cancelled) return;
-        setAssets(loadedAssets);
-        setProjects(loadedProjects);
-        setBackupCount(loadedBackups.length);
-        setRepository(loadedRepository);
-        setRecovery(loadedRecovery);
-        setAuditEntries(loadedAuditEntries);
-        setInitialization(loadedInitialization);
-        setDoctor(loadedDoctor);
-        setStateLabel("只读真实数据");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setAssets([]);
-        setProjects([]);
-        setBackupCount(0);
-        setRepository(emptyGitStatus);
-        setRecovery(healthyRecoveryStatus);
-        setAuditEntries([]);
-        setInitialization(null);
-        setDoctor(null);
-        setStateLabel(`读取失败：${errorMessage(error)}`);
+        setAssets(settledValue(loadedAssets, []));
+        setProjects(settledValue(loadedProjects, []));
+        setBackupCount(settledValue(loadedBackups, []).length);
+        setRepository(settledValue(loadedRepository, emptyGitStatus));
+        setRecovery(settledValue(loadedRecovery, healthyRecoveryStatus));
+        setAuditEntries(settledValue(loadedAuditEntries, []));
+        setInitialization(settledValue(loadedInitialization, null));
+        setDoctor(settledValue(loadedDoctor, null));
+        const failedReads = [
+          loadedAssets,
+          loadedProjects,
+          loadedBackups,
+          loadedRepository,
+          loadedRecovery,
+          loadedAuditEntries,
+          loadedInitialization,
+          loadedDoctor,
+        ].filter((result) => result.status === "rejected").length;
+        setStateLabel(
+          failedReads === 0 ? "只读真实数据" : `部分读取失败（${failedReads} 项）`,
+        );
       });
     return () => {
       cancelled = true;
@@ -576,6 +576,10 @@ function doctorStatusLabel(status: "ok" | "warning" | "error") {
   if (status === "ok") return "正常";
   if (status === "warning") return "需注意";
   return "异常";
+}
+
+function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === "fulfilled" && result.value != null ? result.value : fallback;
 }
 
 function errorMessage(_error: unknown) {
