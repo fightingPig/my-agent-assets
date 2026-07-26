@@ -98,9 +98,14 @@ Installed-app native evidence on 2026-07-26:
   keyboard focus on the provider control
 - the 28px overlay drag area accepted two consecutive drag gestures without
   requiring an application switch
+- the window respected the configured `1180x760` minimum, remained readable,
+  and passed native minimize, zoom, close, and relaunch checks
 - a native read-only command failure was shown as a partial-read warning while
   successful repository, runtime, backup, and project summaries remained
   visible
+- the installed app and read-only mounted DMG both referenced a valid
+  `icon.icns`; the Dock accessibility target timed out, so Dock and app-switcher
+  icon appearance still require visual human confirmation
 - Computer Use cannot retain `MY_AGENT_ASSETS_HOME` when its bridge relaunches
   the target application, so that bridge result is installation/window-shell
   evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
