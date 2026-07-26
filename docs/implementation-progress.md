@@ -308,7 +308,7 @@ Implemented:
   Claude/Codex runtime diagnostics, and direct page navigation; Project Detail
   now displays registered project Target paths/status and classifies mounted
   assets by canonical asset ID
-- current validation on 2026-07-26 passed 94 frontend tests, 135 shared-core
+- current validation on 2026-07-26 passed 95 frontend tests, 135 shared-core
   tests, 21 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
   Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
   Visual QA for 13 pages/26 screenshots with zero issues, ad-hoc macOS signing,

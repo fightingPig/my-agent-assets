@@ -72,20 +72,22 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `e92d9d50dbd0dd47160263397cfe248fcb40a9bc`
+- source commit: `57181b243545fd15354d3410f49b20226e82cb10`
   (`codex/final-product-v1-next`)
 - build command:
   `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256:
-  `0fcbbfdb3af8cfad00e8e82a4e215e192e592b1b7b4dca8dc58db944603d73b5`
+  `950041e17129a12efcc514c4f54d5865d92d5e6b54e1925c6401eb2006775911`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
 - all 26 Visual QA screenshots were reviewed at `1440x900` and `1180x760`;
   no overlap, black tiles, horizontal overflow, or unreadable primary controls
-  were found, and long pages retained their expected local scrolling
+  were found, long pages retained their expected local scrolling, and the
+  automated report enforced a 12px minimum for visible text with zero severe
+  issues and zero warnings
 - verification date: 2026-07-26
 
 Installed-app native evidence on 2026-07-26:
@@ -103,6 +105,9 @@ Installed-app native evidence on 2026-07-26:
   requiring an application switch
 - the window respected the configured `1180x760` minimum, remained readable,
   and passed native minimize, zoom, close, and relaunch checks
+- the rebuilt readability candidate was installed from source commit
+  `57181b243545fd15354d3410f49b20226e82cb10`; Computer Use rechecked Dashboard,
+  Scan Import, Settings, and two consecutive overlay drags in the installed app
 - a native read-only command failure was shown as a partial-read warning while
   successful repository, runtime, backup, and project summaries remained
   visible
