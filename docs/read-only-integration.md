@@ -17,7 +17,8 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 ## Implemented Commands
 
 - `settings_load`
-- `settings_save`
+- `settings_preview`
+- `settings_apply`
 - `git_status`
 - `list_assets`
 - `list_projects`
@@ -26,7 +27,9 @@ This milestone connects the frozen desktop GUI contracts to safe read-only and p
 - `list_codex_skills`
 - `list_codex_mcp_servers`
 
-`settings_save` was implemented after the original read-only milestone. The Settings page now exposes the first controlled write UI action, limited to local settings persistence.
+Settings persistence was implemented after the original read-only milestone.
+The Settings and Sync pages now require a fingerprinted `settings_preview`
+followed by explicit `settings_apply`; there is no direct save command.
 
 ## Implemented Preview-only Commands
 
@@ -49,7 +52,11 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 
 ## Data Sources
 
-`settings_load` returns default settings when no config exists. After `settings_save`, it reads `~/.my-agent-assets/config.json`. In V1, `assetCenterPath` is informational and normalized to the fixed `~/.my-agent-assets` location; the Settings UI exposes it as read-only until relocation is implemented consistently across all commands.
+`settings_load` returns default settings when no config exists. After a
+confirmed `settings_apply`, it reads `~/.my-agent-assets/config.yaml`. In V1,
+`assetCenterPath` is informational and normalized to the fixed
+`~/.my-agent-assets` location; the Settings UI exposes it as read-only until
+relocation is implemented consistently across all commands.
 
 `list_assets` reads:
 

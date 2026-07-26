@@ -7,7 +7,8 @@ mod shared_core;
 use command_error::DesktopCommandError;
 use contracts::{
     AppInfo, AssetOpenResult, BackupRevealInput, BackupRevealResult, CanonicalAssetContentInput,
-    CanonicalMcpGetInput, DesktopSettings, SettingsSaveInput,
+    CanonicalMcpGetInput, DesktopSettings, SettingsApplyInput, SettingsApplyResult,
+    SettingsPreview, SettingsPreviewInput,
 };
 
 type CommandResult<T> = Result<T, DesktopCommandError>;
@@ -33,8 +34,13 @@ fn settings_load() -> CommandResult<DesktopSettings> {
 }
 
 #[tauri::command]
-fn settings_save(input: SettingsSaveInput) -> CommandResult<DesktopSettings> {
-    command_result(settings::settings_save_command(input))
+fn settings_preview(input: SettingsPreviewInput) -> CommandResult<SettingsPreview> {
+    command_result(settings::settings_preview_command(input))
+}
+
+#[tauri::command]
+fn settings_apply(input: SettingsApplyInput) -> CommandResult<SettingsApplyResult> {
+    command_result(settings::settings_apply_command(input))
 }
 
 #[tauri::command]
@@ -343,7 +349,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             settings_load,
-            settings_save,
+            settings_preview,
+            settings_apply,
             git_status,
             recovery_status,
             list_audit_log,

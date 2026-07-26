@@ -21,7 +21,10 @@ import type {
   ProjectRemoveRequest,
   ProjectSaveApplyRequest,
   ProjectSaveRequest,
-  SettingsSaveInput,
+  SettingsPreviewInput,
+  SettingsPreview,
+  SettingsApplyInput,
+  SettingsApplyResult,
   SyncApplyInput,
   SyncApplyResult,
   SyncPreview,
@@ -386,13 +389,39 @@ export async function settingsLoad(): Promise<DesktopSettings> {
   return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : fallbackSettings;
 }
 
-export async function settingsSave(input: SettingsSaveInput): Promise<DesktopSettings> {
-  if (!isTauriRuntime()) return input.settings;
-  const settings = await invoke<unknown>("settings_save", { input });
-  if (!isRecord(settings) || typeof settings.assetCenterPath !== "string") {
-    throw new Error("settings_save returned an invalid response.");
+export async function settingsPreview(input: SettingsPreviewInput): Promise<SettingsPreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("settings_preview requires the Tauri runtime.");
   }
-  return settings as DesktopSettings;
+  const result = await invoke<unknown>("settings_preview", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !isRecord(result.settings) ||
+    !Array.isArray(result.affectedPaths) ||
+    !Array.isArray(result.plannedEffects) ||
+    !Array.isArray(result.warnings) ||
+    typeof result.canApply !== "boolean"
+  ) {
+    throw new Error("settings_preview returned an invalid response.");
+  }
+  return result as SettingsPreview;
+}
+
+export async function settingsApply(input: SettingsApplyInput): Promise<SettingsApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("settings_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("settings_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !isRecord(result.settings) ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("settings_apply returned an invalid response.");
+  }
+  return result as SettingsApplyResult;
 }
 
 export async function discoverRuntimeSources(

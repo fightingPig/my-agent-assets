@@ -68,7 +68,9 @@ export function ConflictResolverPage({
 }) {
   const items = useMemo(
     () => context
-      ? context.preview.items.filter((item) => item.conflict).map(toConflictItem)
+      ? context.preview.items
+        .filter((item) => item.disposition === "conflict" && item.conflict)
+        .map(toConflictItem)
       : demoMode
         ? [...demoItems]
         : [],
@@ -86,9 +88,7 @@ function ConflictResolverWorkspace({
   items: ConflictItem[];
 }) {
   const [selectedId, setSelectedId] = useState(items[0]?.id ?? "");
-  const [resolutions, setResolutions] = useState<Record<string, Resolution>>(
-    () => defaultResolutions(items),
-  );
+  const [resolutions, setResolutions] = useState<Record<string, Resolution>>({});
   const [resolvedPreview, setResolvedPreview] = useState<BatchImportPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
   const [previewState, setPreviewState] = useState(
@@ -99,17 +99,27 @@ function ConflictResolverWorkspace({
   const [isApplying, setIsApplying] = useState(false);
 
   const selected = items.find((item) => item.id === selectedId) ?? items[0];
-  const selectedResolution = selected ? resolutions[selected.id] ?? "skip" : "skip";
-  const selectedPlan = describeResolution(selectedResolution, selected?.name ?? "当前资产");
+  const selectedResolution = selected ? resolutions[selected.id] : undefined;
+  const selectedPlan = selectedResolution
+    ? describeResolution(selectedResolution, selected?.name ?? "当前资产")
+    : pendingResolution();
+  const resolvedCount = items.filter((item) => resolutions[item.id]).length;
   const selections = context
     ? context.preview.items.map((item) => ({
         sourceId: item.sourceId,
-        resolution: item.conflict
-          ? toCanonicalResolution(resolutions[item.sourceId] ?? "skip", item.sourceName)
+        resolution: item.disposition === "conflict"
+          ? resolutions[item.sourceId]
+            ? toCanonicalResolution(resolutions[item.sourceId], item.sourceName)
+            : { kind: "unresolved" as const }
           : { kind: "unresolved" as const },
       }))
     : [];
-  const canPlan = Boolean(context && items.length > 0 && !isPlanning);
+  const canPlan = Boolean(
+    context
+    && items.length > 0
+    && resolvedCount === items.length
+    && !isPlanning,
+  );
   const canApply = Boolean(resolvedPreview?.canApply && resolvedPreview.previewId);
 
   const updateResolution = (resolution: Resolution) => {
@@ -121,7 +131,7 @@ function ConflictResolverWorkspace({
   };
 
   const handlePlan = async () => {
-    if (!context || selections.length === 0) return;
+    if (!context || selections.length === 0 || !canPlan) return;
     setIsPlanning(true);
     setOperationError(null);
     try {
@@ -170,7 +180,7 @@ function ConflictResolverWorkspace({
       <section className="panel master-list-panel">
         <div className="section-heading">
           <div><h3>待处理冲突</h3><p>需要逐项确认处理方式 · {previewState}</p></div>
-          <span className="status-badge warning">{items.length} 项</span>
+          <span className="status-badge warning">{resolvedCount} / {items.length} 已决策</span>
         </div>
         <div className="master-select-list" role="listbox" aria-label="冲突选择">
           {items.map(({ id, name, type, reason, icon: Icon }) => (
@@ -203,7 +213,9 @@ function ConflictResolverWorkspace({
           <>
             <div className="section-heading">
               <div><h3>{selected.name}</h3><p>{selected.reason}</p></div>
-              <span className="asset-status warning">需要确认</span>
+              <span className={`asset-status ${selectedResolution ? "success" : "warning"}`}>
+                {selectedResolution ? "已选择" : "需要确认"}
+              </span>
             </div>
             <dl className="entity-field-list compact">
               <div><dt>资产类型</dt><dd>{selected.type}</dd></div>
@@ -286,7 +298,9 @@ function toConflictItem(item: CanonicalImportPreview): ConflictItem {
       : item.assetType === "command"
         ? "Command"
         : "Skill",
-    reason: conflict.reason,
+    reason: item.assetType === "mcp"
+      ? "资产中心已存在同名 MCP，配置内容需要人工确认"
+      : `资产中心已存在同名 ${item.assetType === "command" ? "Command" : "Skill"}，内容需要人工确认`,
     source: item.sourcePath,
     assetId: item.assetId,
     icon: item.assetType === "mcp" ? Blocks : BookOpen,
@@ -294,10 +308,6 @@ function toConflictItem(item: CanonicalImportPreview): ConflictItem {
     incoming: conflict.incomingContent,
     rawSource: conflict.rawSource,
   };
-}
-
-function defaultResolutions(items: readonly ConflictItem[]): Record<string, Resolution> {
-  return Object.fromEntries(items.map((item) => [item.id, "skip" satisfies Resolution]));
 }
 
 function toCanonicalResolution(
@@ -308,6 +318,14 @@ function toCanonicalResolution(
     return { kind: "rename", newName: `${name}-imported` };
   }
   return { kind: resolution };
+}
+
+function pendingResolution() {
+  return {
+    label: "尚未选择",
+    description: "必须明确选择一种处理方式",
+    planText: "请选择跳过、重命名或覆盖后再生成处理计划",
+  };
 }
 
 function describeResolution(resolution: Resolution, name: string) {

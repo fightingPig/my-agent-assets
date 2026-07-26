@@ -417,24 +417,37 @@ manual diagnosis.
 - **Future consumer:** Settings.
 - **Status:** Implemented and registered as read-only defaults.
 
-### `settings_save`
+### `settings_preview`
 
-- **Purpose:** Validate and persist the complete desktop settings object.
-- **Input:** `SettingsSaveInput { settings: DesktopSettings }`.
-- **Output:** The normalized and persisted `DesktopSettings`.
-- **Side effect:** Write.
-- **Future consumer:** Settings.
+- **Purpose:** Normalize the complete desktop settings object and bind it to the current settings-file fingerprint.
+- **Input:** `SettingsPreviewInput { settings: DesktopSettings }`.
+- **Output:** `SettingsPreview`.
+- **Side effect:** Preview-only.
+- **Consumer:** Settings and Sync policy controls.
 - **Status:** Implemented and registered.
 
-Current behavior:
+### `settings_apply`
+
+- **Purpose:** Persist settings only when the confirmed preview remains valid.
+- **Input:** `SettingsApplyInput { previewId, previewGeneratedAtEpochSeconds, request }`.
+- **Output:** `SettingsApplyResult`.
+- **Side effect:** Write.
+- **Consumer:** Settings and Sync policy controls.
+- **Status:** Implemented and registered.
+
+Current settings behavior:
 
 - Settings are stored as YAML at `~/.my-agent-assets/config.yaml`.
 - Missing config files are not created by `settings_load`.
 - `assetCenterPath` is normalized to the fixed `~/.my-agent-assets` V1 location and is read-only in the GUI.
-- Save failures reject the Tauri invocation instead of returning successful-looking defaults.
+- Preview IDs use SHA-256 over normalized input, generation time, and the current settings-file state.
+- Previews expire after 10 minutes and are recomputed after acquiring the operation lock.
+- Stale or changed previews are rejected before any write.
+- Apply failures reject the Tauri invocation instead of returning successful-looking defaults.
 - Other empty path fields fall back to safe defaults.
 - Numeric settings are clamped to supported ranges.
-- The GUI Settings page can call `settings_save`; this writes only local desktop configuration and does not touch Claude runtime files.
+- The GUI reports success only after `settings_apply` completes and `settings_load` reloads the persisted value.
+- Settings persistence writes only local desktop configuration and does not touch Claude runtime files.
 
 The former Desktop-only `scan_assets`, `preview_import`, `preview_mount`,
 `preview_conflicts`, `import_apply`, `mount_apply`, and `conflict_apply`

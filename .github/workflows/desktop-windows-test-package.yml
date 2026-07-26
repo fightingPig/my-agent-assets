@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - codex/final-product-v1
+      - codex/final-product-v1-next
   pull_request:
     paths:
       - apps/desktop/**

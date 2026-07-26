@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, previewSync, settingsLoad, settingsSave, syncApply } from "../app/data-api";
-import type { ApplyResult, DesktopSettings, GitStatus, SyncDirection, SyncPreview } from "../app/contracts";
+import { gitStatus, previewSync, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
+import type { ApplyResult, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -48,7 +48,12 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
   const [planningDirection, setPlanningDirection] = useState<SyncDirection | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [isSavingPushPolicy, setIsSavingPushPolicy] = useState(false);
+  const [pendingPushPolicy, setPendingPushPolicy] = useState<DesktopSettings | null>(null);
+  const [pushPolicyPreview, setPushPolicyPreview] = useState<SettingsSavePreview | null>(null);
+  const [pushPolicyResult, setPushPolicyResult] = useState<ApplyResult | null>(null);
+  const [pushPolicyError, setPushPolicyError] = useState<string | null>(null);
+  const [isPlanningPushPolicy, setIsPlanningPushPolicy] = useState(false);
+  const [isApplyingPushPolicy, setIsApplyingPushPolicy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,20 +141,63 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
 
   const handlePublicRemotePushChange = async (allowPublicRemotePush: boolean) => {
     if (!settings) return;
-    setIsSavingPushPolicy(true);
-    setOperationError(null);
+    const candidate = { ...settings, allowPublicRemotePush };
+    setPendingPushPolicy(candidate);
+    setPushPolicyPreview(null);
+    setPushPolicyResult(null);
+    setIsPlanningPushPolicy(true);
+    setPushPolicyError(null);
     try {
-      const saved = await settingsSave({
-        settings: { ...settings, allowPublicRemotePush },
-      });
-      setSettings(saved);
+      const result = await settingsPreview({ settings: candidate });
+      setPushPolicyPreview(result);
       setPreview(null);
       setApplyResult(null);
-      setStateLabel(allowPublicRemotePush ? "已允许公开远程 Push" : "已恢复私有仓库保护");
+      setStateLabel(allowPublicRemotePush ? "公开远程策略预览" : "私有仓库保护策略预览");
     } catch (error) {
-      setOperationError(errorMessage(error));
+      setPendingPushPolicy(null);
+      setPushPolicyError(errorMessage(error));
     } finally {
-      setIsSavingPushPolicy(false);
+      setIsPlanningPushPolicy(false);
+    }
+  };
+
+  const handleApplyPushPolicy = async () => {
+    if (!pendingPushPolicy || !pushPolicyPreview?.canApply) return;
+    setIsApplyingPushPolicy(true);
+    setPushPolicyError(null);
+    try {
+      const result = await settingsApply({
+        previewId: pushPolicyPreview.previewId,
+        previewGeneratedAtEpochSeconds: pushPolicyPreview.generatedAtEpochSeconds,
+        request: { settings: pendingPushPolicy },
+      });
+      const refreshed = await settingsLoad();
+      setSettings(refreshed);
+      setPendingPushPolicy(null);
+      setPushPolicyPreview(null);
+      setPushPolicyResult({
+        mode: "apply",
+        ok: true,
+        previewId: result.previewId,
+        backup: null,
+        steps: [{
+          stepId: "push-policy-save",
+          kind: "settings",
+          label: "保存 Push 安全策略",
+          status: "success",
+          message: "同步策略已写入并重新读取。",
+          affectedPaths: result.affectedPaths,
+        }],
+        warnings: [],
+        errors: [],
+      });
+      setStateLabel(refreshed.allowPublicRemotePush ? "已允许公开远程 Push" : "已恢复私有仓库保护");
+    } catch (error) {
+      setPushPolicyResult(null);
+      setPushPolicyError(errorMessage(error));
+      setStateLabel("同步策略保存失败");
+    } finally {
+      setIsApplyingPushPolicy(false);
     }
   };
 
@@ -184,7 +232,8 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
         <div className="section-heading"><div><h3>本地 Git 仓库</h3><p>{status.repositoryPath}</p></div><span className="healthy-badge"><CheckCircle2 size={13} />{cleanLabel}</span></div>
         <div className="sync-status-grid"><div><GitBranch size={17} /><span><small>当前分支</small><strong>{status.branch || "未检测到"}</strong></span></div><div><RefreshCw size={17} /><span><small>远程仓库</small><strong>{status.remoteIdentity ?? status.upstream ?? status.remoteName}</strong></span></div><div><ArrowUp size={17} /><span><small>Ahead</small><strong>{status.ahead} commits</strong></span></div><div><ArrowDown size={17} /><span><small>Behind</small><strong>{status.behind} commits</strong></span></div></div>
         <div className="sync-graph"><div className="sync-graph-line"><span className="local-dot" /><strong>本地 {status.branch || "工作区"}</strong><small>{status.statusMessage}</small></div><div className="sync-graph-line"><span /><strong>仓库状态</strong><small>{status.isRepository ? "已识别为本地 Git 仓库" : "未识别为本地 Git 仓库"}</small></div><div className="sync-graph-line"><span className="remote-dot" /><strong>远程仓库</strong><small>{status.remoteIdentity ?? status.upstream ?? `remote: ${status.remoteName}`}</small></div></div>
-        <div className="settings-toggle-list sync-policy-toggle"><label><input checked={settings?.allowPublicRemotePush ?? false} data-no-drag="true" disabled={!settings || isSavingPushPolicy} onChange={(event) => void handlePublicRemotePushChange(event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>允许推送到公开远程仓库</strong><small>默认只允许已验证的 GitHub 私有仓库。开启后可推送到任意 Git remote，并会在执行前高亮公开或未知可见性风险。</small></span></label></div>
+        <div className="settings-toggle-list sync-policy-toggle"><label><input checked={pendingPushPolicy?.allowPublicRemotePush ?? settings?.allowPublicRemotePush ?? false} data-no-drag="true" disabled={!settings || isPlanningPushPolicy || isApplyingPushPolicy} onChange={(event) => void handlePublicRemotePushChange(event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>允许推送到公开远程仓库</strong><small>默认只允许已验证的 GitHub 私有仓库。开启后可推送到任意 Git remote，并会在执行前高亮公开或未知可见性风险。</small></span></label></div>
+        {pushPolicyPreview || pushPolicyResult || pushPolicyError ? <ApplyConfirmationPanel actionLabel="确认保存策略" canApply={Boolean(pushPolicyPreview?.canApply)} description={pushPolicyPreview?.warnings[0] ?? pushPolicyPreview?.plannedEffects.join("；") ?? "策略保存前必须生成并确认有效预览。"} isApplying={isApplyingPushPolicy} onApply={handleApplyPushPolicy} operationError={pushPolicyError} result={pushPolicyResult} title="保存 Push 安全策略" /> : null}
         <div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" disabled={planningDirection !== null} onClick={() => handlePreviewSync("pull")} style={NO_DRAG_REGION_STYLE} type="button">{planningDirection === "pull" ? "生成中" : "预览 Pull"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={planningDirection !== null} onClick={() => handlePreviewSync("push")} style={NO_DRAG_REGION_STYLE} type="button">{planningDirection === "push" ? "生成中" : "预览 Push"}</button></div>
         <ApplyConfirmationPanel actionLabel={preview?.direction === "pull" ? "执行 Pull" : "执行 Push"} canApply={canApply} description={preview?.allowPublicRemotePush ?? settings?.allowPublicRemotePush ? "后端会校验 previewId、远端身份与当前仓库状态；已允许公开远程 Push，执行前请确认资产、portable backup 与配置可能对远程仓库访问者可见。" : "后端会校验 previewId、远端身份与当前仓库状态；Push 仅允许已验证的 GitHub 私有仓库并只 stage canonical 白名单。"} isApplying={isApplying} onApply={handleApplySync} operationError={operationError} result={applyResult} title="执行同步" />
       </section>

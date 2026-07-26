@@ -250,10 +250,34 @@ describe("read-only desktop data api", () => {
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");
 
-    invoke.mockResolvedValueOnce(savedSettings);
-    await api.settingsSave({ settings: savedSettings });
-    expect(invoke).toHaveBeenLastCalledWith("settings_save", {
+    invoke.mockResolvedValueOnce({
+      previewId: "settings-save-1",
+      settings: savedSettings,
+      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+      plannedEffects: ["replace settings"],
+      warnings: [],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
+    });
+    await api.settingsPreview({ settings: savedSettings });
+    expect(invoke).toHaveBeenLastCalledWith("settings_preview", {
       input: { settings: savedSettings },
+    });
+
+    const settingsApplyInput = {
+      previewId: "settings-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { settings: savedSettings },
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "settings-save-1",
+      settings: savedSettings,
+      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+    });
+    await api.settingsApply(settingsApplyInput);
+    expect(invoke).toHaveBeenLastCalledWith("settings_apply", {
+      input: settingsApplyInput,
     });
 
   });
@@ -590,7 +614,12 @@ describe("read-only desktop data api", () => {
       assetCenterPath: "~/.my-agent-assets",
       scanRoots: ["~/.claude", "~/workspace", "~/code"],
     });
-    await expect(api.settingsSave({ settings: savedSettings })).resolves.toEqual(savedSettings);
+    await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("requires the Tauri runtime");
+    await expect(api.settingsApply({
+      previewId: "settings-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { settings: savedSettings },
+    })).rejects.toThrow("requires the Tauri runtime");
     await expect(api.gitStatus()).resolves.toMatchObject({
       isRepository: false,
       statusMessage: "Tauri runtime is unavailable.",
@@ -614,6 +643,6 @@ describe("read-only desktop data api", () => {
 
     await expect(api.listAssets()).rejects.toThrow("command unavailable");
     await expect(api.gitStatus()).rejects.toThrow("command unavailable");
-    await expect(api.settingsSave({ settings: savedSettings })).rejects.toThrow("command unavailable");
+    await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("command unavailable");
   });
 });

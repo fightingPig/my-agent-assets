@@ -228,11 +228,15 @@ MCP runtime config compilation:
 - MCP compile merges into the target JSON file's top-level `mcpServers.<name>` while preserving other top-level fields and other MCP servers
 - `planOnly` mode creates no symlink, writes no JSON, and creates no backup
 
-`settings_save` supports fake-HOME-tested settings persistence:
+`settings_preview` and `settings_apply` support fake-HOME-tested settings persistence:
 
-- Settings are written to `~/.my-agent-assets/config.json`
+- Settings are written to `~/.my-agent-assets/config.yaml`
 - `settings_load` returns defaults when no config exists and reads the saved config when present
-- Write failures are returned through Tauri as command errors; the frontend must not display success unless save and reload both complete
+- Preview IDs bind the normalized request, generation time, and current config-file SHA-256 state
+- Every shared-core preview fingerprint includes a process-instance nonce, so restarting the backend invalidates previously issued preview IDs
+- Apply validates the 10-minute expiry, acquires the operation lock, and recomputes the preview before writing
+- Changed requests or config files are rejected as stale before writing
+- Write failures are returned through Tauri as command errors; the frontend must not display success unless apply and reload both complete
 - `assetCenterPath` is fixed to `~/.my-agent-assets` in V1 and is not an editable relocation setting
 - Settings writes do not touch Claude runtime files
 - The fixed settings destination is guarded against symlinked parent directories

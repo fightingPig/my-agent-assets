@@ -4,6 +4,26 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use std::sync::OnceLock;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static PROCESS_INSTANCE_NONCE: OnceLock<Vec<u8>> = OnceLock::new();
+
+pub(crate) fn process_instance_nonce() -> &'static [u8] {
+    PROCESS_INSTANCE_NONCE
+        .get_or_init(|| {
+            format!(
+                "{}:{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            )
+            .into_bytes()
+        })
+        .as_slice()
+}
 
 pub struct PreviewFingerprint {
     hash: Sha256,
@@ -15,6 +35,7 @@ impl PreviewFingerprint {
             hash: Sha256::new(),
         };
         fingerprint.add_bytes("domain", domain.as_bytes());
+        fingerprint.add_bytes("process-instance", process_instance_nonce());
         fingerprint
     }
 
@@ -138,5 +159,14 @@ mod tests {
             .unwrap();
         assert_ne!(first, missing.finish("import"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn process_instance_nonce_is_non_empty_and_stable() {
+        let first = process_instance_nonce().to_vec();
+        let second = process_instance_nonce().to_vec();
+
+        assert!(!first.is_empty());
+        assert_eq!(first, second);
     }
 }

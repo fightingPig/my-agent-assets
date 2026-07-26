@@ -461,7 +461,27 @@ export type SyncApplyResult = {
   contentDiagnostics?: ContentDiagnostic[];
   journalPath: string;
 };
-export type SettingsSaveInput = { settings: DesktopSettings };
+export type SettingsPreviewInput = { settings: DesktopSettings };
+export type SettingsPreview = {
+  previewId: string;
+  settings: DesktopSettings;
+  affectedPaths: string[];
+  plannedEffects: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+export type SettingsApplyInput = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: SettingsPreviewInput;
+};
+export type SettingsApplyResult = {
+  previewId: string;
+  settings: DesktopSettings;
+  affectedPaths: string[];
+};
 export const RUNTIME_PROVIDERS = ["claude_code", "codex", "custom"] as const;
 export type RuntimeProvider = (typeof RUNTIME_PROVIDERS)[number];
 export const RUNTIME_SOURCE_FORMATS = [

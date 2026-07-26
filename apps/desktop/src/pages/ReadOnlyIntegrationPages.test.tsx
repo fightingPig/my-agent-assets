@@ -37,7 +37,8 @@ const {
   backupDeleteApply,
   gitStatus,
   settingsLoad,
-  settingsSave,
+  settingsPreview,
+  settingsApply,
   previewSync,
   syncApply,
   listMountTargets,
@@ -63,7 +64,8 @@ const {
   backupDeleteApply: vi.fn(),
   gitStatus: vi.fn(),
   settingsLoad: vi.fn(),
-  settingsSave: vi.fn(),
+  settingsPreview: vi.fn(),
+  settingsApply: vi.fn(),
   previewSync: vi.fn(),
   syncApply: vi.fn(),
   listMountTargets: vi.fn(),
@@ -91,7 +93,8 @@ vi.mock("../app/data-api", () => ({
   backupDeleteApply,
   gitStatus,
   settingsLoad,
-  settingsSave,
+  settingsPreview,
+  settingsApply,
   previewSync,
   syncApply,
   listMountTargets,
@@ -266,7 +269,21 @@ beforeEach(() => {
   }]);
   gitStatus.mockResolvedValue(gitStatusFixture());
   settingsLoad.mockResolvedValue(settingsFixture());
-  settingsSave.mockImplementation(async ({ settings }) => settings);
+  settingsPreview.mockImplementation(async ({ settings }) => ({
+    previewId: "settings-save:test",
+    settings,
+    affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+    plannedEffects: ["保存本地设置"],
+    warnings: [],
+    canApply: true,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 700,
+  }));
+  settingsApply.mockImplementation(async ({ previewId, request }) => ({
+    previewId,
+    settings: request.settings,
+    affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+  }));
   previewSync.mockResolvedValue({
     previewId: "preview:sync:push",
     direction: "push",
@@ -516,7 +533,30 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(gitStatus).toHaveBeenCalledTimes(2));
   });
 
-  it("displays loaded settings and saves edited values through the settings command", async () => {
+  it("requires a settings preview and explicit confirmation before changing Push policy", async () => {
+    render(<SyncPage />);
+
+    const policy = await screen.findByRole("checkbox", {
+      name: /允许推送到公开远程仓库/,
+    });
+    fireEvent.click(policy);
+
+    await waitFor(() => expect(settingsPreview).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ allowPublicRemotePush: true }),
+    }));
+    expect(settingsApply).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "确认保存策略" }));
+    await waitFor(() => expect(settingsApply).toHaveBeenCalledWith({
+      previewId: "settings-save:test",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        settings: expect.objectContaining({ allowPublicRemotePush: true }),
+      },
+    }));
+  });
+
+  it("displays loaded settings and saves edited values through preview and explicit apply", async () => {
     settingsLoad.mockResolvedValue(settingsFixture({
       assetCenterPath: "/tmp/assets",
       scanRoots: ["/tmp/workspace", "/tmp/code"],
@@ -536,24 +576,37 @@ describe("read-only UI integration", () => {
     expect(screen.getByDisplayValue("/tmp/maa")).toBeInTheDocument();
 
     expect(assetCenter).toHaveAttribute("readonly");
-    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
 
-    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith({
+    await waitFor(() => expect(settingsPreview).toHaveBeenCalledWith({
       settings: expect.objectContaining({
         assetCenterPath: "/tmp/assets",
         gitDefaultBranch: "trunk",
         gitRemote: "upstream",
       }),
     }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认保存设置" }));
+    await waitFor(() => expect(settingsApply).toHaveBeenCalledWith({
+      previewId: "settings-save:test",
+      previewGeneratedAtEpochSeconds: 100,
+      request: {
+        settings: expect.objectContaining({
+          assetCenterPath: "/tmp/assets",
+          gitDefaultBranch: "trunk",
+          gitRemote: "upstream",
+        }),
+      },
+    }));
     await waitFor(() => expect(settingsLoad).toHaveBeenCalledTimes(2));
     expect(screen.getByText("设置已写入本地配置，并已从后端重新读取确认。")).toBeInTheDocument();
   });
 
   it("shows settings save failures and never reports a successful save", async () => {
-    settingsSave.mockRejectedValue(new Error("permission denied"));
+    settingsApply.mockRejectedValue(new Error("permission denied"));
 
     render(<SettingsPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "保存设置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "生成保存预览" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认保存设置" }));
 
     expect(await screen.findByText(/保存失败：设置操作未完成。请查看系统状态或导出诊断包后重试。/)).toBeInTheDocument();
     expect(screen.queryByText(/permission denied/)).not.toBeInTheDocument();
@@ -644,6 +697,48 @@ describe("read-only UI integration", () => {
     }));
     expect(await screen.findByText(/skill:live-scan：新增/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled();
+  });
+
+  it("sends only explicitly selected scan sources to import and adopt previews", async () => {
+    discoverRuntimeSources.mockResolvedValue({
+      sources: [
+        ...discoveryFixture("source:first", "first").sources,
+        ...discoveryFixture("source:second", "second").sources,
+      ],
+      warnings: [],
+    });
+    canonicalBatchImportPreview.mockResolvedValue(batchImportPreviewFixture({
+      items: [canonicalImportItemFixture("source:second", "skill:second")],
+    }));
+
+    render(<ScanImportPage />);
+
+    const first = await screen.findByRole("checkbox", { name: "选择 first" });
+    const second = screen.getByRole("checkbox", { name: "选择 second" });
+    expect(first).toBeChecked();
+    expect(second).toBeChecked();
+
+    fireEvent.click(first);
+    expect(first).not.toBeChecked();
+    expect(screen.getByText("1 / 2 项已选择")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成导入计划" }));
+    await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalledWith({
+      scope: { kind: "user" },
+      selections: [{
+        sourceId: "source:second",
+        resolution: { kind: "unresolved" },
+      }],
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "生成接管计划" }));
+    await waitFor(() => expect(previewAdopt).toHaveBeenCalledWith({
+      scope: { kind: "user" },
+      selections: [{
+        sourceId: "source:second",
+        resolution: { kind: "unresolved" },
+      }],
+    }));
   });
 
   it("executes atomic batch import after preview without typed input", async () => {
@@ -741,6 +836,30 @@ describe("read-only UI integration", () => {
     }));
     expect(canonicalBatchImportApply).not.toHaveBeenCalled();
     expect(canonicalMountApply).not.toHaveBeenCalled();
+  });
+
+  it("shows backend adopt blockers and does not expose a misleading apply action", async () => {
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:live-scan", "live-scan"));
+    previewAdopt.mockResolvedValue({
+      previewId: "adopt:blocked",
+      items: [],
+      importPlan: ["import skill:live-scan"],
+      mountPlan: [],
+      backupPlan: [],
+      warnings: ["请先登记兼容的运行目标。"],
+      canApply: false,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+
+    render(<ScanImportPage />);
+    await waitFor(() => expect(discoverRuntimeSources).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "生成接管计划" }));
+
+    expect(await screen.findByText("请先登记兼容的运行目标。")).toBeInTheDocument();
+    expect(screen.getByText("import skill:live-scan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入并接管" })).toBeDisabled();
+    expect(adoptApply).not.toHaveBeenCalled();
   });
 
   it("renders target-registry mount preview and conflict data", async () => {
@@ -844,10 +963,13 @@ describe("read-only UI integration", () => {
 
     expect(screen.getByText("# Existing")).toBeInTheDocument();
     expect(screen.getByText("# Incoming")).toBeInTheDocument();
-    expect(screen.getByText(/review 将被跳过/)).toBeInTheDocument();
+    expect(screen.getByText("尚未选择")).toBeInTheDocument();
+    expect(screen.getByText(/请选择跳过、重命名或覆盖/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成处理计划" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: /重命名.*以新名称导入当前内容/ }));
     expect(screen.getByText(/review 将以 review-imported 导入/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成处理计划" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "生成处理计划" }));
     await waitFor(() => expect(canonicalBatchImportPreview).toHaveBeenCalledWith({
@@ -873,6 +995,88 @@ describe("read-only UI integration", () => {
       },
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
+  });
+
+  it("requires an explicit decision for every conflict before planning", async () => {
+    const first = {
+      ...canonicalImportItemFixture("source:first", "skill:first"),
+      disposition: "conflict" as const,
+      canApply: false,
+      conflict: {
+        assetId: "skill:first",
+        reason: "same name",
+        existingContent: "# Existing first",
+        incomingContent: "# Incoming first",
+        rawSource: "# Incoming first",
+      },
+    };
+    const second = {
+      ...canonicalImportItemFixture("source:second", "skill:second"),
+      disposition: "conflict" as const,
+      canApply: false,
+      conflict: {
+        assetId: "skill:second",
+        reason: "same name",
+        existingContent: "# Existing second",
+        incomingContent: "# Incoming second",
+        rawSource: "# Incoming second",
+      },
+    };
+
+    render(<ConflictResolverPage context={{
+      scope: { kind: "user" },
+      preview: batchImportPreviewFixture({ items: [first, second], canApply: false }),
+    }} />);
+
+    const planButton = screen.getByRole("button", { name: "生成处理计划" });
+    expect(screen.getByText("0 / 2 已决策")).toBeInTheDocument();
+    expect(planButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /跳过.*保留资产中心内容/ }));
+    expect(screen.getByText("1 / 2 已决策")).toBeInTheDocument();
+    expect(planButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("option", { name: "second" }));
+    fireEvent.click(screen.getByRole("button", { name: /覆盖.*使用扫描结果替换现有内容/ }));
+    expect(screen.getByText("2 / 2 已决策")).toBeInTheDocument();
+    expect(planButton).toBeEnabled();
+  });
+
+  it("excludes structurally unchanged items from the conflict decision list", () => {
+    const conflict = {
+      ...canonicalImportItemFixture("source:conflict", "skill:conflict"),
+      disposition: "conflict" as const,
+      canApply: false,
+      conflict: {
+        assetId: "skill:conflict",
+        reason: "same name",
+        existingContent: "# Existing",
+        incomingContent: "# Incoming",
+        rawSource: "# Incoming",
+      },
+    };
+    const unchanged = {
+      ...canonicalImportItemFixture("source:unchanged", "mcp:unchanged"),
+      assetType: "mcp" as const,
+      disposition: "unchanged" as const,
+      canApply: true,
+      conflict: {
+        assetId: "mcp:unchanged",
+        reason: "canonical MCP is structurally identical",
+        existingContent: "{}",
+        incomingContent: "{}",
+        rawSource: "{}",
+      },
+    };
+
+    render(<ConflictResolverPage context={{
+      scope: { kind: "user" },
+      preview: batchImportPreviewFixture({ items: [conflict, unchanged], canApply: false }),
+    }} />);
+
+    expect(screen.getByText("0 / 1 已决策")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "unchanged" })).not.toBeInTheDocument();
+    expect(screen.getByText("资产中心已存在同名 Skill，内容需要人工确认")).toBeInTheDocument();
   });
 
   it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {

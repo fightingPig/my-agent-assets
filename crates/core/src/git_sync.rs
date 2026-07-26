@@ -1,6 +1,7 @@
 use crate::asset_registry::{
     inspect_content, load as load_assets, ContentDiagnostic, ContentState,
 };
+use crate::fingerprint::process_instance_nonce;
 use crate::mount::copy_any;
 use crate::operation::{GitRefRecovery, OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::{guard_existing_path, is_link_or_junction};
@@ -724,6 +725,7 @@ fn fingerprint_preview(
     generated_at: u64,
 ) -> Result<String> {
     let mut hash = Sha256::new();
+    hash.update(process_instance_nonce());
     hash.update(
         serde_json::to_vec(&(
             request,

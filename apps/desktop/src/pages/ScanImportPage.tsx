@@ -27,13 +27,6 @@ const scopes = [
   { id: "custom", title: "自定义路径", detail: "预览指定目录下的资产", icon: ScanSearch },
 ] as const;
 
-const staticResults = [
-  { name: "api-design", type: "Skill", source: "用户级", result: "新增" },
-  { name: "format-code", type: "Command", source: "project-a", result: "新增" },
-  { name: "Filesystem", type: "MCP", source: "my-app", result: "更新" },
-  { name: "db-review", type: "Skill", source: "project-a", result: "冲突" },
-];
-
 const userScanScope: RuntimeDiscoveryScope = { kind: "user" };
 const customSourceOptions = [
   { value: "skill_directory", label: "Skill 目录（SKILL.md）", assetKind: "skill", sourceFormat: "skill_directory" },
@@ -43,6 +36,21 @@ const customSourceOptions = [
 ] as const;
 
 type CustomSourceOption = (typeof customSourceOptions)[number];
+type ScanRow = {
+  sourceId: string | null;
+  name: string;
+  type: string;
+  source: string;
+  result: string;
+  eligibleImport: boolean;
+};
+
+const staticResults: ScanRow[] = [
+  { sourceId: "demo:api-design", name: "api-design", type: "Skill", source: "用户级", result: "新增", eligibleImport: true },
+  { sourceId: "demo:format-code", name: "format-code", type: "Command", source: "project-a", result: "新增", eligibleImport: true },
+  { sourceId: "demo:filesystem", name: "Filesystem", type: "MCP", source: "my-app", result: "更新", eligibleImport: true },
+  { sourceId: "demo:db-review", name: "db-review", type: "Skill", source: "project-a", result: "冲突", eligibleImport: true },
+];
 
 export function ScanImportPage({
   demoMode = false,
@@ -67,6 +75,9 @@ export function ScanImportPage({
   const [selectedProjectPath, setSelectedProjectPath] = useState("");
   const [customPath, setCustomPath] = useState("");
   const [customSource, setCustomSource] = useState<CustomSourceOption>(customSourceOptions[0]);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>(
+    demoMode ? staticResults.flatMap((row) => row.sourceId ? [row.sourceId] : []) : [],
+  );
 
   const input = useMemo(
     () => toScanScope(selectedScope, selectedProjectPath, customPath, customSource),
@@ -94,6 +105,7 @@ export function ScanImportPage({
     let cancelled = false;
     if (!input) {
       setScanResult(null);
+      setSelectedSourceIds([]);
       setImportPreview(null);
       setAdoptPreview(null);
       setStateLabel(selectedScope === "project" ? "请选择已维护项目" : "请选择自定义来源类型并输入路径");
@@ -108,9 +120,13 @@ export function ScanImportPage({
         if (cancelled) return;
         if (result && typeof result === "object" && "sources" in result) {
           setScanResult(result);
+          setSelectedSourceIds(result.sources
+            .filter((source) => source.eligibleImport)
+            .map((source) => source.sourceId));
           setStateLabel(result.sources.length > 0 ? "只读真实数据" : "未发现本地资产");
         } else {
           setScanResult(null);
+          setSelectedSourceIds([]);
           setImportPreview(null);
           setStateLabel("未返回扫描结果");
         }
@@ -118,6 +134,7 @@ export function ScanImportPage({
       .catch((error) => {
         if (cancelled) return;
         setScanResult(null);
+        setSelectedSourceIds([]);
         setImportPreview(null);
         setOperationError(errorMessage(error));
         setStateLabel(`读取失败：${errorMessage(error)}`);
@@ -137,23 +154,42 @@ export function ScanImportPage({
       : { total: 0, skills: 0, commands: 0, mcps: 0 };
   const warning = scanResult?.warnings[0];
   const previewWarning = importPreview?.warnings[0];
-  const sourceIds = scanResult?.sources
+  const adoptWarning = adoptPreview?.warnings[0];
+  const eligibleSourceIds = scanResult?.sources
     .filter((source) => source.eligibleImport)
-    .map((source) => source.sourceId) ?? [];
+    .map((source) => source.sourceId)
+    ?? (demoMode ? staticResults.flatMap((row) => row.eligibleImport && row.sourceId ? [row.sourceId] : []) : []);
+  const sourceIds = selectedSourceIds.filter((sourceId) => eligibleSourceIds.includes(sourceId));
   const conflictCount = importPreview?.items.filter((item) => item.disposition === "conflict").length ?? 0;
   const hasConflicts = conflictCount > 0;
   const planSummary = importPreview?.items
     .map((item) => `${item.assetId}：${dispositionLabel(item.disposition)}`)
     .join(" / ");
+  const adoptPlanSummary = adoptPreview
+    ? [...adoptPreview.importPlan, ...adoptPreview.mountPlan, ...adoptPreview.backupPlan].join(" / ")
+    : "";
   const canGeneratePlan = Boolean(input) && sourceIds.length > 0 && !isPlanning;
   const canApply = Boolean(importPreview?.canApply && importPreview.previewId && !hasConflicts);
   const canAdopt = Boolean(adoptPreview?.canApply && adoptPreview.previewId);
+
+  const handleSourceSelection = (sourceId: string, selected: boolean) => {
+    setSelectedSourceIds((current) => selected
+      ? [...new Set([...current, sourceId])]
+      : current.filter((candidate) => candidate !== sourceId));
+    setImportPreview(null);
+    setAdoptPreview(null);
+    setApplyResult(null);
+    setAdoptResult(null);
+    setOperationError(null);
+    setStateLabel("已更新资产选择");
+  };
 
   const handlePlanImport = async () => {
     if (!input || sourceIds.length === 0) return;
 
     setIsPlanning(true);
     setOperationError(null);
+    setAdoptPreview(null);
     setStateLabel("生成导入计划中");
     try {
       const result = await canonicalBatchImportPreview({
@@ -208,6 +244,7 @@ export function ScanImportPage({
     if (!input || sourceIds.length === 0) return;
     setIsPlanning(true);
     setOperationError(null);
+    setImportPreview(null);
     setStateLabel("生成接管计划中");
     try {
       const result = await previewAdopt({
@@ -282,9 +319,9 @@ export function ScanImportPage({
       </div>
 
       <section className="panel operation-section">
-        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath}` : ""}</p></div><span>{rows.length} 项待确认</span></div>
-        <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={`${result.type}:${result.name}`}><strong>{result.name}</strong><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
-        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary ?? (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
+        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath}` : ""}</p></div><span>{sourceIds.length} / {eligibleSourceIds.length} 项已选择</span></div>
+        <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={result.sourceId ?? `${result.type}:${result.name}`}><label className="scan-source-select"><input aria-label={`选择 ${result.name}`} checked={result.sourceId ? sourceIds.includes(result.sourceId) : true} data-no-drag="true" disabled={!result.sourceId || !result.eligibleImport} onChange={(event) => result.sourceId && handleSourceSelection(result.sourceId, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><strong>{result.name}</strong></label><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
+        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? adoptWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary || adoptPlanSummary || (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
         <div className="operation-actions">{hasConflicts ? <button className="asset-secondary-action" data-no-drag="true" onClick={handleOpenConflicts} style={NO_DRAG_REGION_STYLE} type="button">处理冲突</button> : null}<button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanAdopt} style={NO_DRAG_REGION_STYLE} type="button">生成接管计划</button></div>
         <ApplyConfirmationPanel
           actionLabel="确认导入"
@@ -337,10 +374,12 @@ function toScanScope(
 
 function toScanRow(asset: DiscoveredRuntimeSource) {
   return {
+    sourceId: asset.sourceId,
     name: asset.assetName,
     type: asset.assetKind === "skill" ? "Skill" : asset.assetKind === "command" ? "Command" : "MCP",
     source: `${providerLabel(asset.provider)} · ${asset.scope === "user" ? "用户级" : asset.scope === "project" ? "项目级" : "自定义"}`,
     result: asset.eligibleImport ? "发现" : asset.isManaged ? "已管理" : "无效",
+    eligibleImport: asset.eligibleImport,
   };
 }
 

@@ -1082,6 +1082,15 @@ h1 {
 .preview-table-row span { color: var(--secondary); }
 .preview-table-row .warning-text { color: var(--amber); }
 .preview-table-row .success-text { color: var(--green); }
+.scan-source-select {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+.scan-source-select input { margin: 0; flex: 0 0 auto; -webkit-app-region: no-drag; }
+.scan-source-select strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .operation-warning { min-height: 52px; margin: 12px 14px 0; padding: 10px 12px; border: 1px solid #f4d6a2; border-radius: 8px; display: flex; align-items: center; gap: 10px; color: var(--amber); background: var(--amber-soft); }
 .operation-warning.neutral { border-color: var(--border); color: var(--secondary); background: #f7f8fa; }
