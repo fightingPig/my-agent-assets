@@ -345,11 +345,20 @@ Implemented:
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
   multi-step workflow
-- final native recheck of the latest installed build's exact two-conflict
-  decision count remains pending because the macOS desktop session locked
 - Windows production signing and real Windows manual qualification remain
   external acceptance work before V1 Stable can be claimed; the generated
   unsigned MSI/NSIS files are test packages only
+
+Latest installed-app acceptance:
+- launched `~/Applications/My Agent Assets.app` with isolated fake HOME
+  `/tmp/my-agent-assets-native-qa-L5WHnt`
+- discovered five user sources, deselected the Command to leave four selected,
+  and generated exactly two content conflicts
+- Conflict Resolver showed `0 / 2 已决策` for `claude-review` and
+  `codex-review`, excluded unchanged MCP entries, and kept unresolved apply
+  actions disabled
+- stopped the installed app and removed `MY_AGENT_ASSETS_HOME` from the launch
+  environment after the test
 
 Next:
 - continue the requirement-by-requirement final-goal audit and close the next

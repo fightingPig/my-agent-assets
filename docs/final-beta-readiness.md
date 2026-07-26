@@ -94,9 +94,16 @@ Installed-app native evidence on 2026-07-26:
 - the exact candidate app was installed from the generated bundle into
   `~/Applications/My Agent Assets.app` and passed `codesign --verify --deep --strict`
   at that installed location
-- the latest installed candidate still needs the unlocked native conflict-count
-  recheck described below; the remaining native window evidence in this section
-  was collected from the immediately preceding readability candidate
+- the latest installed candidate was launched with the isolated fake HOME
+  `/tmp/my-agent-assets-native-qa-L5WHnt`; Computer Use discovered five user
+  sources, deselected the Command to leave four selected items, and generated
+  an import preview with exactly two content conflicts
+- Conflict Resolver displayed `0 / 2 已决策` for `claude-review` and
+  `codex-review`, showed localized conflict reasons, excluded the two
+  structurally unchanged MCP entries, and kept import/conflict apply disabled
+  while decisions were unresolved
+- the remaining native window evidence in this section was collected from the
+  immediately preceding readability candidate, whose frozen shell is unchanged
 - the macOS Accessibility tree exposed the native close, minimize, and zoom
   controls, the sidebar navigation, and readable empty-state content; it did
   not expose React-rendered traffic-light controls
@@ -116,18 +123,13 @@ Installed-app native evidence on 2026-07-26:
 - the installed app and read-only mounted DMG both referenced a valid
   `icon.icns`; the Dock accessibility target timed out, so Dock and app-switcher
   icon appearance still require visual human confirmation
-- Computer Use cannot retain `MY_AGENT_ASSETS_HOME` when its bridge relaunches
-  the target application, so that bridge result is installation/window-shell
-  evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
-  suite and needs a human desktop session for final installed-app flows.
-- before the latest session lock, the installed candidate read an isolated fake
-  HOME, persisted a Settings `maxDepth` change only after Preview/Apply
-  confirmation, discovered five fixture sources, and changed the selected
-  import count from five to four when one Command was unchecked
-- the same isolated flow exposed a Conflict Resolver filtering defect; the
-  latest candidate fixes it and has automated regression coverage, but the
-  exact native `0 / 2` conflict-decision count still needs a final unlocked
-  installed-app recheck
+- Computer Use bridge-initiated relaunches do not reliably retain
+  `MY_AGENT_ASSETS_HOME`; the successful isolated workflow therefore launched
+  the installed app explicitly after setting the variable with `launchctl`,
+  then stopped the app and removed the variable after validation
+- an earlier isolated flow persisted a Settings `maxDepth` change only after
+  Preview/Apply confirmation and exposed the Conflict Resolver filtering
+  defect; the latest installed-candidate recheck above confirms the fix
 
 Windows automated package evidence on 2026-07-26:
 

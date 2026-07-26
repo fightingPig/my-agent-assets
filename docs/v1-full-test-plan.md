@@ -212,8 +212,8 @@ This section must be updated with actual command output and evidence after each 
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
 | Release build/signature/DMG | PASS | `82a3217`: arm64 app, valid ad-hoc signature, valid DMG checksum `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66` |
-| Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the latest installed candidate still needs the unlocked conflict-count recheck |
-| Installed application | PARTIAL | The current `.app` is installed at `~/Applications/My Agent Assets.app` and its ad-hoc signature passes; the locked desktop prevents the remaining fake-HOME workflow recheck |
+| Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the current candidate exposes native close/minimize/zoom controls, but its repeated-drag result was not reliably measurable through synthetic Computer Use input |
+| Installed application | PASS | The current `.app` is installed at `~/Applications/My Agent Assets.app`, its ad-hoc signature passes, and an isolated fake-HOME run confirmed five discovered sources, four selected items, exactly two Skill conflicts, localized reasons, unchanged MCP filtering, and disabled unresolved apply actions |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
 | Windows package CI | PASS | Workflow run `30194702076` passed frontend validation and 22 Desktop/shared-core tests, then produced unsigned MSI and NSIS test packages |
 | Windows artifact integrity | PASS | Archive SHA-256 `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`; MSI `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`; NSIS `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675` |
@@ -248,8 +248,8 @@ This section must be updated with actual command output and evidence after each 
 - Native AX validation of the frozen shell covered enabled close/minimize/zoom
   controls, two consecutive real pointer drags, minimize/restore, full-screen
   enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901`
-  window. The latest installed candidate retains the same shell but still needs
-  the unlocked conflict-count workflow recheck.
+  window. The latest installed candidate retains the same shell and its
+  isolated fake-HOME workflow now confirms the exact `0 / 2` conflict count.
 
 ## Human Handoff Rule
 
@@ -259,11 +259,9 @@ Use `docs/manual-acceptance-checklist.md` as the authoritative handoff checklist
 
 ## Remaining Manual Run
 
-1. Unlock the current Mac and recheck the latest installed candidate against the
-   disposable conflict fixture, including the exact `0 / 2` decision count.
-2. Visually confirm the current installed candidate's Dock and app-switcher icon.
-3. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the
+1. Visually confirm the current installed candidate's Dock and app-switcher icon.
+2. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the
    ad-hoc signed, non-notarized build.
-4. Install the unsigned Windows test package from workflow run `30194702076`
+3. Install the unsigned Windows test package from workflow run `30194702076`
    and run L-02 through L-06 on Windows 10/11, including 100%, 125%, 150%, and
    200% DPI. Production signing is still required before V1 Stable.
