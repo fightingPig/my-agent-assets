@@ -217,8 +217,8 @@ This section must be updated with actual command output and evidence after each 
 | Installed core workflows | PASS | The exact committed candidate mounted Skills to Claude/Codex/project targets, mounted a Claude Command, rejected Command-to-Codex, patched Claude/Codex MCP configs without replacing unrelated fields, showed backup history/manual recovery guidance, completed a preview-bound local Git Push, and retained bindings and sync history after restart |
 | Installed application icon | PARTIAL | Finder icon view shows the intended non-placeholder product icon for the installed app; Dock and app-switcher appearance still require direct human confirmation because the Dock accessibility target times out |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
-| Windows package CI | PASS | Workflow run `30194702076` passed frontend validation and 22 Desktop/shared-core tests, then produced unsigned MSI and NSIS test packages |
-| Windows artifact integrity | PASS | Archive SHA-256 `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`; MSI `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`; NSIS `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675` |
+| Windows package CI | PASS | Workflow run `30201644197` for commit `2e219a0` passed frontend validation and 22 Desktop/shared-core tests, then produced unsigned MSI and NSIS test packages |
+| Windows artifact integrity | PASS | Archive SHA-256 `b9fd385c8a84058ac582b33b4c79f21c3f1a50b969c56b1d44d27c7d1490f188`; MSI `2b552d434a6c1d0c6de277c95b153903eb07027d68bf7663822adc1eb96b528b`; NSIS `d8511c2ee02ff15770582a226c8d5aa03334c78db521017d60ca07d4483961a9` |
 | Windows native qualification | MANUAL | Requires Windows 10/11 installation, DPI, path, titlebar, runtime patch, upgrade, and uninstall checks |
 
 ### Native UI Evidence
@@ -264,6 +264,6 @@ Use `docs/manual-acceptance-checklist.md` as the authoritative handoff checklist
 1. Visually confirm the current installed candidate's Dock and app-switcher icon.
 2. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the
    ad-hoc signed, non-notarized build.
-3. Install the unsigned Windows test package from workflow run `30194702076`
+3. Install the unsigned Windows test package from workflow run `30201644197`
    and run L-02 through L-06 on Windows 10/11, including 100%, 125%, 150%, and
    200% DPI. Production signing is still required before V1 Stable.

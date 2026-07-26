@@ -151,17 +151,17 @@ Windows automated package evidence on 2026-07-26:
 
 - `cargo check -p my-agent-assets-core --tests --target x86_64-pc-windows-msvc`
   passed, including compilation of the Windows-only junction regression test.
-- GitHub Actions workflow run `30194702076` passed frontend contract validation
+- GitHub Actions workflow run `30201644197` for commit `2e219a0` passed frontend contract validation
   and all 22 Desktop shared-core adapter tests on a native Windows runner.
 - The same run produced the unsigned test installers
   `My Agent Assets_0.1.0_x64_en-US.msi` and
   `My Agent Assets_0.1.0_x64-setup.exe`.
 - The artifact archive SHA-256 is
-  `6ce19439505d09aea411f4384c47b8a6ad18da37da0a53971f7e8f2183ed5dca`;
+  `b9fd385c8a84058ac582b33b4c79f21c3f1a50b969c56b1d44d27c7d1490f188`;
   the MSI SHA-256 is
-  `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`;
+  `2b552d434a6c1d0c6de277c95b153903eb07027d68bf7663822adc1eb96b528b`;
   the NSIS SHA-256 is
-  `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675`.
+  `d8511c2ee02ff15770582a226c8d5aa03334c78db521017d60ca07d4483961a9`.
 
 This is automated package evidence only. It does not replace installation,
 upgrade, launch, workflow, or accessibility manual acceptance on the exact
