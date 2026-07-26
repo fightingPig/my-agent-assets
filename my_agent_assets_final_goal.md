@@ -495,18 +495,20 @@ Scan/Import 永远不创建客户端目录或配置。
 
 ### 2.13 文件型状态模型
 
-不使用数据库。资产中心使用四个由 serde 正式解析的 YAML 文件：
+不使用数据库。资产中心使用五个由 serde 正式解析的 YAML 文件：
 
 ```text
 ~/.my-agent-assets/
 ├── assets.yaml
 ├── config.yaml
+├── projects.yaml
 ├── targets.yaml
 └── mounts.yaml
 ```
 
 - `assets.yaml`：Git 同步的 canonical asset 索引，只保存 asset ID、type、name 和可移植 metadata，不保存来源绝对路径、target binding 或本机状态。
 - `config.yaml`：机器本地 scan roots、max depth、Git branch/remote 偏好、UI、日志和 CLI 设置；固定 asset center root 不作为可编辑配置。
+- `projects.yaml`：机器本地显式维护项目 registry，只保存用户登记的项目路径和显示 metadata，不进入 Git。
 - `targets.yaml`：机器本地已授权 Mount Targets。
 - `mounts.yaml`：机器本地 asset-to-target bindings，以及 `mounted/outOfSync/orphaned` 等状态。
 
@@ -517,7 +519,7 @@ Scan/Import 永远不创建客户端目录或配置。
 - 旧版本升级必须先创建 local backup，再执行显式 migration。
 - 文件损坏时返回诊断并保留原文，不得自动重建覆盖。
 - 所有写入遵守 ordered lock、stale revalidation 和 atomic replace。
-- `config.yaml`、`targets.yaml`、`mounts.yaml` 必须加入 `.gitignore`。
+- `config.yaml`、`projects.yaml`、`targets.yaml`、`mounts.yaml` 必须加入 `.gitignore`。
 - 禁止使用自定义管道分隔文本伪装成 YAML。
 - 不引入 SQLite 或其他数据库。
 
@@ -554,6 +556,7 @@ GUI 与 CLI 必须调用共享 core 的同一项目扫描逻辑：
 ├── backups/local/
 ├── assets.yaml
 ├── config.yaml
+├── projects.yaml
 ├── targets.yaml
 ├── mounts.yaml
 └── .gitignore
@@ -1471,7 +1474,7 @@ feat(desktop): preview mounts through target adapters
 - map canonical `headers` to Codex `http_headers`
 - remove legacy `[mcp.servers.<name>]` when deleting a Codex server
 - disabling a target removes only that server from that target
-- deleting an MCP asset removes it from every previously enabled target before deleting canonical storage
+- deleting an MCP asset preserves live Target entries by default; explicit high-risk confirmation may remove it from every previously enabled target before deleting canonical storage
 - do not symlink the whole Claude JSON or Codex TOML config
 - do not manage OAuth token
 
@@ -1499,7 +1502,7 @@ feat(desktop): preview mounts through target adapters
 - TOML comments and unrelated fields preserved。
 - MCP import does not trigger reverse synchronization。
 - target disable precisely removes one server。
-- MCP delete cleans all previously enabled targets。
+- MCP delete 默认保留所有已启用 Target 的 live entry；显式选择清理并确认后才精准删除这些 entries。
 - mounted Skill/Command cannot be directly deleted。
 - unmount only removes a link that still targets the canonical asset。
 - user-replaced runtime content blocks unmount/delete。

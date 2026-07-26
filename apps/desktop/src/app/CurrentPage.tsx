@@ -52,7 +52,7 @@ export function CurrentPage({
   demoMode = false,
 }: CurrentPageProps) {
   switch (activePage) {
-    case "dashboard": return <DashboardPage appInfo={appInfo} demoMode={demoMode} />;
+    case "dashboard": return <DashboardPage appInfo={appInfo} demoMode={demoMode} onPageChange={onPageChange} />;
     case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;
     case "commands": return <CommandsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
     case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} provider={provider} />;

@@ -197,8 +197,9 @@ Implemented:
   or remove only management records; project directories are never created or
   deleted by this feature, and active mount bindings block unsafe path changes
   or removal
-- project scans now select an explicitly managed project; configured
-  `max_depth` remains the CLI/custom recursive scan limit (default 5)
+- project scans now select an explicitly managed project and recursively inspect
+  nested runtime roots up to the shared configurable `max_depth` (default 5);
+  the fixed skip list and no-directory-link rule apply equally to Desktop and CLI
 - changed V1 Skills to directory-only `skills/<name>/SKILL.md` sources and
   canonical directories; direct Markdown Skills are ignored
 - MCP deletion now preserves enabled Target live configuration by default and
@@ -292,6 +293,26 @@ Implemented:
   shows total size, oldest backup, and a configurable 1 GiB default cleanup
   reminder without automatic deletion; `maa backup list` and `maa backup
   delete <entry-id> [--apply]` call the same shared-core workflow
+- made `projects.yaml` an initialized, schema-validated, machine-local registry
+  and ensured it remains excluded from Git even when an older asset center did
+  not yet contain the local project registry entry in `.gitignore`
+- made standard Claude Code and Codex user Target readiness refresh from current
+  runtime presence on every registry read instead of freezing initialization
+  state in `targets.yaml`; Doctor now reports installed, initialized, and missing
+  runtime states separately
+- restricted project discovery to paths explicitly present in `projects.yaml`
+  and restored the shared recursive monorepo scan inside that selected project,
+  honoring configurable `max_depth`, the fixed skip list, directory-link
+  blocking, and warning-based read/config failure degradation
+- completed Dashboard real summaries for backups, bindings, conflicts,
+  Claude/Codex runtime diagnostics, and direct page navigation; Project Detail
+  now displays registered project Target paths/status and classifies mounted
+  assets by canonical asset ID
+- current validation on 2026-07-26 passed 94 frontend tests, 135 shared-core
+  tests, 21 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
+  Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
+  Visual QA for 13 pages/26 screenshots with zero issues, ad-hoc macOS signing,
+  and DMG checksum verification
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every

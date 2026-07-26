@@ -989,6 +989,9 @@ describe("read-only UI integration", () => {
       assetId: "skill:review",
       targetId: "project-a-skills",
     }));
+    expect(screen.getByText("Claude Code · Skills")).toBeInTheDocument();
+    expect(screen.getByText("~/workspace/project-a/.claude/skills · 可用")).toBeInTheDocument();
+    expect(screen.getByText("Git 工作区")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认项目挂载" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
     await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({

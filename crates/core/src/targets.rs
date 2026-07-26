@@ -555,7 +555,85 @@ pub fn load(home: &Path) -> Result<TargetRegistry> {
             path.display()
         ))
     })?;
-    TargetRegistry::from_yaml(&yaml)
+    let mut registry = TargetRegistry::from_yaml(&yaml)?;
+    refresh_standard_user_target_states(home, &mut registry);
+    Ok(registry)
+}
+
+pub fn detect_provider_state(home: &Path, provider: RuntimeProvider) -> ProviderState {
+    let initialized = match provider {
+        RuntimeProvider::ClaudeCode => {
+            home.join(".claude").exists() || home.join(".claude.json").exists()
+        }
+        RuntimeProvider::Codex => home.join(".codex").exists(),
+        RuntimeProvider::Custom => true,
+    };
+    let executable = match provider {
+        RuntimeProvider::ClaudeCode => command_exists("claude"),
+        RuntimeProvider::Codex => command_exists("codex"),
+        RuntimeProvider::Custom => true,
+    };
+    provider_state_from_presence(initialized, executable)
+}
+
+fn refresh_standard_user_target_states(home: &Path, registry: &mut TargetRegistry) {
+    let claude = detect_provider_state(home, RuntimeProvider::ClaudeCode);
+    let codex = detect_provider_state(home, RuntimeProvider::Codex);
+    for target in &mut registry.targets {
+        let state = match target.kind {
+            MountTargetKind::ClaudeUserSkills
+            | MountTargetKind::ClaudeUserCommands
+            | MountTargetKind::ClaudeUserMcpJson => Some(claude),
+            MountTargetKind::CodexUserSkills | MountTargetKind::CodexUserMcpToml => Some(codex),
+            _ => None,
+        };
+        if let Some(state) = state {
+            target.provider_state = state;
+            target.status = status_for_provider_state(state);
+        }
+    }
+}
+
+fn provider_state_from_presence(initialized: bool, executable: bool) -> ProviderState {
+    if initialized {
+        ProviderState::Initialized
+    } else if executable {
+        ProviderState::InstalledNotInitialized
+    } else {
+        ProviderState::NotInstalled
+    }
+}
+
+fn command_exists(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions = executable_extensions();
+    std::env::split_paths(&path).any(|directory| {
+        extensions
+            .iter()
+            .any(|extension| directory.join(format!("{name}{extension}")).is_file())
+    })
+}
+
+#[cfg(windows)]
+fn executable_extensions() -> Vec<String> {
+    let raw = std::env::var_os("PATHEXT")
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into())
+        .to_string_lossy()
+        .into_owned();
+    let mut extensions = raw
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| extension.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    extensions.push(String::new());
+    extensions
+}
+
+#[cfg(not(windows))]
+fn executable_extensions() -> Vec<String> {
+    vec![String::new()]
 }
 
 pub fn save(home: &Path, registry: &TargetRegistry) -> Result<()> {
@@ -972,6 +1050,22 @@ mod tests {
     }
 
     #[test]
+    fn provider_presence_distinguishes_installed_and_initialized_states() {
+        assert_eq!(
+            provider_state_from_presence(false, false),
+            ProviderState::NotInstalled
+        );
+        assert_eq!(
+            provider_state_from_presence(false, true),
+            ProviderState::InstalledNotInitialized
+        );
+        assert_eq!(
+            provider_state_from_presence(true, false),
+            ProviderState::Initialized
+        );
+    }
+
+    #[test]
     fn project_target_must_stay_inside_registered_project() {
         let target = MountTarget {
             id: "project-skills".to_string(),
@@ -999,6 +1093,8 @@ mod tests {
                 .as_nanos()
         ));
         fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::create_dir_all(home.join(".codex")).unwrap();
         let registry = TargetRegistry::standard_user_targets(
             &home,
             ProviderState::Initialized,
@@ -1008,6 +1104,45 @@ mod tests {
         .unwrap();
         save(&home, &registry).unwrap();
         assert_eq!(load(&home).unwrap(), registry);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn loading_registry_refreshes_standard_targets_after_runtime_initialization() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-target-refresh-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        let registry = TargetRegistry::standard_user_targets(
+            &home,
+            ProviderState::NotInstalled,
+            ProviderState::NotInstalled,
+            MountAdapter::SymlinkDirectory,
+        )
+        .unwrap();
+        save(&home, &registry).unwrap();
+
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        let refreshed = load(&home).unwrap();
+        assert_eq!(
+            refreshed
+                .resolve("codex-user-skills")
+                .unwrap()
+                .provider_state,
+            ProviderState::Initialized
+        );
+        assert_eq!(
+            refreshed.resolve("codex-user-skills").unwrap().status,
+            TargetStatus::Ready
+        );
+        assert_eq!(
+            refreshed.resolve("claude-user-skills").unwrap().status,
+            status_for_provider_state(detect_provider_state(&home, RuntimeProvider::ClaudeCode))
+        );
         let _ = fs::remove_dir_all(home);
     }
 }

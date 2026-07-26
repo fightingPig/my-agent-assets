@@ -4,7 +4,10 @@ use crate::asset_registry::{
 use crate::initialization::preview_initialization;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::incomplete_journals;
-use crate::targets::{load as load_targets, ProviderState, TargetStatus};
+use crate::project_registry::load as load_projects;
+use crate::targets::{
+    detect_provider_state, load as load_targets, ProviderState, RuntimeProvider, TargetStatus,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::Command;
@@ -96,15 +99,18 @@ pub fn doctor(home: &Path) -> DoctorReport {
     } else {
         Vec::new()
     };
+    if initialized || crate::project_registry::registry_path(home).exists() {
+        checks.push(project_registry_check(home));
+    }
     checks.push(runtime_check(
         "claude_runtime",
         "Claude Code Runtime",
-        home.join(".claude").exists() || home.join(".claude.json").exists(),
+        detect_provider_state(home, RuntimeProvider::ClaudeCode),
     ));
     checks.push(runtime_check(
         "codex_runtime",
         "Codex Runtime",
-        home.join(".codex").exists(),
+        detect_provider_state(home, RuntimeProvider::Codex),
     ));
     checks.push(platform_mount_check());
 
@@ -225,6 +231,23 @@ fn target_registry_check(home: &Path) -> DoctorCheck {
     }
 }
 
+fn project_registry_check(home: &Path) -> DoctorCheck {
+    match load_projects(home) {
+        Ok(registry) => check(
+            "project_registry",
+            "项目 Registry",
+            DoctorCheckStatus::Ok,
+            format!("{} 个显式维护项目。", registry.projects.len()),
+        ),
+        Err(error) => check(
+            "project_registry",
+            "项目 Registry",
+            DoctorCheckStatus::Error,
+            error.to_string(),
+        ),
+    }
+}
+
 fn mount_registry_check(home: &Path) -> DoctorCheck {
     match load_mounts(home) {
         Ok(registry) => check(
@@ -265,16 +288,21 @@ fn operation_check(home: &Path) -> DoctorCheck {
     }
 }
 
-fn runtime_check(id: &str, label: &str, initialized: bool) -> DoctorCheck {
-    if initialized {
-        check(id, label, DoctorCheckStatus::Ok, "已检测到本机配置。")
-    } else {
-        check(
+fn runtime_check(id: &str, label: &str, state: ProviderState) -> DoctorCheck {
+    match state {
+        ProviderState::Initialized => check(id, label, DoctorCheckStatus::Ok, "已检测到本机配置。"),
+        ProviderState::InstalledNotInitialized => check(
             id,
             label,
             DoctorCheckStatus::Warning,
-            "未检测到本机配置；不会自动创建。",
-        )
+            "已检测到客户端命令，但本机配置尚未初始化；不会自动创建。",
+        ),
+        ProviderState::NotInstalled => check(
+            id,
+            label,
+            DoctorCheckStatus::Warning,
+            "未检测到客户端命令或本机配置；不会自动创建。",
+        ),
     }
 }
 
@@ -364,12 +392,39 @@ mod tests {
             "asset_center",
             "asset_registry",
             "target_registry",
+            "project_registry",
             "mount_registry",
             "operations",
             "mount_mechanism",
         ] {
             assert!(report.checks.iter().any(|entry| entry.id == id), "{id}");
         }
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn reports_a_damaged_project_registry_without_replacing_it() {
+        let home = home("damaged-projects");
+        let preview = preview_initialization(&home).unwrap();
+        apply_initialization(
+            &home,
+            &InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
+        let projects = home.join(".my-agent-assets/projects.yaml");
+        fs::write(&projects, "schemaVersion: 1\nprojects: [broken\n").unwrap();
+
+        let report = doctor(&home);
+        assert!(report.checks.iter().any(|entry| {
+            entry.id == "project_registry" && entry.status == DoctorCheckStatus::Error
+        }));
+        assert_eq!(
+            fs::read_to_string(projects).unwrap(),
+            "schemaVersion: 1\nprojects: [broken\n"
+        );
         let _ = fs::remove_dir_all(home);
     }
 

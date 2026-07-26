@@ -32,6 +32,7 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
   const initialDetail = detailProp ?? (demoMode ? fallbackProject : null);
   const [detail, setDetail] = useState<ProjectDetailContext | null>(initialDetail);
   const [selectedAsset, setSelectedAsset] = useState<AssetSummary | null>(null);
+  const [projectTargets, setProjectTargets] = useState<readonly RegisteredMountTarget[]>([]);
   const [target, setTarget] = useState<RegisteredMountTarget | null>(null);
   const [preview, setPreview] = useState<CanonicalMountPreview | null>(null);
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
@@ -47,6 +48,7 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
     let cancelled = false;
     if (!detail) {
       setSelectedAsset(null);
+      setProjectTargets([]);
       return undefined;
     }
     Promise.all([listAssets(), listMountTargets()])
@@ -57,10 +59,13 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
             ?? assets[0]
             ?? null
         );
+        const matchingTargets = targets.filter(
+          (candidate) => candidate.projectPath === detail.path,
+        );
         setSelectedAsset(asset);
+        setProjectTargets(matchingTargets);
         setTarget(asset
-          ? targets.find((candidate) =>
-            candidate.projectPath === detail.path &&
+          ? matchingTargets.find((candidate) =>
             candidate.accepts.includes(asset.assetType) &&
             candidate.status === "ready"
           ) ?? null
@@ -143,9 +148,9 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
     );
   }
 
-  const skillMounts = detail.mounts.filter((mount) => mount.includes("review") || mount.includes("skill"));
-  const commandMounts = detail.mounts.filter((mount) => mount.includes("deploy") || mount.includes("build") || mount.includes("test") || mount.includes("format"));
-  const mcpMounts = detail.mounts.filter((mount) => mount.includes("PostgreSQL") || mount.includes("Filesystem") || mount.includes("Redis") || mount.includes("SQLite"));
+  const skillMounts = detail.mounts.filter((mount) => mountKind(mount) === "skill");
+  const commandMounts = detail.mounts.filter((mount) => mountKind(mount) === "command");
+  const mcpMounts = detail.mounts.filter((mount) => mountKind(mount) === "mcp");
 
   return (
     <div className="detail-workspace">
@@ -157,7 +162,7 @@ export function ProjectDetailPage({ demoMode = false, detail: detailProp }: Proj
       <div className="detail-two-column">
         <div className="detail-column">
           <section className="panel detail-section"><div className="section-heading"><div><h3>项目概览</h3><p>{detail.path}</p></div><span>{detail.updated}</span></div><div className="project-metrics"><div><strong>{detail.assets}</strong><span>全部资产</span></div><div><strong>{detail.skills}</strong><span>Skills</span></div><div><strong>{detail.commands}</strong><span>Commands</span></div><div><strong>{detail.mcps}</strong><span>MCP</span></div></div></section>
-          <section className="panel detail-section"><div className="section-heading"><div><h3>本地环境</h3><p>{demoMode ? "Visual QA 示例环境" : "项目只读汇总"}</p></div></div><div className="environment-list"><div><strong>Claude Runtime</strong><span>项目级 · {detail.assets} 项资产</span></div><div><strong>挂载引用</strong><span>{detail.mounts.length} 项</span></div><div><strong>MCP 配置</strong><span>{detail.mcps} 项</span></div></div></section>
+          <section className="panel detail-section"><div className="section-heading"><div><h3>本地环境</h3><p>{demoMode ? "Visual QA 示例环境" : "项目 Runtime 与 Git 诊断"}</p></div></div><div className="environment-list">{projectTargets.map((registeredTarget) => <div key={registeredTarget.id}><strong>{providerLabel(registeredTarget.provider)} · {targetKindLabel(registeredTarget)}</strong><span>{registeredTarget.path} · {targetStatusLabel(registeredTarget)}</span></div>)}{projectTargets.length === 0 ? <div><strong>项目 Target</strong><span>尚未登记 Claude Code 或 Codex 项目 Target</span></div> : null}<div><strong>Git 工作区</strong><span>{detail.status === "有变更" ? "检测到未提交变更" : detail.status === "无效" ? "项目路径不可用" : "工作区正常"}</span></div><div><strong>挂载引用</strong><span>{detail.mounts.length} 项</span></div><div><strong>扫描诊断</strong><span>{detail.assets} 项资产 · {detail.mcps} 项 MCP 配置</span></div></div></section>
           <section className="panel detail-section"><div className="section-heading"><div><h3>最近活动</h3><p>项目资产变更</p></div></div>{demoMode ? <div className="timeline-list"><div><Activity size={14} /><span>挂载 db-review</span><time>今天 11:20</time></div><div><Activity size={14} /><span>更新 deploy-prod</span><time>今天 09:40</time></div><div><Activity size={14} /><span>扫描项目资产</span><time>昨天 18:12</time></div></div> : <div className="asset-empty-state"><Activity size={20} /><strong>暂无真实活动记录</strong><span>项目活动数据源尚未接入。</span></div>}</section>
         </div>
 
@@ -216,4 +221,32 @@ function renderMounts(mounts: readonly string[]) {
   return mounts.length > 0
     ? mounts.map((mount) => <span key={mount}>{mount}</span>)
     : <span>暂无</span>;
+}
+
+function mountKind(mount: string): AssetSummary["assetType"] {
+  if (mount.startsWith("skill:")) return "skill";
+  if (mount.startsWith("command:")) return "command";
+  if (mount.startsWith("mcp:")) return "mcp";
+  if (["PostgreSQL", "Filesystem", "Redis", "SQLite"].includes(mount)) return "mcp";
+  if (/(deploy|build|test|format|command)/i.test(mount)) return "command";
+  return "skill";
+}
+
+function providerLabel(provider: RegisteredMountTarget["provider"]) {
+  if (provider === "claude_code") return "Claude Code";
+  if (provider === "codex") return "Codex";
+  return "Custom";
+}
+
+function targetKindLabel(target: RegisteredMountTarget) {
+  if (target.accepts.includes("skill")) return "Skills";
+  if (target.accepts.includes("command")) return "Commands";
+  return "MCP";
+}
+
+function targetStatusLabel(target: RegisteredMountTarget) {
+  if (target.status === "ready") return "可用";
+  if (target.providerState === "installed_not_initialized") return "客户端尚未初始化";
+  if (target.providerState === "not_installed") return "客户端未安装";
+  return "配置无效";
 }

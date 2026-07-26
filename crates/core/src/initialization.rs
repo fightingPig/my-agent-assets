@@ -2,8 +2,9 @@ use crate::asset_registry::{self, AssetRegistry};
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::{self, MountRegistry};
 use crate::path_safety::is_link_or_junction;
+use crate::project_registry::ProjectRegistry;
 use crate::settings::{self, Settings};
-use crate::targets::{self, MountAdapter, ProviderState, TargetRegistry};
+use crate::targets::{self, MountAdapter, RuntimeProvider, TargetRegistry};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
@@ -28,7 +29,8 @@ const REQUIRED_FILES: &[&str] = &[
     "mounts.yaml",
     ".gitignore",
 ];
-const GITIGNORE: &str = "config.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\ncache/\nlogs/\nsecrets/\n";
+const INITIAL_LOCAL_FILES: &[&str] = &["projects.yaml"];
+const GITIGNORE: &str = "config.yaml\nprojects.yaml\ntargets.yaml\nmounts.yaml\nbackups/local/\noperations/\nlocks/\ncache/\nlogs/\nsecrets/\n";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +91,11 @@ fn preview_initialization_at(
                 .map(|relative| root.join(relative)),
         );
         planned_paths.extend(REQUIRED_FILES.iter().map(|relative| root.join(relative)));
+        planned_paths.extend(
+            INITIAL_LOCAL_FILES
+                .iter()
+                .map(|relative| root.join(relative)),
+        );
         planned_paths.push(root.join(".git"));
         false
     };
@@ -209,14 +216,20 @@ fn build_staging(home: &Path, staging: &Path) -> Result<()> {
     )?;
     let targets = TargetRegistry::standard_user_targets(
         home,
-        provider_state(home.join(".claude").exists() || home.join(".claude.json").exists()),
-        provider_state(home.join(".codex").exists()),
+        targets::detect_provider_state(home, RuntimeProvider::ClaudeCode),
+        targets::detect_provider_state(home, RuntimeProvider::Codex),
         directory_mount_adapter(),
     )?;
     write_synced(&staging.join("targets.yaml"), targets.to_yaml()?.as_bytes())?;
     write_synced(
         &staging.join("mounts.yaml"),
         serde_yaml::to_string(&MountRegistry::default())
+            .map_err(|error| MaaError::new(error.to_string()))?
+            .as_bytes(),
+    )?;
+    write_synced(
+        &staging.join("projects.yaml"),
+        serde_yaml::to_string(&ProjectRegistry::default())
             .map_err(|error| MaaError::new(error.to_string()))?
             .as_bytes(),
     )?;
@@ -261,6 +274,7 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
     settings::load(home).map_err(|error| MaaError::new(error.to_string()))?;
     asset_registry::load(home).map_err(|error| MaaError::new(error.to_string()))?;
     mount_registry::load(home).map_err(|error| MaaError::new(error.to_string()))?;
+    crate::project_registry::load(home)?;
     targets::load(home)?;
     let output = Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
@@ -309,14 +323,6 @@ fn validate_home(home: &Path) -> Result<()> {
         return Err(MaaError::new("HOME must be an existing real directory"));
     }
     Ok(())
-}
-
-fn provider_state(initialized: bool) -> ProviderState {
-    if initialized {
-        ProviderState::Initialized
-    } else {
-        ProviderState::NotInstalled
-    }
 }
 
 fn directory_mount_adapter() -> MountAdapter {
@@ -431,6 +437,15 @@ mod tests {
         .unwrap();
         assert!(applied.created);
         validate_existing(&home, &home.join(ROOT_NAME)).unwrap();
+        let projects: ProjectRegistry = serde_yaml::from_str(
+            &fs::read_to_string(home.join(ROOT_NAME).join("projects.yaml")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(projects, ProjectRegistry::default());
+        assert!(fs::read_to_string(home.join(ROOT_NAME).join(".gitignore"))
+            .unwrap()
+            .lines()
+            .any(|line| line == "projects.yaml"));
         assert!(!home.join(".my-agent-assets.init.lock").exists());
 
         let preview = preview_initialization(&home).unwrap();

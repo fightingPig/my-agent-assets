@@ -1,6 +1,7 @@
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
+use crate::path_safety::is_link_or_junction;
 use crate::targets::{load as load_targets, save as save_targets, MountTarget, TargetRegistry};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const PROJECT_REGISTRY_SCHEMA_VERSION: u32 = 1;
 const PREVIEW_TTL_SECONDS: u64 = 300;
+const PROJECTS_GITIGNORE_ENTRY: &str = "projects.yaml";
 static OPERATION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +117,7 @@ impl ProjectRegistry {
         let mut ids = BTreeSet::new();
         let mut paths = BTreeSet::new();
         for project in &self.projects {
-            validate_project(&project)?;
+            validate_project(project)?;
             if !ids.insert(project.id.clone()) {
                 return Err(MaaError::new(format!(
                     "duplicate managed project id: {}",
@@ -143,6 +145,10 @@ impl ProjectRegistry {
 
 pub fn registry_path(home: &Path) -> PathBuf {
     home.join(".my-agent-assets/projects.yaml")
+}
+
+fn gitignore_path(home: &Path) -> PathBuf {
+    home.join(".my-agent-assets/.gitignore")
 }
 
 pub fn load(home: &Path) -> Result<ProjectRegistry> {
@@ -301,13 +307,15 @@ fn preview_save_project_at(
     let can_apply = warnings.is_empty();
     build_preview(
         home,
-        "save",
-        Some(project),
-        migrated_target_ids,
-        blocking_bindings,
-        warnings,
-        can_apply,
         generated_at,
+        ProjectPreviewParts {
+            operation: "save",
+            project: Some(project),
+            migrated_target_ids,
+            blocking_bindings,
+            warnings,
+            can_apply,
+        },
     )
 }
 
@@ -328,26 +336,40 @@ fn preview_remove_project_at(
     };
     build_preview(
         home,
-        "remove",
-        Some(project),
-        target_ids,
-        blocking_bindings.clone(),
-        warnings,
-        blocking_bindings.is_empty(),
         generated_at,
+        ProjectPreviewParts {
+            operation: "remove",
+            project: Some(project),
+            migrated_target_ids: target_ids,
+            blocking_bindings: blocking_bindings.clone(),
+            warnings,
+            can_apply: blocking_bindings.is_empty(),
+        },
     )
 }
 
-fn build_preview(
-    home: &Path,
-    operation: &str,
+struct ProjectPreviewParts {
+    operation: &'static str,
     project: Option<ManagedProject>,
     migrated_target_ids: Vec<String>,
     blocking_bindings: Vec<String>,
     warnings: Vec<String>,
     can_apply: bool,
+}
+
+fn build_preview(
+    home: &Path,
     generated_at: u64,
+    parts: ProjectPreviewParts,
 ) -> Result<ProjectChangePreview> {
+    let ProjectPreviewParts {
+        operation,
+        project,
+        migrated_target_ids,
+        blocking_bindings,
+        warnings,
+        can_apply,
+    } = parts;
     let mut fingerprint = PreviewFingerprint::new("project-change");
     fingerprint.add_bytes(
         "request",
@@ -362,6 +384,7 @@ fn build_preview(
     fingerprint.add_u64("generated-at", generated_at);
     fingerprint.add_path_if_present("project-registry", &registry_path(home))?;
     fingerprint.add_path_if_present("target-registry", &crate::targets::registry_path(home))?;
+    fingerprint.add_path_if_present("gitignore", &gitignore_path(home))?;
     if let Some(project) = &project {
         fingerprint.add_bytes("project-path", project.path.to_string_lossy().as_bytes());
         let metadata = fs::metadata(&project.path).map_err(|error| {
@@ -373,7 +396,11 @@ fn build_preview(
         preview_id: fingerprint.finish(&format!("project-{operation}")),
         operation: operation.into(),
         project,
-        affected_paths: vec![registry_path(home), crate::targets::registry_path(home)],
+        affected_paths: vec![
+            registry_path(home),
+            crate::targets::registry_path(home),
+            gitignore_path(home),
+        ],
         migrated_target_ids,
         blocking_bindings,
         warnings,
@@ -402,11 +429,13 @@ fn commit_change(
         vec![
             RecoveryTarget::asset_center(registry_path(home)),
             RecoveryTarget::asset_center(crate::targets::registry_path(home)),
+            RecoveryTarget::asset_center(gitignore_path(home)),
         ],
     )?;
     let result: Result<ProjectChangeResult> = (|| {
         save(home, registry)?;
         save_targets(home, targets)?;
+        ensure_project_registry_ignored(home)?;
         journal.record_step("project_registry_saved")?;
         journal.complete()?;
         Ok(ProjectChangeResult {
@@ -427,6 +456,34 @@ fn commit_change(
         return Err(error);
     }
     result
+}
+
+fn ensure_project_registry_ignored(home: &Path) -> Result<()> {
+    let path = gitignore_path(home);
+    let mut content = if path.exists() {
+        let metadata = fs::symlink_metadata(&path)?;
+        if is_link_or_junction(&metadata) || !metadata.is_file() {
+            return Err(MaaError::new(
+                "asset center .gitignore must be a regular file",
+            ));
+        }
+        fs::read_to_string(&path)
+            .map_err(|error| MaaError::new(format!("failed to read .gitignore: {error}")))?
+    } else {
+        String::new()
+    };
+    if content
+        .lines()
+        .any(|line| line.trim() == PROJECTS_GITIGNORE_ENTRY)
+    {
+        return Ok(());
+    }
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(PROJECTS_GITIGNORE_ENTRY);
+    content.push('\n');
+    write_atomic(&path, content.as_bytes())
 }
 
 fn migrate_project_targets(
@@ -709,9 +766,16 @@ mod tests {
     #[test]
     fn explicit_projects_are_saved_and_missing_registry_is_empty() {
         let home = home("save");
+        fs::remove_file(registry_path(&home)).unwrap();
+        let ignore_path = gitignore_path(&home);
+        let legacy_ignore = fs::read_to_string(&ignore_path)
+            .unwrap()
+            .replace("projects.yaml\n", "");
+        fs::write(&ignore_path, legacy_ignore).unwrap();
         let request = save_request(home.join("workspace/project-a"));
         let preview = preview_save_project(&home, &request).unwrap();
         assert!(preview.can_apply);
+        assert!(preview.affected_paths.contains(&ignore_path));
         let result = apply_save_project(
             &home,
             &ProjectSaveApplyRequest {
@@ -725,6 +789,10 @@ mod tests {
         let projects = load(&home).unwrap();
         assert_eq!(projects.projects.len(), 1);
         assert_eq!(projects.projects[0].name, "project-a");
+        assert!(fs::read_to_string(ignore_path)
+            .unwrap()
+            .lines()
+            .any(|line| line == "projects.yaml"));
         assert!(home.join("workspace/project-a").is_dir());
         let _ = fs::remove_dir_all(home);
     }

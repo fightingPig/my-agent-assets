@@ -124,18 +124,18 @@ Tauri transport.
 
 ### `list_projects`
 
-- **Purpose:** Discover local projects and mounted-asset counts from
-  `config.yaml.scan_roots`.
+- **Purpose:** List explicitly maintained local projects from the machine-local
+  project registry, including discovered asset and mounted-asset counts.
 - **Input:** None.
 - **Output:** `ProjectSummary[]`.
 - **Side effect:** Read-only.
 - **Future consumer:** Projects and Project Detail.
 - **Status:** Implemented in shared core and registered as read-only.
 
-Project discovery uses the configured `max_depth` (default `5`), supports
-nested/monorepo projects, follows the shared fixed skip list, and never follows
-directory symlinks. Missing scan roots and an uninitialized asset center return
-safe read-only results without creating files.
+Each maintained project is scanned with the configured `max_depth` (default
+`5`), supports nested/monorepo runtime roots, follows the shared fixed skip
+list, and never follows directory symlinks. A missing project registry or an
+uninitialized asset center returns a safe empty result without creating files.
 
 ### Target Registry commands
 

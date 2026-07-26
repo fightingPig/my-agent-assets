@@ -726,6 +726,8 @@ mod tests {
             root.join("assets/mcps"),
             root.join("backups/portable"),
             root.join("backups/local"),
+            home.join(".claude"),
+            home.join(".codex"),
         ] {
             fs::create_dir_all(path).unwrap();
         }

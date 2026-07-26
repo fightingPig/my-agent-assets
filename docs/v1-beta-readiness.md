@@ -1,13 +1,14 @@
 # V1 Beta Readiness
 
-Date: 2026-06-27
+Date: 2026-07-26
 
 My Agent Assets V1 is ready for controlled local beta testing. It remains a local-first desktop application with no login, account, cloud workspace, billing, or authentication dependency.
 
 ## Implemented Features
 
 - Read-only discovery of asset-center Skills, Commands, and MCP servers
-- One-level project discovery under `~/workspace` and `~/code`
+- Explicit machine-local project management with nested project runtime
+  discovery bounded by configurable `max_depth`
 - User, project, and custom runtime asset scans
 - Exact MCP conflict preview from top-level `mcpServers.<name>` JSON
 - Import preview, preview-bound ordinary confirmation, apply, and backup
@@ -41,10 +42,14 @@ The following validation passed on Apple Silicon macOS:
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Passed |
-| `npm test` | 10 files, 73 tests passed |
+| `npm test` | 12 files, 94 tests passed |
 | `npm run build:renderer` | Passed |
 | `cargo fmt --all -- --check` | Passed |
-| `cargo test -p my-agent-assets-desktop` | 80 tests passed |
+| `cargo test -p my-agent-assets-core --lib` | 135 tests passed |
+| `cargo test -p my-agent-assets-desktop` | 21 tests passed |
+| `cargo test -p my-agent-assets-cli` | 10 tests passed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed |
+| `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` | Passed |
 | `npm run qa:visual` | 13 pages, 26 screenshots, 0 severe issues, 0 warnings |
 | Tauri dev smoke | Started successfully with `MY_AGENT_ASSETS_HOME` set to an empty `/tmp` directory |
 | Tauri release build | `.app` and arm64 `.dmg` generated |
@@ -68,8 +73,8 @@ Build artifacts:
 - Windows packaging, native titlebar behavior, DPI scaling, path handling, and symlink permissions were not validated in this macOS run.
 - Automated Visual QA runs in headless Chrome. It does not validate native traffic lights, overlay dragging, Dock behavior, or OS window shadows.
 - Project List only shows explicitly managed existing local directories; the
-  project registry is the single maintenance entry point. `max_depth` remains
-  configurable for CLI/custom recursive scans and defaults to 5.
+  project registry is the single maintenance entry point. Project scans inspect
+  nested runtime roots with the shared configurable `max_depth`, defaulting to 5.
 - Asset content shown in details is read from canonical asset files through shared-core Tauri commands.
 - Automatic historical Restore remains out of scope; Backup History is manual-restore-only.
 - Git Pull is fast-forward only. Git Push defaults to a verifiable GitHub

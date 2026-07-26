@@ -4,6 +4,7 @@ import { DashboardPage } from "./DashboardPage";
 
 const {
   listAssets,
+  listBackups,
   listProjects,
   listAuditLog,
   gitStatus,
@@ -17,6 +18,7 @@ const {
   initializationApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
+  listBackups: vi.fn(),
   listProjects: vi.fn(),
   listAuditLog: vi.fn(),
   gitStatus: vi.fn(),
@@ -32,6 +34,7 @@ const {
 
 vi.mock("../app/data-api", () => ({
   listAssets,
+  listBackups,
   listProjects,
   listAuditLog,
   gitStatus,
@@ -49,6 +52,7 @@ describe("Dashboard recovery status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listAssets.mockResolvedValue([]);
+    listBackups.mockResolvedValue([]);
     listProjects.mockResolvedValue([]);
     listAuditLog.mockResolvedValue([]);
     gitStatus.mockResolvedValue({
@@ -79,7 +83,10 @@ describe("Dashboard recovery status", () => {
     doctorReport.mockResolvedValue({
       assetCenterPath: "/tmp/home/.my-agent-assets",
       initialized: true,
-      checks: [],
+      checks: [
+        { id: "claude_runtime", label: "Claude Code Runtime", status: "ok", message: "已检测到本机配置。" },
+        { id: "codex_runtime", label: "Codex Runtime", status: "warning", message: "未检测到本机配置；不会自动创建。" },
+      ],
       contentDiagnostics: [],
     });
   });
@@ -112,6 +119,65 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText("事务恢复")).toBeInTheDocument();
     expect(screen.getByText("写入已阻止")).toBeInTheDocument();
     expect(screen.getByText(/检测到 1 个未完成事务/)).toBeInTheDocument();
+  });
+
+  it("describes projects as explicitly managed records", async () => {
+    recoveryStatus.mockResolvedValue({
+      writesBlocked: false,
+      journals: [],
+      recentRecoveries: [],
+      message: "没有未完成事务。",
+    });
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect((await screen.findAllByText("尚未维护项目")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("显式添加的本地运行目标").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("在项目列表添加已有本地目录后会显示在这里。").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/扫描根目录/)).toHaveLength(0);
+  });
+
+  it("summarizes mounts, backups, conflicts, and both runtime diagnostics", async () => {
+    recoveryStatus.mockResolvedValue({
+      writesBlocked: false,
+      journals: [],
+      recentRecoveries: [],
+      message: "没有未完成事务。",
+    });
+    listAssets.mockResolvedValue([{
+      id: "skill:review",
+      name: "review",
+      title: "review",
+      assetType: "skill",
+      status: "conflict",
+      category: "local",
+      description: "",
+      sourcePath: "/tmp/home/.my-agent-assets/assets/skills/review",
+      scope: "user",
+      updatedAt: null,
+      mountTargets: ["claude-user-skills", "codex-user-skills"],
+    }]);
+    listBackups.mockResolvedValue([{ id: "backup-1" }, { id: "backup-2" }]);
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect(await screen.findByText("2 条本机 asset-to-target binding")).toBeInTheDocument();
+    expect(screen.getByText("2 份 portable / local backup")).toBeInTheDocument();
+    expect(screen.getByText("1 项需要处理")).toBeInTheDocument();
+    expect(screen.getAllByText("Claude Code Runtime").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Codex Runtime").length).toBeGreaterThan(0);
   });
 
   it("shows redacted local audit entries as recent activity", async () => {
