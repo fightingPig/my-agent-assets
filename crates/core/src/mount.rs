@@ -837,22 +837,7 @@ fn create_directory_link(canonical: &Path, target: &Path, _: MountAdapter) -> Re
 fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter) -> Result<()> {
     match adapter {
         MountAdapter::WindowsDirectoryJunction => {
-            // Keep runtime paths out of the PowerShell program text so
-            // metacharacters such as '&' and '%' remain literal path content.
-            let status = std::process::Command::new("powershell.exe")
-                .args([
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "New-Item -ItemType Junction -Path $env:MAA_JUNCTION_PATH -Target $env:MAA_CANONICAL_PATH -ErrorAction Stop | Out-Null",
-                ])
-                .env("MAA_JUNCTION_PATH", target)
-                .env("MAA_CANONICAL_PATH", canonical)
-                .status()?;
-            if !status.success() {
-                return Err(MaaError::new("failed to create Windows directory junction"));
-            }
+            junction::create(canonical, target)?;
             Ok(())
         }
         _ => {
@@ -1102,7 +1087,9 @@ pub(crate) fn remove_path_if_present(path: &Path) -> Result<()> {
 fn remove_link_or_junction(path: &Path, metadata: &fs::Metadata) -> Result<()> {
     #[cfg(windows)]
     {
-        if metadata.is_dir() {
+        if junction::exists(path)? {
+            junction::delete(path)?;
+        } else if metadata.is_dir() {
             fs::remove_dir(path)?;
         } else {
             fs::remove_file(path)?;
