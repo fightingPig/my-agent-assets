@@ -121,8 +121,10 @@ Installed-app native evidence on 2026-07-26:
   successful repository, runtime, backup, and project summaries remained
   visible
 - the installed app and read-only mounted DMG both referenced a valid
-  `icon.icns`; the Dock accessibility target timed out, so Dock and app-switcher
-  icon appearance still require visual human confirmation
+  `icon.icns`; Finder icon view visually showed the intended product icon for
+  `~/Applications/My Agent Assets.app` rather than a default placeholder
+- the Dock accessibility target timed out, so Dock and app-switcher icon
+  appearance still require visual human confirmation
 - Computer Use bridge-initiated relaunches do not reliably retain
   `MY_AGENT_ASSETS_HOME`; the successful isolated workflow therefore launched
   the installed app explicitly after setting the variable with `launchctl`,

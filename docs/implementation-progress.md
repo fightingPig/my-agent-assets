@@ -357,6 +357,8 @@ Latest installed-app acceptance:
 - Conflict Resolver showed `0 / 2 已决策` for `claude-review` and
   `codex-review`, excluded unchanged MCP entries, and kept unresolved apply
   actions disabled
+- Finder icon view showed the intended non-placeholder product icon for the
+  installed app; Dock and app-switcher appearance remain a direct visual check
 - stopped the installed app and removed `MY_AGENT_ASSETS_HOME` from the launch
   environment after the test
 
