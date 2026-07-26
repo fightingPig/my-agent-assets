@@ -338,9 +338,9 @@ Implemented:
     `43e5107ec2e05712a53fac67b0309ef789be987c723da9fde9c1fb26703c7be7`
   - NSIS SHA-256:
     `fb1f519d2ef33b278f5bf8f871c36ab79c934c002b58690a76d0097b823c7675`
-- rebuilt and installed the current Apple Silicon candidate from `82a3217`;
+- rebuilt and installed the current Apple Silicon candidate from `7e97e2c`;
   ad-hoc signature and DMG verification passed, with DMG SHA-256
-  `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66`
+  `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
@@ -359,6 +359,16 @@ Latest installed-app acceptance:
   actions disabled
 - Finder icon view showed the intended non-placeholder product icon for the
   installed app; Dock and app-switcher appearance remain a direct visual check
+- mounted Skills to Claude Code, Codex, and a registered project target;
+  mounted a Claude Command and confirmed Command-to-Codex remains blocked
+- mounted MCP assets to isolated Claude JSON and Codex TOML while preserving
+  unrelated configuration
+- verified 15 real backup records, affected paths, manifest reveal, and the
+  manual restore guide
+- completed a preview-bound Push to a disposable local remote and verified the
+  persisted `git-sync` history after restart
+- fixed the warning-free mount preview summary and post-sync history refresh
+  defects discovered during this installed-app run
 - stopped the installed app and removed `MY_AGENT_ASSETS_HOME` from the launch
   environment after the test
 

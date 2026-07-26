@@ -72,13 +72,13 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `82a3217` (`codex/final-product-v1-next`)
+- source commit: `7e97e2c` (`codex/final-product-v1-next`)
 - build command:
   `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256:
-  `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66`
+  `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
@@ -102,6 +102,20 @@ Installed-app native evidence on 2026-07-26:
   `codex-review`, showed localized conflict reasons, excluded the two
   structurally unchanged MCP entries, and kept import/conflict apply disabled
   while decisions were unresolved
+- the installed app previewed and applied isolated Skill mounts to Claude Code,
+  Codex, and a registered project target; it also applied a Claude Command
+  mount and rejected Command-to-Codex as incompatible
+- isolated Claude JSON and Codex TOML MCP mounts preserved unrelated
+  `theme`, `model`, and `history` configuration while updating only the
+  selected server entry
+- Backup History displayed 15 real portable/local records, affected paths,
+  manifest locations, file reveal, and the five-step manual restore guide
+- a disposable local Git remote completed preview-bound Push; the worktree
+  became clean and the persisted `git-sync` audit entry remained visible after
+  app restart
+- native QA exposed and fixed two status defects before this package was built:
+  a successful warning-free mount preview no longer claims that no preview
+  exists, and successful Git sync now refreshes persisted sync history
 - the remaining native window evidence in this section was collected from the
   immediately preceding readability candidate, whose frozen shell is unchanged
 - the macOS Accessibility tree exposed the native close, minimize, and zoom

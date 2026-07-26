@@ -211,9 +211,10 @@ This section must be updated with actual command output and evidence after each 
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
 | Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
-| Release build/signature/DMG | PASS | `82a3217`: arm64 app, valid ad-hoc signature, valid DMG checksum `b51c2d1b4ae10b71a4bcac7302a908b9c4e4c88ecf0f98a923575e256534de66` |
+| Release build/signature/DMG | PASS | `7e97e2c`: arm64 app, valid ad-hoc signature, valid DMG checksum `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb` |
 | Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the current candidate exposes native close/minimize/zoom controls, but its repeated-drag result was not reliably measurable through synthetic Computer Use input |
 | Installed application | PASS | The current `.app` is installed at `~/Applications/My Agent Assets.app`, its ad-hoc signature passes, and an isolated fake-HOME run confirmed five discovered sources, four selected items, exactly two Skill conflicts, localized reasons, unchanged MCP filtering, and disabled unresolved apply actions |
+| Installed core workflows | PASS | The exact committed candidate mounted Skills to Claude/Codex/project targets, mounted a Claude Command, rejected Command-to-Codex, patched Claude/Codex MCP configs without replacing unrelated fields, showed backup history/manual recovery guidance, completed a preview-bound local Git Push, and retained bindings and sync history after restart |
 | Installed application icon | PARTIAL | Finder icon view shows the intended non-placeholder product icon for the installed app; Dock and app-switcher appearance still require direct human confirmation because the Dock accessibility target times out |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
 | Windows package CI | PASS | Workflow run `30194702076` passed frontend validation and 22 Desktop/shared-core tests, then produced unsigned MSI and NSIS test packages |
