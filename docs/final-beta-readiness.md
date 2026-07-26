@@ -83,6 +83,9 @@ Latest automated macOS package verification:
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
+- all 26 Visual QA screenshots were reviewed at `1440x900` and `1180x760`;
+  no overlap, black tiles, horizontal overflow, or unreadable primary controls
+  were found, and long pages retained their expected local scrolling
 - verification date: 2026-07-26
 
 Installed-app native evidence on 2026-07-26:
@@ -157,9 +160,10 @@ design for signing, release source, integrity checks, and rollback.
 As of this readiness note, the remaining work before any final release decision
 is:
 
-1. Review the latest 26 Visual QA screenshots manually.
-2. Run the macOS checklist from `docs/manual-acceptance-checklist.md` against
+1. Run the remaining macOS functional checklist from
+   `docs/manual-acceptance-checklist.md` against
    the exact package intended for Beta.
+2. Visually confirm the Dock and app-switcher icon on the installed candidate.
 3. Run Gatekeeper validation on another Apple Silicon Mac for ad-hoc,
    non-notarized builds.
 4. Complete the Windows Stable checklist before claiming cross-platform V1
