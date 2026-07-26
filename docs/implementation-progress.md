@@ -308,8 +308,23 @@ Implemented:
   Claude/Codex runtime diagnostics, and direct page navigation; Project Detail
   now displays registered project Target paths/status and classifies mounted
   assets by canonical asset ID
-- current validation on 2026-07-26 passed 95 frontend tests, 135 shared-core
-  tests, 21 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
+- made Scan Import selection explicit: only checked, import-eligible source IDs
+  enter Import or Adopt previews, and changing the selection invalidates every
+  existing preview/result before a new write can be confirmed
+- made Conflict Resolver require an explicit skip, rename, or overwrite decision
+  for every actual `disposition=conflict` item; structurally unchanged entries
+  are no longer incorrectly included in the conflict decision list
+- replaced the direct Desktop settings save transport with ten-minute
+  SHA-256-bound `settings_preview` / `settings_apply`; Settings and the Sync
+  public-remote policy both require an ordinary explicit confirmation, and
+  success is shown only after persisted settings are reloaded
+- added a process-instance nonce to every shared preview fingerprint, including
+  the separate Git Pull/Push fingerprint, so a backend restart invalidates all
+  previously issued preview IDs
+- enabled the Windows unsigned test-package workflow for pushes to
+  `codex/final-product-v1-next`
+- current validation on 2026-07-26 passed 100 frontend tests, 139 shared-core
+  tests, 22 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
   Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
   Visual QA for 13 pages/26 screenshots with zero issues, ad-hoc macOS signing,
   and DMG checksum verification
@@ -317,6 +332,8 @@ Implemented:
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
   multi-step workflow
+- final native recheck of the latest installed build's exact two-conflict
+  decision count remains pending because the macOS desktop session locked
 - Windows packaging/signing and real Windows manual qualification remain
   external manual acceptance work before V1 Stable can be claimed
 

@@ -72,14 +72,13 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `57181b243545fd15354d3410f49b20226e82cb10`
-  (`codex/final-product-v1-next`)
+- source commit: `955983b` (`codex/final-product-v1-next`)
 - build command:
   `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256:
-  `950041e17129a12efcc514c4f54d5865d92d5e6b54e1925c6401eb2006775911`
+  `cbe8424a38adb2cb7bb35b7103f95fdc409f2dee02ab6d37c865fb8a8204675a`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
@@ -118,6 +117,14 @@ Installed-app native evidence on 2026-07-26:
   the target application, so that bridge result is installation/window-shell
   evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
   suite and needs a human desktop session for final installed-app flows.
+- before the latest session lock, the installed candidate read an isolated fake
+  HOME, persisted a Settings `maxDepth` change only after Preview/Apply
+  confirmation, discovered five fixture sources, and changed the selected
+  import count from five to four when one Command was unchecked
+- the same isolated flow exposed a Conflict Resolver filtering defect; the
+  latest candidate fixes it and has automated regression coverage, but the
+  exact native `0 / 2` conflict-decision count still needs a final unlocked
+  installed-app recheck
 
 Windows preflight evidence on 2026-07-11:
 
@@ -168,10 +175,13 @@ is:
 1. Run the remaining macOS functional checklist from
    `docs/manual-acceptance-checklist.md` against
    the exact package intended for Beta.
-2. Visually confirm the Dock and app-switcher icon on the installed candidate.
-3. Run Gatekeeper validation on another Apple Silicon Mac for ad-hoc,
+2. Recheck the latest installed candidate's Conflict Resolver against the
+   isolated fixture and confirm that only the two actual conflicts require
+   decisions.
+3. Visually confirm the Dock and app-switcher icon on the installed candidate.
+4. Run Gatekeeper validation on another Apple Silicon Mac for ad-hoc,
    non-notarized builds.
-4. Complete the Windows Stable checklist before claiming cross-platform V1
+5. Complete the Windows Stable checklist before claiming cross-platform V1
    Stable.
 
 ## Release Report Template
