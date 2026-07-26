@@ -72,24 +72,35 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `8cbf17f82372` (`codex/final-product-v1-next`)
-- build command: `cd apps/desktop && npm run build`
+- source commit: `e92d9d50dbd0dd47160263397cfe248fcb40a9bc`
+  (`codex/final-product-v1-next`)
+- build command:
+  `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
-- DMG SHA-256: `af0edd3bc558466d535d12d270885a0ab5c696480b26b87adadcb4f9d94edf81`
+- DMG SHA-256:
+  `0fcbbfdb3af8cfad00e8e82a4e215e192e592b1b7b4dca8dc58db944603d73b5`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
 - verification date: 2026-07-26
 
-Historical installed-app native evidence on 2026-07-11:
+Installed-app native evidence on 2026-07-26:
 
-- the candidate app was installed from the generated bundle into
+- the exact candidate app was installed from the generated bundle into
   `~/Applications/My Agent Assets.app` and passed `codesign --verify --deep --strict`
   at that installed location
 - the macOS Accessibility tree exposed the native close, minimize, and zoom
   controls, the sidebar navigation, and readable empty-state content; it did
   not expose React-rendered traffic-light controls
+- Computer Use navigated the installed app through Projects, Scan, Mount,
+  Sync, and Settings, switched between Claude Code and Codex, and verified
+  keyboard focus on the provider control
+- the 28px overlay drag area accepted two consecutive drag gestures without
+  requiring an application switch
+- a native read-only command failure was shown as a partial-read warning while
+  successful repository, runtime, backup, and project summaries remained
+  visible
 - Computer Use cannot retain `MY_AGENT_ASSETS_HOME` when its bridge relaunches
   the target application, so that bridge result is installation/window-shell
   evidence only. Fake-HOME workflow validation remains covered by the CLI/E2E
@@ -111,8 +122,8 @@ candidate build.
 
 The current macOS artifact locations used by the existing test plan are:
 
-- `target/release/bundle/macos/My Agent Assets.app`
-- `target/release/bundle/dmg/My Agent Assets_0.1.0_aarch64.dmg`
+- `target/aarch64-apple-darwin/release/bundle/macos/My Agent Assets.app`
+- `target/aarch64-apple-darwin/release/bundle/dmg/My Agent Assets_0.1.0_aarch64.dmg`
 
 Before publishing a Beta, regenerate these artifacts from the exact release
 commit and record:
