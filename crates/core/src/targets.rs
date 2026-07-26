@@ -972,7 +972,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::TomlMcpPatch,
             scope: TargetScope::Custom,
-            path: PathBuf::from("/tmp/custom-mcp.toml"),
+            path: std::env::temp_dir().join("custom-mcp.toml"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -985,7 +985,7 @@ mod tests {
     fn registry_rejects_duplicate_ids_and_paths() {
         let first = custom_json_target();
         let mut duplicate_id = first.clone();
-        duplicate_id.path = PathBuf::from("/tmp/other-mcp.json");
+        duplicate_id.path = std::env::temp_dir().join("other-mcp.json");
         assert!(TargetRegistry::new(vec![first.clone(), duplicate_id]).is_err());
 
         let mut duplicate_path = first.clone();

@@ -883,12 +883,23 @@ fn link_points_to(path: &Path, canonical: &Path) -> Result<bool> {
     if !is_link_or_junction(&metadata) {
         return Ok(false);
     }
+    #[cfg(windows)]
+    {
+        // Junction targets returned by read_link can use an extended-length
+        // path prefix. Canonicalizing both sides compares filesystem identity
+        // without depending on that Windows representation detail.
+        return Ok(fs::canonicalize(path)? == fs::canonicalize(canonical)?);
+    }
+
+    #[cfg(not(windows))]
     let link = fs::read_link(path)?;
+    #[cfg(not(windows))]
     let link = if link.is_absolute() {
         link
     } else {
         path.parent().unwrap_or_else(|| Path::new(".")).join(link)
     };
+    #[cfg(not(windows))]
     Ok(link == canonical)
 }
 
