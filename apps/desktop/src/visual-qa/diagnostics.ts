@@ -2,6 +2,7 @@ import type { PageId } from "../app/pages";
 import type { VisualQaPlatform } from "./config";
 
 export const OVERFLOW_TOLERANCE = 1;
+export const MIN_READABLE_FONT_SIZE = 12;
 
 export type OverflowResults = {
   document: boolean;
@@ -134,6 +135,26 @@ function inspectLocalScrolling(severeIssues: string[]) {
   }
 }
 
+function inspectTypography(severeIssues: string[]) {
+  const elements = document.querySelectorAll<HTMLElement>("body *");
+  for (const element of elements) {
+    if (!isVisible(element) || element.getAttribute("aria-hidden") === "true") continue;
+    if (["SCRIPT", "STYLE", "SVG", "PATH"].includes(element.tagName)) continue;
+
+    const hasDirectText = [...element.childNodes].some(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+    );
+    if (!hasDirectText) continue;
+
+    const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
+    if (Number.isFinite(fontSize) && fontSize < MIN_READABLE_FONT_SIZE) {
+      severeIssues.push(
+        `${labelFor(element)} uses ${fontSize}px text, below the ${MIN_READABLE_FONT_SIZE}px readability baseline.`,
+      );
+    }
+  }
+}
+
 export function collectVisualQaReport(input: {
   pageId: PageId;
   pageTitle: string;
@@ -161,6 +182,7 @@ export function collectVisualQaReport(input: {
   inspectPanels(appMain, severeIssues);
   inspectClipping(appMain, severeIssues, warningIssues);
   inspectLocalScrolling(severeIssues);
+  inspectTypography(severeIssues);
 
   return {
     pageId: input.pageId,

@@ -4,7 +4,7 @@ export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_STATUSES = ["ready", "mounted", "unmounted", "conflict", "invalid"] as const;
 export type AssetStatus = (typeof ASSET_STATUSES)[number];
 
-export const PROJECT_STATUSES = ["ready", "unchecked", "needs_attention", "missing_path", "invalid"] as const;
+export const PROJECT_STATUSES = ["ready", "changed", "needsSync", "invalid"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 export const RUNTIME_SCOPES = ["user", "local", "project"] as const;
@@ -104,47 +104,47 @@ export type ProjectSummary = {
   status: ProjectStatus;
   description: string;
   updatedAt: string | null;
-  lastCheckedAt?: string | null;
-  pathAvailable: boolean;
-  warningCount: number;
   assetCounts: AssetCounts;
   mounts: string[];
+  lastCheckedAtEpochSeconds?: number | null;
+  pathHealthy?: boolean;
+  warnings?: string[];
 };
 
-export type ProjectCheckSummary = {
-  checkedAtEpochSeconds: number;
-  assetCounts: AssetCounts;
-  warningCount: number;
-  pathAvailable: boolean;
+export type ProjectSaveRequest = {
+  id?: string;
+  name: string;
+  title: string;
+  path: string;
+  description: string;
+};
+
+export type ProjectRemoveRequest = {
+  id: string;
 };
 
 export type ManagedProject = {
   id: string;
   name: string;
+  title: string;
   path: string;
-  createdAtEpochSeconds: number;
-  updatedAtEpochSeconds: number;
-  lastCheck?: ProjectCheckSummary;
+  description: string;
+  lastInspection?: {
+    checkedAtEpochSeconds: number;
+    skills: number;
+    commands: number;
+    mcps: number;
+    pathHealthy: boolean;
+    warnings: string[];
+  };
 };
-
-export type ProjectAddPreviewRequest = {
-  path: string;
-  name?: string;
-};
-
-export type ProjectEditPreviewRequest = {
-  projectId: string;
-  name?: string;
-  path?: string;
-};
-
-export type ProjectRemovePreviewRequest = { projectId: string };
 
 export type ProjectChangePreview = {
   previewId: string;
-  operation: "add" | "edit" | "remove";
-  project: ManagedProject;
+  operation: "save" | "remove";
+  project?: ManagedProject;
   affectedPaths: string[];
+  migratedTargetIds: string[];
   blockingBindings: string[];
   warnings: string[];
   canApply: boolean;
@@ -152,35 +152,33 @@ export type ProjectChangePreview = {
   expiresAtEpochSeconds: number;
 };
 
-export type ProjectAddApplyRequest = {
+export type ProjectSaveApplyRequest = {
   previewId: string;
   previewGeneratedAtEpochSeconds: number;
-  request: ProjectAddPreviewRequest;
-};
-
-export type ProjectEditApplyRequest = {
-  previewId: string;
-  previewGeneratedAtEpochSeconds: number;
-  request: ProjectEditPreviewRequest;
+  request: ProjectSaveRequest;
 };
 
 export type ProjectRemoveApplyRequest = {
   previewId: string;
   previewGeneratedAtEpochSeconds: number;
-  request: ProjectRemovePreviewRequest;
+  request: ProjectRemoveRequest;
 };
 
 export type ProjectChangeResult = {
   previewId: string;
-  operation: "add" | "edit" | "remove";
-  project: ManagedProject;
+  operation: "save" | "remove";
+  projectId: string;
   registryPath: string;
   affectedPaths: string[];
 };
 
-export type ProjectInspectionRequest = { projectIds: string[] };
-export type ProjectInspection = {
-  project: ProjectSummary;
+export type ProjectRefreshRequest = {
+  projectIds: string[];
+};
+
+export type ProjectRefreshResult = {
+  refreshedProjectIds: string[];
+  registryPath: string;
   warnings: string[];
 };
 
@@ -439,6 +437,7 @@ export type SyncPreview = {
   direction: SyncDirection;
   status: GitStatus;
   repositoryVisibility: "private" | "public" | "internal" | "unknown";
+  allowPublicRemotePush: boolean;
   plannedEffects: string[];
   warnings: string[];
   backupRequired: boolean;
@@ -456,6 +455,7 @@ export type DesktopSettings = {
   planOnlyByDefault: boolean;
   gitDefaultBranch: string;
   gitRemote: string;
+  allowPublicRemotePush: boolean;
   appearanceTheme: AppearanceTheme;
   density: DensityPreference;
   logLevel: LogLevel;
@@ -482,7 +482,27 @@ export type SyncApplyResult = {
   contentDiagnostics?: ContentDiagnostic[];
   journalPath: string;
 };
-export type SettingsSaveInput = { settings: DesktopSettings };
+export type SettingsPreviewInput = { settings: DesktopSettings };
+export type SettingsPreview = {
+  previewId: string;
+  settings: DesktopSettings;
+  affectedPaths: string[];
+  plannedEffects: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+export type SettingsApplyInput = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: SettingsPreviewInput;
+};
+export type SettingsApplyResult = {
+  previewId: string;
+  settings: DesktopSettings;
+  affectedPaths: string[];
+};
 export const RUNTIME_PROVIDERS = ["claude_code", "codex", "custom"] as const;
 export type RuntimeProvider = (typeof RUNTIME_PROVIDERS)[number];
 export const RUNTIME_SOURCE_FORMATS = [
@@ -630,15 +650,12 @@ export type RegisteredMountTarget = {
   status: "ready" | "blocked" | "invalid";
 };
 
-export type MountBindingStatus = "mounted" | "out_of_sync" | "orphaned";
-
-export type MountBindingSummary = {
+export type MountBinding = {
+  id: string;
   assetId: string;
   targetId: string;
-  status: MountBindingStatus;
-  targetPath?: string;
-  provider?: RuntimeProvider;
-  scope?: "user" | "local" | "project" | "custom";
+  status: "mounted" | "out_of_sync" | "orphaned";
+  lastSyncedAt?: string;
 };
 
 export type TargetRegistrationPreviewRequest = {
@@ -791,7 +808,7 @@ export type McpSaveApplyResult = {
   affectedPaths: string[];
 };
 
-export type McpBindingStatus = MountBindingStatus;
+export type McpBindingStatus = "mounted" | "out_of_sync" | "orphaned";
 
 export type McpAssetDefinition = {
   assetId: string;
@@ -841,12 +858,14 @@ export type CanonicalUnmountApplyResult = {
 export type CanonicalDeletePreviewRequest = {
   assetId: string;
   mode: "require_unmounted" | "unmount_all";
+  removeMcpTargetEntries: boolean;
 };
 
 export type CanonicalDeleteBindingImpact = {
   targetId: string;
   targetPath: string;
   canUnmount: boolean;
+  willRemoveTargetEntry: boolean;
   warnings: string[];
 };
 
@@ -854,6 +873,7 @@ export type CanonicalDeletePreview = {
   previewId: string;
   assetId: string;
   canonicalPath: string;
+  removeMcpTargetEntries: boolean;
   bindings: CanonicalDeleteBindingImpact[];
   plannedEffects: string[];
   warnings: string[];
@@ -960,4 +980,35 @@ export type BatchImportApplyResult = {
   items: CanonicalImportApplyResult[];
   affectedPaths: string[];
   journalPath: string;
+};
+
+export type GitRemotePreviewRequest = {
+  remoteName: string;
+  remoteUrl: string;
+};
+
+export type GitRemotePreview = {
+  previewId: string;
+  remoteName: string;
+  previousUrl?: string;
+  remoteUrl: string;
+  affectedPaths: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type GitRemoteApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: GitRemotePreviewRequest;
+};
+
+export type GitRemoteApplyResult = {
+  previewId: string;
+  remoteName: string;
+  remoteUrl: string;
+  backupPath: string;
+  affectedPaths: string[];
 };

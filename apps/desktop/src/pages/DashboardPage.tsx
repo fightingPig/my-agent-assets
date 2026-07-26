@@ -15,12 +15,11 @@ import {
   doctorReport,
   consistencyRepairApply,
   consistencyRepairPreview,
-  diagnosticExportApply,
-  diagnosticExportPreview,
   initializationApply,
   initializationPreview,
   listAuditLog,
   listAssets,
+  listBackups,
   listProjects,
   recoveryStatus,
 } from "../app/data-api";
@@ -31,12 +30,12 @@ import type {
   ConsistencyRepairAction,
   ConsistencyRepairPreview,
   DoctorReport,
-  DiagnosticExportPreview,
   GitStatus,
   InitializationPreview,
   ProjectSummary,
   RecoveryStatus,
 } from "../app/contracts";
+import type { PageId } from "../app/pages";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import {
   projects as demoProjects,
@@ -48,6 +47,7 @@ import {
 type DashboardPageProps = {
   appInfo: AppInfo;
   demoMode?: boolean;
+  onPageChange?: (page: PageId) => void;
 };
 
 type DashboardStat = {
@@ -81,9 +81,10 @@ const healthyRecoveryStatus: RecoveryStatus = {
   message: "没有未完成事务。",
 };
 
-export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps) {
+export function DashboardPage({ appInfo, demoMode = false, onPageChange }: DashboardPageProps) {
   const [assets, setAssets] = useState<readonly AssetSummary[]>([]);
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [backupCount, setBackupCount] = useState(0);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
   const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
   const [auditEntries, setAuditEntries] = useState<readonly AuditLogEntry[]>([]);
@@ -91,9 +92,6 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
   const [repairPreview, setRepairPreview] = useState<ConsistencyRepairPreview | null>(null);
   const [repairMessage, setRepairMessage] = useState("");
   const [repairBusy, setRepairBusy] = useState(false);
-  const [diagnosticExport, setDiagnosticExport] = useState<DiagnosticExportPreview | null>(null);
-  const [diagnosticExportMessage, setDiagnosticExportMessage] = useState("");
-  const [diagnosticExportBusy, setDiagnosticExportBusy] = useState(false);
   const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
   const [showInitializationPreview, setShowInitializationPreview] = useState(false);
   const [initializationMessage, setInitializationMessage] = useState("");
@@ -109,36 +107,39 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
 
     let cancelled = false;
     setStateLabel("读取中");
-    Promise.all([
+    Promise.allSettled([
       listAssets({ assetType: null }),
       listProjects(),
+      listBackups(),
       gitStatus(),
       recoveryStatus(),
       listAuditLog(),
       initializationPreview(),
       doctorReport(),
     ])
-      .then(([loadedAssets, loadedProjects, loadedRepository, loadedRecovery, loadedAuditEntries, loadedInitialization, loadedDoctor]) => {
+      .then(([loadedAssets, loadedProjects, loadedBackups, loadedRepository, loadedRecovery, loadedAuditEntries, loadedInitialization, loadedDoctor]) => {
         if (cancelled) return;
-        setAssets(loadedAssets);
-        setProjects(loadedProjects);
-        setRepository(loadedRepository);
-        setRecovery(loadedRecovery);
-        setAuditEntries(loadedAuditEntries);
-        setInitialization(loadedInitialization);
-        setDoctor(loadedDoctor);
-        setStateLabel("只读真实数据");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setAssets([]);
-        setProjects([]);
-        setRepository(emptyGitStatus);
-        setRecovery(healthyRecoveryStatus);
-        setAuditEntries([]);
-        setInitialization(null);
-        setDoctor(null);
-        setStateLabel(`读取失败：${errorMessage(error)}`);
+        setAssets(settledValue(loadedAssets, []));
+        setProjects(settledValue(loadedProjects, []));
+        setBackupCount(settledValue(loadedBackups, []).length);
+        setRepository(settledValue(loadedRepository, emptyGitStatus));
+        setRecovery(settledValue(loadedRecovery, healthyRecoveryStatus));
+        setAuditEntries(settledValue(loadedAuditEntries, []));
+        setInitialization(settledValue(loadedInitialization, null));
+        setDoctor(settledValue(loadedDoctor, null));
+        const failedReads = [
+          loadedAssets,
+          loadedProjects,
+          loadedBackups,
+          loadedRepository,
+          loadedRecovery,
+          loadedAuditEntries,
+          loadedInitialization,
+          loadedDoctor,
+        ].filter((result) => result.status === "rejected").length;
+        setStateLabel(
+          failedReads === 0 ? "只读真实数据" : `部分读取失败（${failedReads} 项）`,
+        );
       });
     return () => {
       cancelled = true;
@@ -212,50 +213,21 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
     }
   };
 
-  const handleDiagnosticExportPreview = async () => {
-    setDiagnosticExportBusy(true);
-    setDiagnosticExportMessage("");
-    try {
-      setDiagnosticExport(await diagnosticExportPreview());
-    } catch (error) {
-      setDiagnosticExportMessage(`诊断包预览失败：${errorMessage(error)}`);
-    } finally {
-      setDiagnosticExportBusy(false);
-    }
-  };
-
-  const handleDiagnosticExportApply = async () => {
-    if (!diagnosticExport?.canApply) return;
-    setDiagnosticExportBusy(true);
-    setDiagnosticExportMessage("");
-    try {
-      const result = await diagnosticExportApply({
-        previewId: diagnosticExport.previewId,
-        previewGeneratedAtEpochSeconds: diagnosticExport.generatedAtEpochSeconds,
-      });
-      setDiagnosticExportMessage(`已导出脱敏诊断包：${result.packagePath}`);
-      setDiagnosticExport(null);
-    } catch (error) {
-      setDiagnosticExportMessage(`导出诊断包失败：${errorMessage(error)}`);
-    } finally {
-      setDiagnosticExportBusy(false);
-    }
-  };
 
   const stats = demoMode ? demoStats : realStats(assets, projects);
+  const statPages: Record<string, PageId> = {
+    Skills: "skills",
+    Commands: "commands",
+    "MCP Servers": "mcp",
+    项目: "projects",
+  };
   const visibleProjects = demoMode
     ? demoProjects
     : projects.slice(0, 3).map((project) => ({
       name: project.name,
       path: project.path,
       assets: project.assetCounts.total,
-      state: project.status === "ready"
-        ? "正常"
-        : project.status === "unchecked"
-          ? "未检查"
-          : project.status === "missing_path"
-            ? "路径不可用"
-            : "需处理",
+      state: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : "正常",
     }));
   const recentActivities = demoMode
     ? demoRecentActivity
@@ -266,6 +238,17 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       icon: entry.outcome === "completed" ? CircleCheck : AlertTriangle,
       tone: entry.outcome === "completed" ? "green" : "amber",
     }));
+  const mountCount = assets.reduce((total, asset) => total + asset.mountTargets.length, 0);
+  const conflictCount = assets.filter((asset) => asset.status === "conflict").length
+    + (doctor?.contentDiagnostics.length ?? 0);
+  const runtimeCheck = (id: "claude_runtime" | "codex_runtime", label: string) => {
+    const check = doctor?.checks.find((item) => item.id === id);
+    return {
+      label,
+      detail: check?.message ?? "未读取本机 Runtime 诊断。",
+      status: check ? doctorStatusLabel(check.status) : "未读取",
+    };
+  };
   const systemChecks = demoMode ? demoSystemChecks : [
     {
       label: "资产中心",
@@ -277,10 +260,17 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       detail: repository.statusMessage,
       status: repository.isRepository ? (repository.clean ? "正常" : "有变更") : "未连接",
     },
+    runtimeCheck("claude_runtime", "Claude Code Runtime"),
+    runtimeCheck("codex_runtime", "Codex Runtime"),
     {
-      label: "Claude Runtime",
-      detail: `${assets.length} 项资产已读取`,
-      status: appInfo.backendReady ? "已连接" : "未连接",
+      label: "挂载关系",
+      detail: `${mountCount} 条本机 asset-to-target binding`,
+      status: mountCount > 0 ? "已挂载" : "暂无",
+    },
+    {
+      label: "备份历史",
+      detail: `${backupCount} 份 portable / local backup`,
+      status: backupCount > 0 ? "可查看" : "暂无",
     },
     {
       label: "事务恢复",
@@ -288,13 +278,9 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
       status: recovery.writesBlocked ? "写入已阻止" : "正常",
     },
     {
-      label: "资产一致性",
-      detail: doctor
-        ? doctor.contentDiagnostics.length === 0
-          ? "assets.yaml 与 canonical 内容一致"
-          : `${doctor.contentDiagnostics.length} 项需要处理`
-        : "未读取诊断",
-      status: doctor?.contentDiagnostics.length ? "需处理" : "正常",
+      label: "冲突与一致性",
+      detail: conflictCount === 0 ? "canonical 资产没有待处理冲突或诊断" : `${conflictCount} 项需要处理`,
+      status: conflictCount > 0 ? "需处理" : "正常",
     },
   ];
 
@@ -304,17 +290,20 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <article className="stat-card" key={stat.label}>
+            <button className="stat-card" data-no-drag="true" key={stat.label} onClick={() => onPageChange?.(statPages[stat.label])} style={NO_DRAG_REGION_STYLE} type="button">
               <div className={`icon-box ${stat.tone}`}><Icon size={20} /></div>
               <div className="stat-copy"><span>{stat.label}</span><strong>{stat.value}</strong><small>{stat.change}</small></div>
-            </article>
+            </button>
           );
         })}
       </section>
 
       <div className="dashboard-grid">
         <section className="panel activity-panel">
-          <div className="panel-header"><div><h2>最近活动</h2><p>资产中心的最新变更</p></div></div>
+          <div className="panel-header">
+            <div><h2>最近活动</h2><p>资产中心的最新变更</p></div>
+            {onPageChange ? <button className="text-button" data-no-drag="true" onClick={() => onPageChange("scan")} style={NO_DRAG_REGION_STYLE} type="button">扫描资产</button> : null}
+          </div>
           <div className="activity-list">
             {recentActivities.map((item) => {
               const Icon = item.icon;
@@ -337,27 +326,36 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
         </section>
 
         <section className="panel projects-panel">
-          <div className="panel-header"><div><h2>常用项目</h2><p>最近访问的运行目标</p></div></div>
+          <div className="panel-header">
+            <div><h2>已维护项目</h2><p>显式添加的本地运行目标</p></div>
+            {onPageChange ? <button className="text-button" data-no-drag="true" onClick={() => onPageChange("projects")} style={NO_DRAG_REGION_STYLE} type="button">管理项目</button> : null}
+          </div>
           <div className="project-list">
             {visibleProjects.map((project) => (
-              <div className="project-item" key={project.name}>
+              <button className="project-item" data-no-drag="true" key={project.name} onClick={() => onPageChange?.("projects")} style={NO_DRAG_REGION_STYLE} type="button">
                 <div className="project-folder"><FolderKanban size={18} /></div>
                 <div className="project-copy"><strong>{project.name}</strong><span>{project.path}</span></div>
                 <div className="project-meta"><span>{project.assets} 项资产</span><small className={project.state === "正常" ? "ok" : "pending"}>{project.state}</small></div>
-              </div>
+              </button>
             ))}
             {visibleProjects.length === 0 && (
               <div className="asset-empty-state">
                 <FolderKanban size={22} />
-                <strong>未发现本地项目</strong>
-                <span>项目扫描根目录下出现可识别项目后会显示在这里。</span>
+                <strong>尚未维护项目</strong>
+                <span>在项目列表添加已有本地目录后会显示在这里。</span>
               </div>
             )}
           </div>
         </section>
 
         <section className="panel health-panel">
-          <div className="panel-header"><div><h2>系统状态</h2><p>{demoMode ? "Visual QA 示例环境" : "本机只读运行环境"}</p></div><span className="healthy-badge"><CircleCheck size={14} />{stateLabel}</span></div>
+          <div className="panel-header">
+            <div><h2>系统状态</h2><p>{demoMode ? "Visual QA 示例环境" : "本机只读运行环境"}</p></div>
+            <div className="initialization-actions">
+              {onPageChange ? <button className="text-button" data-no-drag="true" onClick={() => onPageChange("backups")} style={NO_DRAG_REGION_STYLE} type="button">查看备份</button> : null}
+              <span className="healthy-badge"><CircleCheck size={14} />{stateLabel}</span>
+            </div>
+          </div>
           <div className="check-grid">
             {systemChecks.map((check) => (
               <div className="check-item" key={check.label}>
@@ -470,30 +468,6 @@ export function DashboardPage({ appInfo, demoMode = false }: DashboardPageProps)
               {repairMessage && <p className="initialization-message">{repairMessage}</p>}
             </section>
           )}
-          {!demoMode && doctor && (
-            <section className="initialization-panel" aria-label="导出诊断包">
-              <div className="initialization-copy">
-                <Activity size={17} />
-                <div>
-                  <strong>导出诊断包</strong>
-                  <span>仅导出脱敏日志、版本/平台和状态摘要，不包含资产、live config、备份或用户配置。</span>
-                </div>
-              </div>
-              {!diagnosticExport ? (
-                <button className="asset-secondary-action" data-no-drag="true" disabled={diagnosticExportBusy} onClick={handleDiagnosticExportPreview} style={NO_DRAG_REGION_STYLE} type="button">{diagnosticExportBusy ? "正在检查…" : "预览诊断包"}</button>
-              ) : (
-                <div className="initialization-preview">
-                  <p>将导出 {diagnosticExport.includedFiles.length} 个逻辑文件：{diagnosticExport.includedFiles.map((file) => file.logicalPath).join("、") || "状态摘要"}</p>
-                  {diagnosticExport.warnings.map((warning) => <p className="initialization-warning" key={warning}>{warning}</p>)}
-                  <div className="initialization-actions">
-                    <button className="asset-secondary-action" data-no-drag="true" disabled={diagnosticExportBusy} onClick={() => setDiagnosticExport(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button>
-                    <button className="asset-business-action" data-no-drag="true" disabled={diagnosticExportBusy || !diagnosticExport.canApply} onClick={handleDiagnosticExportApply} style={NO_DRAG_REGION_STYLE} type="button">确认导出</button>
-                  </div>
-                </div>
-              )}
-              {diagnosticExportMessage && <p className="initialization-message">{diagnosticExportMessage}</p>}
-            </section>
-          )}
         </section>
       </div>
     </>
@@ -541,8 +515,18 @@ function realStats(assets: readonly AssetSummary[], projects: readonly ProjectSu
     { label: "Skills", value: count("skill"), change: "本地真实数据", icon: BookOpen, tone: "green" },
     { label: "Commands", value: count("command"), change: "本地真实数据", icon: TerminalSquare, tone: "blue" },
     { label: "MCP Servers", value: count("mcp"), change: "本地真实数据", icon: Blocks, tone: "violet" },
-    { label: "项目", value: projects.length, change: "扫描根目录", icon: FolderKanban, tone: "amber" },
+    { label: "项目", value: projects.length, change: "已维护项目", icon: FolderKanban, tone: "amber" },
   ];
+}
+
+function doctorStatusLabel(status: "ok" | "warning" | "error") {
+  if (status === "ok") return "正常";
+  if (status === "warning") return "需注意";
+  return "异常";
+}
+
+function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === "fulfilled" && result.value != null ? result.value : fallback;
 }
 
 function errorMessage(_error: unknown) {

@@ -1,3 +1,4 @@
+use crate::fingerprint::PreviewFingerprint;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result as CoreResult};
@@ -13,6 +14,7 @@ pub const SETTINGS_SCHEMA_VERSION: u32 = 1;
 pub const DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024 * 1024;
 const MIN_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024;
 const MAX_BACKUP_WARNING_THRESHOLD_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
+const PREVIEW_TTL_SECONDS: u64 = 600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppearanceTheme {
@@ -49,7 +51,8 @@ pub enum LogLevel {
 /// `asset_center_path` is derived from `home` by `load`/`save` and is never
 /// persisted, so callers cannot relocate the V1/V2 asset center through this
 /// settings API.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub asset_center_path: String,
     pub scan_roots: Vec<String>,
@@ -59,11 +62,47 @@ pub struct Settings {
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,
+    pub allow_public_remote_push: bool,
     pub appearance_theme: AppearanceTheme,
     pub density: DensityPreference,
     pub log_level: LogLevel,
     pub log_retention_days: u32,
     pub cli_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPreviewRequest {
+    pub settings: Settings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPreview {
+    pub preview_id: String,
+    pub settings: Settings,
+    pub affected_paths: Vec<PathBuf>,
+    pub planned_effects: Vec<String>,
+    pub warnings: Vec<String>,
+    pub can_apply: bool,
+    pub generated_at_epoch_seconds: u64,
+    pub expires_at_epoch_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsApplyRequest {
+    pub preview_id: String,
+    pub preview_generated_at_epoch_seconds: u64,
+    pub request: SettingsPreviewRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsApplyResult {
+    pub preview_id: String,
+    pub settings: Settings,
+    pub affected_paths: Vec<PathBuf>,
 }
 
 impl Settings {
@@ -81,6 +120,7 @@ impl Settings {
             plan_only_by_default: true,
             git_default_branch: "main".into(),
             git_remote: "origin".into(),
+            allow_public_remote_push: false,
             appearance_theme: AppearanceTheme::System,
             density: DensityPreference::Compact,
             log_level: LogLevel::Info,
@@ -162,6 +202,8 @@ struct SettingsFile {
     plan_only_by_default: bool,
     git_default_branch: String,
     git_remote: String,
+    #[serde(default)]
+    allow_public_remote_push: bool,
     appearance_theme: AppearanceTheme,
     density: DensityPreference,
     log_level: LogLevel,
@@ -204,7 +246,7 @@ pub fn load(home: &Path) -> Result<Settings, SettingsError> {
     Ok(normalize_settings(home, file.into_settings(home)))
 }
 
-pub fn save(home: &Path, settings: &Settings) -> Result<Settings, SettingsError> {
+pub(crate) fn save(home: &Path, settings: &Settings) -> Result<Settings, SettingsError> {
     let asset_center = asset_center_path(home);
     let requested_path = settings_path(home);
     if requested_path.exists() {
@@ -248,8 +290,101 @@ pub fn to_yaml(home: &Path, settings: &Settings) -> Result<String, SettingsError
     })
 }
 
-pub fn save_transactional(home: &Path, settings: &Settings) -> CoreResult<Settings> {
+#[cfg(test)]
+fn save_transactional(home: &Path, settings: &Settings) -> CoreResult<Settings> {
     let _lock = OperationLock::acquire(home)?;
+    save_with_journal(home, settings)
+}
+
+pub fn preview_settings(
+    home: &Path,
+    request: &SettingsPreviewRequest,
+) -> CoreResult<SettingsPreview> {
+    preview_settings_at(home, request, epoch_seconds())
+}
+
+pub fn apply_settings(
+    home: &Path,
+    request: &SettingsApplyRequest,
+) -> CoreResult<SettingsApplyResult> {
+    validate_preview_time(request.preview_generated_at_epoch_seconds)?;
+    let _lock = OperationLock::acquire(home)?;
+    let preview = preview_settings_at(
+        home,
+        &request.request,
+        request.preview_generated_at_epoch_seconds,
+    )?;
+    if !preview.can_apply {
+        return Err(MaaError::new(format!(
+            "settings preview is blocked: {}",
+            preview.warnings.join("; ")
+        )));
+    }
+    if preview.preview_id != request.preview_id {
+        return Err(MaaError::new(
+            "settings preview is stale; generate a new preview",
+        ));
+    }
+    let settings = save_with_journal(home, &preview.settings)?;
+    Ok(SettingsApplyResult {
+        preview_id: preview.preview_id,
+        settings,
+        affected_paths: preview.affected_paths,
+    })
+}
+
+fn preview_settings_at(
+    home: &Path,
+    request: &SettingsPreviewRequest,
+    generated_at: u64,
+) -> CoreResult<SettingsPreview> {
+    let settings = normalize_settings(home, request.settings.clone());
+    let path = settings_path(home);
+    let mut warnings = Vec::new();
+    if path.exists() {
+        if let Err(error) = load(home) {
+            warnings.push(error.to_string());
+        }
+    }
+    if let Err(error) = guard_write_path(&asset_center_path(home), &path) {
+        warnings.push(error.to_string());
+    }
+
+    let request_bytes = serde_json::to_vec(&settings)
+        .map_err(|error| MaaError::new(format!("cannot serialize settings preview: {error}")))?;
+    let mut fingerprint = PreviewFingerprint::new("settings-save");
+    fingerprint.add_bytes("request", &request_bytes);
+    fingerprint.add_u64("generated-at", generated_at);
+    fingerprint.add_path_if_present("settings", &path)?;
+
+    Ok(SettingsPreview {
+        preview_id: fingerprint.finish("settings-save"),
+        settings,
+        affected_paths: vec![path.clone()],
+        planned_effects: vec![format!(
+            "使用规范化后的设置更新本地配置文件：{}。",
+            display_path(&path)
+        )],
+        can_apply: warnings.is_empty(),
+        warnings,
+        generated_at_epoch_seconds: generated_at,
+        expires_at_epoch_seconds: generated_at.saturating_add(PREVIEW_TTL_SECONDS),
+    })
+}
+
+fn validate_preview_time(generated_at: u64) -> CoreResult<()> {
+    let now = epoch_seconds();
+    if generated_at > now.saturating_add(5)
+        || now.saturating_sub(generated_at) > PREVIEW_TTL_SECONDS
+    {
+        return Err(MaaError::new(
+            "settings preview expired; generate a new preview",
+        ));
+    }
+    Ok(())
+}
+
+fn save_with_journal(home: &Path, settings: &Settings) -> CoreResult<Settings> {
     let operation_id = format!(
         "settings-{}-{}",
         std::process::id(),
@@ -282,6 +417,13 @@ pub fn save_transactional(home: &Path, settings: &Settings) -> CoreResult<Settin
     }
 }
 
+fn epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 impl SettingsFile {
     fn from_settings(settings: &Settings) -> Self {
         Self {
@@ -293,6 +435,7 @@ impl SettingsFile {
             plan_only_by_default: settings.plan_only_by_default,
             git_default_branch: settings.git_default_branch.clone(),
             git_remote: settings.git_remote.clone(),
+            allow_public_remote_push: settings.allow_public_remote_push,
             appearance_theme: settings.appearance_theme,
             density: settings.density,
             log_level: settings.log_level,
@@ -311,6 +454,7 @@ impl SettingsFile {
             plan_only_by_default: self.plan_only_by_default,
             git_default_branch: self.git_default_branch,
             git_remote: self.git_remote,
+            allow_public_remote_push: self.allow_public_remote_push,
             appearance_theme: self.appearance_theme,
             density: self.density,
             log_level: self.log_level,
@@ -465,6 +609,7 @@ fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fingerprint::assert_sha256_preview_id;
     use crate::operation::{crash_test, recover_incomplete};
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -557,6 +702,7 @@ mod tests {
             settings.backup_warning_threshold_bytes,
             DEFAULT_BACKUP_WARNING_THRESHOLD_BYTES
         );
+        assert!(!settings.allow_public_remote_push);
         fs::remove_dir_all(home).unwrap();
     }
 
@@ -637,6 +783,99 @@ mod tests {
         assert_eq!(report.attempts.len(), 1);
         assert!(report.attempts[0].recovered);
         assert_eq!(load(&home).unwrap().max_depth, 3);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn preview_is_read_only_and_apply_persists_the_exact_settings() {
+        let home = fake_home("preview-apply");
+        let mut settings = Settings::defaults_for_home(&home);
+        settings.max_depth = 9;
+        let request = SettingsPreviewRequest { settings };
+
+        let preview = preview_settings(&home, &request).unwrap();
+
+        assert!(preview.can_apply, "{:?}", preview.warnings);
+        assert_eq!(preview.settings.max_depth, 9);
+        assert_eq!(preview.affected_paths, vec![settings_path(&home)]);
+        assert_sha256_preview_id(&preview.preview_id, "settings-save-");
+        assert!(!settings_path(&home).exists());
+
+        let result = apply_settings(
+            &home,
+            &SettingsApplyRequest {
+                preview_id: preview.preview_id.clone(),
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.preview_id, preview.preview_id);
+        assert_eq!(result.settings.max_depth, 9);
+        assert_eq!(load(&home).unwrap(), result.settings);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn apply_rejects_changed_request_and_stale_config() {
+        let home = fake_home("preview-stale");
+        let request = SettingsPreviewRequest {
+            settings: Settings::defaults_for_home(&home),
+        };
+        let preview = preview_settings(&home, &request).unwrap();
+
+        let mut changed_request = request.clone();
+        changed_request.settings.max_depth = 8;
+        let changed_error = apply_settings(
+            &home,
+            &SettingsApplyRequest {
+                preview_id: preview.preview_id.clone(),
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request: changed_request,
+            },
+        )
+        .unwrap_err();
+        assert!(changed_error.to_string().contains("stale"));
+        assert!(!settings_path(&home).exists());
+
+        let mut external = Settings::defaults_for_home(&home);
+        external.max_depth = 3;
+        save(&home, &external).unwrap();
+        let stale_error = apply_settings(
+            &home,
+            &SettingsApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap_err();
+        assert!(stale_error.to_string().contains("stale"));
+        assert_eq!(load(&home).unwrap().max_depth, 3);
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn apply_rejects_expired_preview() {
+        let home = fake_home("preview-expired");
+        let request = SettingsPreviewRequest {
+            settings: Settings::defaults_for_home(&home),
+        };
+        let preview = preview_settings_at(&home, &request, 1).unwrap();
+
+        let error = apply_settings(
+            &home,
+            &SettingsApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("expired"));
+        assert!(!settings_path(&home).exists());
         fs::remove_dir_all(home).unwrap();
     }
 }

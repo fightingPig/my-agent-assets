@@ -2,7 +2,6 @@ use crate::asset_registry::{
     canonical_path, load as load_assets, parse_asset_id, registry_path as asset_registry_path,
 };
 use crate::fingerprint::PreviewFingerprint;
-use crate::fs_sync::sync_directory;
 use crate::mcp::{
     patch_claude_json, patch_codex_toml, remove_from_claude_json, remove_from_codex_toml,
     CanonicalMcp, ClaudeScope, CodexScope,
@@ -838,23 +837,7 @@ fn create_directory_link(canonical: &Path, target: &Path, _: MountAdapter) -> Re
 fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter) -> Result<()> {
     match adapter {
         MountAdapter::WindowsDirectoryJunction => {
-            // Keep the command text constant. Runtime paths are positional
-            // PowerShell arguments, so cmd.exe metacharacters in an approved
-            // Windows path cannot be interpreted as another command.
-            let status = std::process::Command::new("powershell.exe")
-                .args([
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-Command",
-                    "New-Item -ItemType Junction -LiteralPath $args[0] -Target $args[1] -ErrorAction Stop | Out-Null",
-                ])
-                .arg(target)
-                .arg(canonical)
-                .status()?;
-            if !status.success() {
-                return Err(MaaError::new("failed to create Windows directory junction"));
-            }
+            junction::create(canonical, target)?;
             Ok(())
         }
         _ => {
@@ -885,12 +868,23 @@ fn link_points_to(path: &Path, canonical: &Path) -> Result<bool> {
     if !is_link_or_junction(&metadata) {
         return Ok(false);
     }
+    #[cfg(windows)]
+    {
+        // Junction targets returned by read_link can use an extended-length
+        // path prefix. Canonicalizing both sides compares filesystem identity
+        // without depending on that Windows representation detail.
+        return Ok(fs::canonicalize(path)? == fs::canonicalize(canonical)?);
+    }
+
+    #[cfg(not(windows))]
     let link = fs::read_link(path)?;
+    #[cfg(not(windows))]
     let link = if link.is_absolute() {
         link
     } else {
         path.parent().unwrap_or_else(|| Path::new(".")).join(link)
     };
+    #[cfg(not(windows))]
     Ok(link == canonical)
 }
 
@@ -987,7 +981,7 @@ fn atomic_runtime_write(path: &Path, content: &[u8]) -> Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        sync_directory(parent)
+        crate::operation::sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);
@@ -1093,7 +1087,10 @@ pub(crate) fn remove_path_if_present(path: &Path) -> Result<()> {
 fn remove_link_or_junction(path: &Path, metadata: &fs::Metadata) -> Result<()> {
     #[cfg(windows)]
     {
-        if metadata.is_dir() {
+        if junction::exists(path)? {
+            junction::delete(path)?;
+            fs::remove_dir(path)?;
+        } else if metadata.is_dir() {
             fs::remove_dir(path)?;
         } else {
             fs::remove_file(path)?;
@@ -1128,11 +1125,13 @@ mod tests {
     use super::*;
     use crate::asset_registry::{save as save_assets, AssetRecord, AssetRegistry};
     use crate::mount_registry::MountRegistry;
+    #[cfg(unix)]
     use crate::operation::{crash_test, recover_incomplete};
     use crate::targets::{
         save as save_targets, AssetKind, MountAdapter, ProviderState, TargetRegistry,
     };
     use serde_json::json;
+    #[cfg(unix)]
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[cfg(unix)]
@@ -1428,6 +1427,8 @@ mod tests {
             root.join("assets/commands"),
             root.join("assets/mcps"),
             root.join("backups/local"),
+            home.join(".claude"),
+            home.join(".codex"),
         ] {
             fs::create_dir_all(path).unwrap();
         }

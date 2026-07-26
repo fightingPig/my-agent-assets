@@ -226,6 +226,92 @@ interrupted application transaction.
 
 Do not modify window config or AppShell window strategy while adding provider support.
 
+## V1 Beta Product Rules
+
+### Managed Projects
+
+- The Projects page manages an explicit local project registry. Do not populate
+  it by listing arbitrary directories from `~/workspace`, `~/code`, Git
+  repositories, `package.json`, or `Cargo.toml`.
+- Add projects through a native directory picker. Store a stable project ID,
+  display name, normalized path, and the latest asset-health inspection
+  summary.
+- Reject duplicate paths and parent/child path overlaps.
+- Block project path edits and project removal while mounts still reference the
+  project. The user must remove those mounts first.
+- Removing a managed project removes only the registry entry. It must never
+  delete the project directory or canonical assets.
+- Project refresh discovers Claude Code and Codex runtime asset markers only.
+  The project root is depth `0`; the default maximum depth is `5` and remains
+  configurable.
+- Project health describes asset-maintenance state, not source-repository Git
+  cleanliness.
+- Local project paths, mount associations, inspection caches, and advanced
+  custom targets are machine-local state and must not be committed to the asset
+  Git repository.
+
+### Mount Targets
+
+- Standard user and project targets are derived by the Rust core from asset
+  type, location type, provider, project, and MCP scope. React and CLI callers
+  must not construct target paths.
+- Apply APIs accept an authorized target ID, never an arbitrary frontend path.
+- Project-level targets are not manually registered. Manual target
+  registration is reserved for advanced non-standard directories or MCP config
+  files.
+- Commands support Claude Code targets only.
+- Skills are canonical directory assets and mount through the platform adapter.
+- MCP targets are compiled by patching the target JSON or TOML section. Never
+  symlink an entire Claude or Codex live config file.
+
+### Write And Conflict Safety
+
+- Every persistent mutation uses preview plus explicit confirmation. Apply must
+  validate the preview ID, freshness, request fingerprint, and current state.
+- Scan/import conflicts are resolved only through explicit skip, manual rename,
+  or overwrite. Never silently overwrite or automatically rename.
+- Production error messages must be safe and redacted. Detailed diagnostics
+  belong in the local diagnostic export, not in user-facing errors.
+- Interrupted transactions may use the operation journal for internal rollback.
+  Historical backups remain history and manual recovery material, not an
+  in-app Restore workflow.
+
+### Asset Git Sync
+
+- The asset repository is the Git repository inside the user's asset center.
+  It is separate from this application's source-code repository.
+- Push defaults to verified GitHub private repositories.
+- Public remote Push is allowed only after the user explicitly enables the
+  setting through preview and confirmation. Public or unknown visibility must
+  be highlighted before execution.
+- Pull and Push must use preview/apply, detect stale remote state, and stop on
+  conflicts. Do not fetch, merge, or resolve conflicts implicitly.
+- Push stages only the canonical allowlist. Machine-local project, target, and
+  mount state must remain excluded.
+
+## Cross-Platform File Rules
+
+- All filesystem writes and mount operations belong in the shared Rust core and
+  must be tested with isolated fake homes.
+- Do not assume Unix symlink behavior on Windows.
+- Directory mounts on Windows use the platform junction adapter. Creation,
+  verification, replacement, and removal must all recognize junctions and must
+  not follow or recursively delete the junction target.
+- Use native filesystem APIs or argument-array process calls. Never construct
+  shell command strings from paths.
+- Atomic write and sync behavior must account for Windows file-sharing and
+  read-handle restrictions.
+
+## Readability Baseline
+
+- V1 pages use a readability-first desktop hierarchy: page titles around
+  `32px`, section titles around `18px`, body text `15-16px`, and secondary,
+  table, and code text no smaller than `12-13px`.
+- Do not reduce type below this baseline to fit more content. Prefer removing
+  duplicated presentation, improving grouping, or adding local scrolling.
+- Layout changes must be checked at `1440x900` and `1180x760` for both macOS and
+  Windows through Visual QA.
+
 ## Static GUI Freeze
 
 The V1 static GUI pages are implemented, and their current page layouts are frozen.
@@ -310,6 +396,139 @@ It must not require typed confirmation and must not expose historical Restore
 actions.
 
 `visual-qa/` contains reusable static GUI screenshot and layout diagnostics tooling.
+
+## Version Iteration Rules
+
+### Version Branches
+
+- `main` is the latest integrated and accepted baseline. Do not start a new
+  version from an older release branch or an unmerged feature branch.
+- Create one release branch for each planned product version before version
+  work begins.
+- Codex-owned release branches use:
+
+  ```text
+  codex/release/v<major>.<minor>.<patch>
+  ```
+
+  Example:
+
+  ```text
+  codex/release/v0.1.2
+  ```
+
+- All Beta and RC iterations for the same product version stay on that one
+  release branch. Do not create a branch for every prerelease number.
+- Urgent fixes based on an already released version use:
+
+  ```text
+  codex/hotfix/v<major>.<minor>.<patch>
+  ```
+
+- Do not continue the next product version on the previous version branch.
+- Do not force-push or rewrite a version branch after any public tag has been
+  created from it.
+
+### Semantic Versions And Tags
+
+- Use semantic versioning:
+  - patch: compatible fixes only;
+  - minor: backward-compatible product capability;
+  - major: incompatible persisted-data, contract, or workflow change.
+- Prerelease tags use:
+
+  ```text
+  v<major>.<minor>.<patch>-beta.<number>
+  v<major>.<minor>.<patch>-rc.<number>
+  ```
+
+- Stable tags use:
+
+  ```text
+  v<major>.<minor>.<patch>
+  ```
+
+- Prerelease numbers increase monotonically on the same version branch.
+- Never move, overwrite, or reuse a tag that has been pushed publicly. A fix
+  after a failed or withdrawn prerelease receives the next prerelease number.
+- The tag must point to the exact commit used to build every attached
+  installer.
+
+### Version Synchronization
+
+- Before tagging, synchronize the product version in:
+  - `apps/desktop/package.json`;
+  - `apps/desktop/src-tauri/Cargo.toml`;
+  - `apps/desktop/src-tauri/tauri.conf.json`;
+  - `crates/core/Cargo.toml`;
+  - `crates/cli/Cargo.toml`;
+  - generated lock files affected by those changes.
+- `tauri.windows.conf.json` may use a Windows-compatible bundle version when a
+  prerelease SemVer string is not accepted by MSI or NSIS tooling. The mapping
+  must preserve the product version and prerelease sequence, and the
+  user-facing installer filename must still use the Git tag.
+- The application version returned by `app_info`, the CLI version, Release
+  title, tag, and installer names must identify the same product version.
+- Version synchronization is a release gate. Do not tag when any version source
+  disagrees.
+
+### Iteration Sequence
+
+For each version:
+
+1. Update local `main` and verify it matches `origin/main`.
+2. Create the version branch from that exact baseline.
+3. Record the version scope and explicit non-goals.
+4. Implement changes without mixing unrelated future-version work.
+5. Run the required frontend, Rust, Visual QA, and platform validation.
+6. Update version fields and release notes.
+7. Commit and push the version branch.
+8. Create and push the next immutable Beta, RC, or stable tag.
+9. Wait for both platform builds and the GitHub Release publish job.
+10. Verify installer names, checksums, download URLs, and tag commit.
+11. Merge the accepted version branch back into `main`.
+12. Start later version work from the updated `main`.
+
+### Release Acceptance
+
+- A Beta is testable but may be unsigned or unnotarized when that limitation is
+  clearly stated.
+- An RC must have no known release-blocking functional, data-safety, or
+  cross-platform packaging defect.
+- A stable release requires the complete automated suite plus the documented
+  native macOS and Windows acceptance checks.
+- Failed required validation stops tagging and publishing.
+- A GitHub Actions success without a GitHub Release and downloadable installers
+  is not a completed release.
+
+## Desktop Release Rules
+
+- The application source repository may remain public. Its visibility must
+  never be used as the asset-repository privacy policy.
+- Beta tags matching `v*-beta.*` trigger the cross-platform desktop release
+  workflow.
+- A downloadable release is complete only after both macOS and Windows builds
+  succeed and the installers are attached to a GitHub Prerelease. Actions
+  artifacts alone are temporary CI evidence, not a user-facing release.
+- Publish an Apple Silicon macOS DMG, a Windows x64 MSI, a Windows x64 NSIS
+  setup executable, and `SHA256SUMS.txt`.
+- Use stable public asset names containing product, version, platform, and
+  architecture.
+- Installer names use these exact patterns:
+
+  ```text
+  My-Agent-Assets-v<version>-macOS-arm64.dmg
+  My-Agent-Assets-v<version>-Windows-x64.msi
+  My-Agent-Assets-v<version>-Windows-x64-Setup.exe
+  SHA256SUMS.txt
+  ```
+
+- `<version>` includes the prerelease suffix when applicable, for example
+  `0.1.2-beta.1`.
+- Release notes must state signing and notarization status. Do not present
+  ad-hoc-signed, unnotarized, or unsigned installers as production-signed.
+- The release tag, installers, checksum file, and GitHub Release page must be
+  verified before announcing availability.
 
 ## Validation Before Full Page Work
 

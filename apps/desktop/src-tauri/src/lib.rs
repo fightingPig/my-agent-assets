@@ -7,7 +7,8 @@ mod shared_core;
 use command_error::DesktopCommandError;
 use contracts::{
     AppInfo, AssetOpenResult, BackupRevealInput, BackupRevealResult, CanonicalAssetContentInput,
-    CanonicalMcpGetInput, DesktopSettings, SettingsSaveInput,
+    CanonicalMcpGetInput, DesktopSettings, SettingsApplyInput, SettingsApplyResult,
+    SettingsPreview, SettingsPreviewInput,
 };
 
 type CommandResult<T> = Result<T, DesktopCommandError>;
@@ -33,8 +34,13 @@ fn settings_load() -> CommandResult<DesktopSettings> {
 }
 
 #[tauri::command]
-fn settings_save(input: SettingsSaveInput) -> CommandResult<DesktopSettings> {
-    command_result(settings::settings_save_command(input))
+fn settings_preview(input: SettingsPreviewInput) -> CommandResult<SettingsPreview> {
+    command_result(settings::settings_preview_command(input))
+}
+
+#[tauri::command]
+fn settings_apply(input: SettingsApplyInput) -> CommandResult<SettingsApplyResult> {
+    command_result(settings::settings_apply_command(input))
 }
 
 #[tauri::command]
@@ -124,52 +130,38 @@ fn list_projects() -> CommandResult<Vec<my_agent_assets_core::query::ProjectSumm
 }
 
 #[tauri::command]
-fn inspect_projects(
-    input: my_agent_assets_core::query::ProjectInspectionRequest,
-) -> CommandResult<Vec<my_agent_assets_core::query::ProjectInspection>> {
-    command_result(shared_core::inspect_projects_command(input))
+fn project_save_preview(
+    input: my_agent_assets_core::project_registry::ProjectSaveRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangePreview> {
+    command_result(shared_core::project_save_preview_command(input))
 }
 
 #[tauri::command]
-fn project_add_preview(
-    input: my_agent_assets_core::managed_projects::ProjectAddPreviewRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangePreview> {
-    command_result(shared_core::project_add_preview_command(input))
-}
-
-#[tauri::command]
-fn project_add_apply(
-    input: my_agent_assets_core::managed_projects::ProjectAddApplyRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangeResult> {
-    command_result(shared_core::project_add_apply_command(input))
-}
-
-#[tauri::command]
-fn project_edit_preview(
-    input: my_agent_assets_core::managed_projects::ProjectEditPreviewRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangePreview> {
-    command_result(shared_core::project_edit_preview_command(input))
-}
-
-#[tauri::command]
-fn project_edit_apply(
-    input: my_agent_assets_core::managed_projects::ProjectEditApplyRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangeResult> {
-    command_result(shared_core::project_edit_apply_command(input))
+fn project_save_apply(
+    input: my_agent_assets_core::project_registry::ProjectSaveApplyRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangeResult> {
+    command_result(shared_core::project_save_apply_command(input))
 }
 
 #[tauri::command]
 fn project_remove_preview(
-    input: my_agent_assets_core::managed_projects::ProjectRemovePreviewRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangePreview> {
+    input: my_agent_assets_core::project_registry::ProjectRemoveRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangePreview> {
     command_result(shared_core::project_remove_preview_command(input))
 }
 
 #[tauri::command]
 fn project_remove_apply(
-    input: my_agent_assets_core::managed_projects::ProjectRemoveApplyRequest,
-) -> CommandResult<my_agent_assets_core::managed_projects::ProjectChangeResult> {
+    input: my_agent_assets_core::project_registry::ProjectRemoveApplyRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectChangeResult> {
     command_result(shared_core::project_remove_apply_command(input))
+}
+
+#[tauri::command]
+fn project_refresh(
+    input: my_agent_assets_core::project_registry::ProjectRefreshRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectRefreshResult> {
+    command_result(shared_core::project_refresh_command(input))
 }
 
 #[tauri::command]
@@ -211,6 +203,20 @@ fn sync_apply(
 }
 
 #[tauri::command]
+fn git_remote_preview(
+    input: my_agent_assets_core::git_remote::GitRemotePreviewRequest,
+) -> CommandResult<my_agent_assets_core::git_remote::GitRemotePreview> {
+    command_result(shared_core::git_remote_preview_command(input))
+}
+
+#[tauri::command]
+fn git_remote_apply(
+    input: my_agent_assets_core::git_remote::GitRemoteApplyRequest,
+) -> CommandResult<my_agent_assets_core::git_remote::GitRemoteApplyResult> {
+    command_result(shared_core::git_remote_apply_command(input))
+}
+
+#[tauri::command]
 fn discover_runtime_sources(
     input: my_agent_assets_core::discovery::DiscoveryScope,
 ) -> CommandResult<my_agent_assets_core::discovery::DiscoveryResult> {
@@ -237,7 +243,7 @@ fn list_mount_targets() -> CommandResult<Vec<my_agent_assets_core::targets::Moun
 }
 
 #[tauri::command]
-fn list_mount_bindings() -> CommandResult<Vec<my_agent_assets_core::query::MountBindingSummary>> {
+fn list_mount_bindings() -> CommandResult<Vec<my_agent_assets_core::mount_registry::MountBinding>> {
     command_result(shared_core::list_mount_bindings_command())
 }
 
@@ -370,7 +376,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             settings_load,
-            settings_save,
+            settings_preview,
+            settings_apply,
             git_status,
             recovery_status,
             list_audit_log,
@@ -385,19 +392,19 @@ pub fn run() {
             canonical_asset_content,
             canonical_asset_open,
             list_projects,
-            inspect_projects,
-            project_add_preview,
-            project_add_apply,
-            project_edit_preview,
-            project_edit_apply,
+            project_save_preview,
+            project_save_apply,
             project_remove_preview,
             project_remove_apply,
+            project_refresh,
             list_backups,
             reveal_backup_manifest,
             backup_delete_preview,
             backup_delete_apply,
             preview_sync,
             sync_apply,
+            git_remote_preview,
+            git_remote_apply,
             discover_runtime_sources,
             canonical_import_preview,
             canonical_import_apply,

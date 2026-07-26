@@ -1,6 +1,6 @@
-use crate::managed_projects::load as load_managed_projects;
 use crate::path_safety::{expand_tilde, is_link_or_junction, validate_single_path_component};
-use crate::settings;
+use crate::project_registry::load as load_projects;
+use crate::settings::{self, Settings};
 pub use crate::targets::{AssetKind, RuntimeProvider};
 use crate::{
     mcp::{import_claude_server, import_codex_server, CanonicalMcp},
@@ -43,7 +43,7 @@ pub enum DiscoveryScope {
         project_path: PathBuf,
     },
     ManagedProjects {
-        #[serde(rename = "projectIds", default)]
+        #[serde(default, rename = "projectIds")]
         project_ids: Vec<String>,
     },
     Custom {
@@ -133,10 +133,43 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
             );
         }
         DiscoveryScope::Project { project_path } => {
-            scan_project_runtime(home, &expand_input_path(&project_path, home), &mut result);
+            let Some(project) = resolve_managed_project_path(home, &project_path, &mut result)
+            else {
+                return result;
+            };
+            let max_depth = match settings::load(home) {
+                Ok(settings) => settings.max_depth as usize,
+                Err(error) => {
+                    result.warnings.push(format!(
+                        "无法读取扫描设置，项目扫描使用默认 max_depth=5：{error}"
+                    ));
+                    Settings::defaults_for_home(home).max_depth as usize
+                }
+            };
+            scan_project_tree(home, &project, 0, max_depth, &mut result);
         }
         DiscoveryScope::ManagedProjects { project_ids } => {
-            scan_managed_projects(home, &project_ids, &mut result);
+            let registry = match load_projects(home) {
+                Ok(registry) => registry,
+                Err(error) => {
+                    result
+                        .warnings
+                        .push(format!("无法读取已维护项目列表：{error}"));
+                    return result;
+                }
+            };
+            let selected = project_ids
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>();
+            let max_depth = settings::load(home)
+                .unwrap_or_else(|_| Settings::defaults_for_home(home))
+                .max_depth as usize;
+            for project in registry.projects {
+                if !selected.is_empty() && !selected.contains(&project.id) {
+                    continue;
+                }
+                scan_project_tree(home, &project.path, 0, max_depth, &mut result);
+            }
         }
         DiscoveryScope::Custom {
             path,
@@ -145,8 +178,7 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
         } => {
             let path = expand_input_path(&path, home);
             match (asset_kind, source_format) {
-                (AssetKind::Skill, SourceFormat::SkillDirectory)
-                | (AssetKind::Skill, SourceFormat::Markdown) => scan_skill_dir(
+                (AssetKind::Skill, SourceFormat::SkillDirectory) => scan_skill_dir(
                     home,
                     &path,
                     RuntimeProvider::Custom,
@@ -191,143 +223,139 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
     result
 }
 
-fn scan_project_runtime(home: &Path, project: &Path, result: &mut DiscoveryResult) {
-    scan_skill_dir(
-        home,
-        &project.join(".claude/skills"),
-        RuntimeProvider::ClaudeCode,
-        SourceScope::Project,
-        result,
-    );
-    scan_command_dir(
-        home,
-        &project.join(".claude/commands"),
-        RuntimeProvider::ClaudeCode,
-        SourceScope::Project,
-        result,
-    );
-    scan_claude_mcp(
-        home,
-        &project.join(".mcp.json"),
-        SourceScope::Project,
-        result,
-    );
-    scan_skill_dir(
-        home,
-        &project.join(".agents/skills"),
-        RuntimeProvider::Codex,
-        SourceScope::Project,
-        result,
-    );
-    scan_codex_mcp(
-        home,
-        &project.join(".codex/config.toml"),
-        SourceScope::Project,
-        result,
-    );
-}
-
-fn scan_managed_projects(home: &Path, requested_ids: &[String], result: &mut DiscoveryResult) {
-    let registry = match load_managed_projects(home) {
-        Ok(registry) => registry,
-        Err(error) => {
-            result.warnings.push(format!(
-                "managed project registry could not be read: {error}"
-            ));
-            return;
-        }
-    };
-    let settings = match settings::load(home) {
-        Ok(settings) => settings,
-        Err(error) => {
-            result
-                .warnings
-                .push(format!("scan settings could not be read: {error}"));
-            return;
-        }
-    };
-    let requested = requested_ids
-        .iter()
-        .collect::<std::collections::BTreeSet<_>>();
-    for project in &registry.projects {
-        if !requested.is_empty() && !requested.contains(&project.id) {
-            continue;
-        }
-        if !project.path.is_dir() {
-            result.warnings.push(format!(
-                "managed project path is unavailable: {}",
-                project.path.display()
-            ));
-            continue;
-        }
-        scan_managed_project_tree(home, &project.path, 0, settings.max_depth as usize, result);
-    }
-    for requested_id in requested_ids {
-        if !registry
-            .projects
-            .iter()
-            .any(|project| &project.id == requested_id)
-        {
-            result
-                .warnings
-                .push(format!("managed project is unavailable: {requested_id}"));
-        }
-    }
-}
-
-fn scan_managed_project_tree(
+fn scan_project_tree(
     home: &Path,
     directory: &Path,
     depth: usize,
     max_depth: usize,
     result: &mut DiscoveryResult,
 ) {
-    if depth > max_depth || should_skip_project_child(directory) || is_project_symlink(directory) {
+    if depth > max_depth || (depth > 0 && should_skip_directory(directory)) {
         return;
     }
-    scan_project_runtime(home, directory, result);
+    let metadata = match fs::symlink_metadata(directory) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            result.warnings.push(format!(
+                "failed to inspect project directory {}: {error}",
+                directory.display()
+            ));
+            return;
+        }
+    };
+    if !metadata.is_dir() || is_link_or_junction(&metadata) {
+        return;
+    }
+
+    scan_project_runtime_root(home, directory, result);
     if depth == max_depth {
         return;
     }
-    let Ok(entries) = fs::read_dir(directory) else {
-        result.warnings.push(format!(
-            "cannot read managed project directory: {}",
-            directory.display()
-        ));
-        return;
+
+    let mut children = match fs::read_dir(directory) {
+        Ok(entries) => entries
+            .filter_map(|entry| match entry {
+                Ok(entry) => Some(entry.path()),
+                Err(error) => {
+                    result.warnings.push(format!(
+                        "failed to read an entry under {}: {error}",
+                        directory.display()
+                    ));
+                    None
+                }
+            })
+            .collect::<Vec<_>>(),
+        Err(error) => {
+            result.warnings.push(format!(
+                "failed to read project directory {}: {error}",
+                directory.display()
+            ));
+            return;
+        }
     };
-    let mut children = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .collect::<Vec<_>>();
     children.sort();
-    for child in children.into_iter().filter(|child| child.is_dir()) {
-        scan_managed_project_tree(home, &child, depth + 1, max_depth, result);
+    for child in children {
+        scan_project_tree(home, &child, depth + 1, max_depth, result);
     }
 }
 
-fn should_skip_project_child(path: &Path) -> bool {
+fn scan_project_runtime_root(home: &Path, root: &Path, result: &mut DiscoveryResult) {
+    scan_skill_dir(
+        home,
+        &root.join(".claude/skills"),
+        RuntimeProvider::ClaudeCode,
+        SourceScope::Project,
+        result,
+    );
+    scan_command_dir(
+        home,
+        &root.join(".claude/commands"),
+        RuntimeProvider::ClaudeCode,
+        SourceScope::Project,
+        result,
+    );
+    scan_claude_mcp(home, &root.join(".mcp.json"), SourceScope::Project, result);
+    scan_skill_dir(
+        home,
+        &root.join(".agents/skills"),
+        RuntimeProvider::Codex,
+        SourceScope::Project,
+        result,
+    );
+    scan_codex_mcp(
+        home,
+        &root.join(".codex/config.toml"),
+        SourceScope::Project,
+        result,
+    );
+}
+
+fn should_skip_directory(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
         Some(
             ".git"
+                | ".claude"
+                | ".agents"
+                | ".codex"
                 | "node_modules"
                 | "dist"
                 | "build"
                 | "target"
                 | ".venv"
                 | "__pycache__"
-                | ".claude"
-                | ".agents"
-                | ".codex"
         )
     )
 }
 
-fn is_project_symlink(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| is_link_or_junction(&metadata))
-        .unwrap_or(true)
+fn resolve_managed_project_path(
+    home: &Path,
+    requested: &Path,
+    result: &mut DiscoveryResult,
+) -> Option<PathBuf> {
+    let expanded = expand_input_path(requested, home);
+    let normalized = fs::canonicalize(&expanded).unwrap_or(expanded);
+    let registry = match load_projects(home) {
+        Ok(registry) => registry,
+        Err(error) => {
+            result
+                .warnings
+                .push(format!("无法读取已维护项目 registry：{error}"));
+            return None;
+        }
+    };
+    if registry
+        .projects
+        .iter()
+        .any(|project| project.path == normalized)
+    {
+        Some(normalized)
+    } else {
+        result
+            .warnings
+            .push("项目路径尚未在项目列表中显式维护；项目扫描已跳过。".into());
+        None
+    }
 }
 
 pub fn load_mcp_source(source: &DiscoveredSource) -> Result<LoadedMcpSource> {
@@ -429,17 +457,10 @@ fn scan_skill_dir(
                 result,
             );
         } else if is_extension(&path, "md") {
-            let name = file_stem_or_name(&path);
-            push_file_source(
-                home,
-                path,
-                provider,
-                scope,
-                AssetKind::Skill,
-                name,
-                SourceFormat::Markdown,
-                result,
-            );
+            result.warnings.push(format!(
+                "ignored direct Markdown Skill {}; V1 Skills must be directories containing SKILL.md",
+                path.display()
+            ));
         }
     }
 }
@@ -799,7 +820,26 @@ fn file_stem_or_name(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project_registry::{save as save_projects, ManagedProject, ProjectRegistry};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn register_project(home: &Path, path: &Path, id: &str) {
+        save_projects(
+            home,
+            &ProjectRegistry {
+                schema_version: 1,
+                projects: vec![ManagedProject {
+                    id: id.into(),
+                    name: id.into(),
+                    title: id.into(),
+                    path: fs::canonicalize(path).unwrap(),
+                    description: String::new(),
+                    last_inspection: None,
+                }],
+            },
+        )
+        .unwrap();
+    }
 
     #[test]
     fn user_scan_discovers_claude_and_codex_without_project_guessing() {
@@ -862,21 +902,176 @@ mod tests {
         }
         fs::create_dir_all(selected.join(".claude/skills/review")).unwrap();
         fs::write(selected.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
+        register_project(&home, &selected, "selected");
         let result = discover(
             &home,
             DiscoveryScope::Project {
                 project_path: selected.clone(),
             },
         );
+        let selected_canonical = fs::canonicalize(&selected).unwrap();
+        let other_canonical = fs::canonicalize(&other).unwrap();
         assert_eq!(result.sources.len(), 2);
         assert!(result
             .sources
             .iter()
-            .all(|source| source.source_path.starts_with(&selected)));
+            .all(|source| source.source_path.starts_with(&selected_canonical)));
         assert!(result
             .sources
             .iter()
-            .all(|source| !source.source_path.starts_with(&other)));
+            .all(|source| !source.source_path.starts_with(&other_canonical)));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn project_scan_uses_configured_depth_and_fixed_skip_list() {
+        let home = test_dir("project-depth");
+        let project = home.join("workspace/project-a");
+        let nested = project.join("packages/nested");
+        let too_deep = project.join("packages/nested/too-deep");
+        let skipped = project.join("node_modules/dependency");
+        for root in [&project, &nested, &too_deep, &skipped] {
+            fs::create_dir_all(root.join(".claude/skills/review")).unwrap();
+            fs::write(root.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
+        }
+        register_project(&home, &project, "project-a");
+        let mut configured = Settings::defaults_for_home(&home);
+        configured.max_depth = 2;
+        settings::save(&home, &configured).unwrap();
+
+        let result = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project.clone(),
+            },
+        );
+
+        let paths = result
+            .sources
+            .iter()
+            .map(|source| source.source_path.clone())
+            .collect::<Vec<_>>();
+        let project_skill = fs::canonicalize(project.join(".claude/skills/review")).unwrap();
+        let nested_skill = fs::canonicalize(nested.join(".claude/skills/review")).unwrap();
+        let too_deep_skill = fs::canonicalize(too_deep.join(".claude/skills/review")).unwrap();
+        let skipped_skill = fs::canonicalize(skipped.join(".claude/skills/review")).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert!(paths.contains(&project_skill));
+        assert!(paths.contains(&nested_skill));
+        assert!(!paths.contains(&too_deep_skill));
+        assert!(!paths.contains(&skipped_skill));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_scan_does_not_follow_directory_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let home = test_dir("project-directory-symlink");
+        let project = home.join("workspace/project-a");
+        let outside = home.join("outside");
+        fs::create_dir_all(outside.join(".claude/skills/outside")).unwrap();
+        fs::write(outside.join(".claude/skills/outside/SKILL.md"), "# Outside").unwrap();
+        fs::create_dir_all(&project).unwrap();
+        symlink(&outside, project.join("linked")).unwrap();
+        register_project(&home, &project, "project-a");
+
+        let result = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project,
+            },
+        );
+
+        assert!(result.sources.is_empty());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn damaged_settings_warn_and_fall_back_to_default_project_depth() {
+        let home = test_dir("project-damaged-settings");
+        let project = home.join("workspace/project-a");
+        let nested = project.join("one/two/three");
+        fs::create_dir_all(nested.join(".claude/skills/review")).unwrap();
+        fs::write(nested.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
+        register_project(&home, &project, "project-a");
+        fs::write(settings::settings_path(&home), "schemaVersion: [broken").unwrap();
+
+        let result = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project,
+            },
+        );
+
+        assert_eq!(result.sources.len(), 1);
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("默认 max_depth=5")));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn direct_markdown_skills_are_ignored_for_user_project_and_custom_scopes() {
+        let home = test_dir("direct-markdown-skills");
+        let project = home.join("workspace/project-a");
+        let custom = home.join("custom-skills");
+        for path in [
+            home.join(".claude/skills/legacy.md"),
+            project.join(".claude/skills/project-legacy.md"),
+            custom.join("custom-legacy.md"),
+        ] {
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "# Legacy Skill").unwrap();
+        }
+        register_project(&home, &project, "project-a");
+
+        let user = discover(&home, DiscoveryScope::User);
+        assert!(user.sources.is_empty());
+        assert_eq!(user.warnings.len(), 1);
+        assert!(user.warnings[0].contains("ignored direct Markdown Skill"));
+
+        let project = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project,
+            },
+        );
+        assert!(project.sources.is_empty());
+        assert_eq!(project.warnings.len(), 1);
+
+        let custom = discover(
+            &home,
+            DiscoveryScope::Custom {
+                path: custom,
+                asset_kind: AssetKind::Skill,
+                source_format: SourceFormat::SkillDirectory,
+            },
+        );
+        assert!(custom.sources.is_empty());
+        assert_eq!(custom.warnings.len(), 1);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn project_scan_rejects_an_unmanaged_project_path() {
+        let home = test_dir("unmanaged-project");
+        let project = home.join("workspace/unmanaged");
+        fs::create_dir_all(project.join(".claude/skills/review")).unwrap();
+        fs::write(project.join(".claude/skills/review/SKILL.md"), "# Review").unwrap();
+
+        let result = discover(
+            &home,
+            DiscoveryScope::Project {
+                project_path: project,
+            },
+        );
+
+        assert!(result.sources.is_empty());
+        assert_eq!(result.warnings.len(), 1);
+        assert!(result.warnings[0].contains("尚未在项目列表中显式维护"));
         let _ = fs::remove_dir_all(home);
     }
 

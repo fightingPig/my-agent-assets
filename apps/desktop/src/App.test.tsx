@@ -218,13 +218,12 @@ describe("macOS preview home", () => {
     expect(styles).toMatch(/\.dropdown-menu,[^}]*-webkit-app-region:\s*no-drag;/s);
   });
 
-  it("keeps canonical asset navigation independent of a global provider switch", () => {
+  it("keeps provider choice inside operation pages", () => {
     render(<App demoMode />);
     expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Commands" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Skills" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "MCP Servers" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Codex" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Commands" }));
+    expect(screen.getByRole("heading", { name: "Commands" })).toBeInTheDocument();
+    expect(screen.queryByText(/当前 Provider/)).not.toBeInTheDocument();
   });
 
   it("does not show demo rows across normal production pages", async () => {
@@ -242,7 +241,7 @@ describe("macOS preview home", () => {
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "项目列表" }));
-    expect(await screen.findByText("尚未添加维护项目")).toBeInTheDocument();
+    expect(await screen.findByText("尚未维护项目")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "冲突处理" }));

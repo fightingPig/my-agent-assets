@@ -463,6 +463,8 @@ mod tests {
             root.join("assets/mcps"),
             root.join("backups/local"),
             root.join("operations"),
+            home.join(".claude"),
+            home.join(".codex"),
         ] {
             fs::create_dir_all(path).unwrap();
         }

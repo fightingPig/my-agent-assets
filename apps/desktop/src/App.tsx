@@ -17,7 +17,7 @@ import {
 
 const fallbackInfo: AppInfo = {
   name: "My Agent Assets",
-  version: "0.1.0",
+  version: "0.1.1-beta.1",
   platform: "macOS",
   arch: "arm64",
   backendReady: false,

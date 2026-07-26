@@ -918,8 +918,7 @@ fn sync_path(path: &Path) -> Result<()> {
         return sync_parent(path);
     }
     if metadata.is_file() {
-        #[cfg(unix)]
-        OpenOptions::new().read(true).open(path)?.sync_all()?;
+        sync_file(path)?;
         return sync_parent(path);
     }
     for entry in fs::read_dir(path)? {
@@ -936,7 +935,19 @@ fn sync_parent(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn sync_directory(path: &Path) -> std::io::Result<()> {
+fn sync_file(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        OpenOptions::new().read(true).open(path)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
+pub(crate) fn sync_directory(path: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         OpenOptions::new().read(true).open(path)?.sync_all()
@@ -1066,7 +1077,14 @@ mod tests {
         fs::write(&file, "before").unwrap();
         fs::write(directory.join("SKILL.md"), "before skill").unwrap();
 
+        #[cfg(unix)]
         let mut targets = vec![
+            RecoveryTarget::asset_center(&file),
+            RecoveryTarget::asset_center(&directory),
+            RecoveryTarget::asset_center(&missing),
+        ];
+        #[cfg(not(unix))]
+        let targets = vec![
             RecoveryTarget::asset_center(&file),
             RecoveryTarget::asset_center(&directory),
             RecoveryTarget::asset_center(&missing),

@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
-      - "codex/**"
+      - codex/final-product-v1
+      - codex/final-product-v1-next
   pull_request:
     paths:
       - apps/desktop/**
@@ -46,12 +46,10 @@ jobs:
 
       - name: Run Windows shared-core regression tests
         working-directory: ${{ github.workspace }}
-        run: |
-          cargo test -p my-agent-assets-core
-          cargo test -p my-agent-assets-desktop
+        run: cargo test --workspace --no-fail-fast
 
       - name: Build unsigned Windows test installers
-        run: npm run tauri -- build --bundles msi,nsis
+        run: npm run tauri -- build --config src-tauri/tauri.windows.conf.json
 
       - name: Upload unsigned Windows test installers
         uses: actions/upload-artifact@v4

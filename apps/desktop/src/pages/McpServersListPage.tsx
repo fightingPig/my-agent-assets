@@ -1,19 +1,26 @@
-import { Blocks, Plus, X } from "lucide-react";
+import { AlertTriangle, Blocks, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalMcpGet,
   canonicalMcpSaveApply,
   canonicalMcpSavePreview,
+  canonicalMountApply,
+  canonicalMountPreview,
   canonicalAssetContent,
+  canonicalDeleteApply,
+  canonicalDeletePreview,
   listAssets,
 } from "../app/data-api";
 import type {
   AssetSummary,
   CanonicalMcp,
+  CanonicalDeletePreview,
+  CanonicalDeletePreviewRequest,
   McpAssetDefinition,
   McpSavePreview,
   McpSavePreviewRequest,
   McpTransport,
+  CanonicalMountPreview,
 } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import {
@@ -24,6 +31,7 @@ import {
   InspectorTags,
   type AssetCenterItem,
 } from "../components/assets/AssetCenterLayout";
+import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type McpItem = AssetCenterItem & {
@@ -137,12 +145,15 @@ type McpEditorState = {
 type McpEditorProps = {
   editor: McpEditorState;
   savePreview: McpSavePreview | null;
+  syncPreviews: Record<string, CanonicalMountPreview>;
   busy: boolean;
   message: string;
   onChange: (editor: McpEditorState) => void;
   onClose: () => void;
   onPreviewSave: () => void;
   onApplySave: () => void;
+  onPreviewTargetSync: (targetId: string) => void;
+  onApplyTargetSync: (targetId: string) => void;
 };
 
 export function McpServersListPage({
@@ -156,6 +167,11 @@ export function McpServersListPage({
   const [editorMessage, setEditorMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [syncPreviews, setSyncPreviews] = useState<Record<string, CanonicalMountPreview>>({});
+  const [deletePreview, setDeletePreview] = useState<CanonicalDeletePreview | null>(null);
+  const [deleteServer, setDeleteServer] = useState<McpItem | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +214,7 @@ export function McpServersListPage({
   const openCreate = () => {
     setEditor(emptyEditor());
     setSavePreview(null);
+    setSyncPreviews({});
     setEditorMessage("");
   };
 
@@ -208,6 +225,7 @@ export function McpServersListPage({
       const definition = await canonicalMcpGet(server.id.startsWith("mcp:") ? server.id : `mcp:${server.name}`);
       setEditor(editorFromDefinition(definition));
       setSavePreview(null);
+      setSyncPreviews({});
     } catch (error) {
       setEditorMessage(errorMessage(error));
     } finally {
@@ -260,6 +278,96 @@ export function McpServersListPage({
     }
   };
 
+  const previewTargetSync = async (targetId: string) => {
+    if (!editor?.assetId) return;
+    setBusy(true);
+    setEditorMessage("");
+    try {
+      const preview = await canonicalMountPreview({ assetId: editor.assetId, targetId });
+      setSyncPreviews((current) => ({ ...current, [targetId]: preview }));
+    } catch (error) {
+      setEditorMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const applyTargetSync = async (targetId: string) => {
+    if (!editor?.assetId) return;
+    const preview = syncPreviews[targetId];
+    if (!preview?.canApply) return;
+    setBusy(true);
+    setEditorMessage("");
+    try {
+      await canonicalMountApply({
+        previewId: preview.previewId,
+        previewGeneratedAtEpochSeconds: preview.generatedAtEpochSeconds,
+        request: { assetId: editor.assetId, targetId },
+      });
+      const definition = await canonicalMcpGet(editor.assetId);
+      setEditor(editorFromDefinition(definition));
+      setSyncPreviews((current) => {
+        const next = { ...current };
+        delete next[targetId];
+        return next;
+      });
+      setEditorMessage(`目标 ${targetId} 已显式同步。`);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setEditorMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const previewDelete = async (server: McpItem, removeMcpTargetEntries: boolean) => {
+    setDeleteServer(server);
+    setDeletePreview(null);
+    setDeleteMessage("生成删除影响预览中");
+    try {
+      const request: CanonicalDeletePreviewRequest = {
+        assetId: canonicalAssetId(server),
+        mode: removeMcpTargetEntries ? "unmount_all" : "require_unmounted",
+        removeMcpTargetEntries,
+      };
+      const preview = await canonicalDeletePreview(request);
+      setDeletePreview(preview);
+      setDeleteMessage(
+        preview.canApply
+          ? removeMcpTargetEntries
+            ? "删除计划已生成：将同时清理已启用 Target 配置。"
+            : "删除计划已生成：Target live config 会保留为外部未管理配置。"
+          : "删除计划被安全检查阻止。",
+      );
+    } catch (error) {
+      setDeleteMessage(errorMessage(error));
+    }
+  };
+
+  const applyDelete = async () => {
+    if (!deletePreview?.canApply || !deleteServer) return;
+    setIsDeleting(true);
+    try {
+      await canonicalDeleteApply({
+        previewId: deletePreview.previewId,
+        previewGeneratedAtEpochSeconds: deletePreview.generatedAtEpochSeconds,
+        request: {
+          assetId: canonicalAssetId(deleteServer),
+          mode: deletePreview.removeMcpTargetEntries ? "unmount_all" : "require_unmounted",
+          removeMcpTargetEntries: deletePreview.removeMcpTargetEntries,
+        },
+      });
+      setDeleteMessage("MCP canonical 配置已删除。");
+      setDeletePreview(null);
+      setDeleteServer(null);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setDeleteMessage(errorMessage(error));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="mcp-page-stack">
       <div className="mcp-page-actions">
@@ -278,14 +386,19 @@ export function McpServersListPage({
           onChange={(next) => {
             setEditor(next);
             setSavePreview(null);
+            setSyncPreviews({});
           }}
           onClose={() => {
             setEditor(null);
             setSavePreview(null);
+            setSyncPreviews({});
             setEditorMessage("");
           }}
           onPreviewSave={requestSavePreview}
+          onPreviewTargetSync={previewTargetSync}
+          onApplyTargetSync={applyTargetSync}
           savePreview={savePreview}
+          syncPreviews={syncPreviews}
         />
       ) : editorMessage ? <p className="mcp-editor-message error">{editorMessage}</p> : null}
       <AssetCenterLayout
@@ -300,9 +413,10 @@ export function McpServersListPage({
       onOpenDetail={onOpenAssetDetail
         ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览"))
         : undefined}
-      renderActions={(server) => !demoMode ? (
-        <button className="asset-business-action" data-no-drag="true" disabled={busy} onClick={() => void openEdit(server)} style={NO_DRAG_REGION_STYLE} type="button">编辑配置</button>
-      ) : null}
+      renderActions={(server) => !demoMode ? <>
+        <button className="asset-business-action" data-no-drag="true" disabled={busy || isDeleting} onClick={() => void openEdit(server)} style={NO_DRAG_REGION_STYLE} type="button">编辑配置</button>
+        <button className="asset-danger-action" data-no-drag="true" disabled={busy || isDeleting} onClick={() => void previewDelete(server, false)} style={NO_DRAG_REGION_STYLE} type="button"><Trash2 size={14} />删除 MCP</button>
+      </> : null}
       renderInspector={(server) => (
         <>
           <InspectorFields fields={[
@@ -314,19 +428,27 @@ export function McpServersListPage({
         </>
       )}
       />
+      {deleteServer ? <section className="panel mcp-delete-preview"><div className="section-heading"><div><h3>删除 MCP：{deleteServer.name}</h3><p>默认只删除资产中心 canonical 配置和本机管理关系，不修改现有 Target live config。</p></div></div><label className="settings-toggle-list"><span><input checked={deletePreview?.removeMcpTargetEntries ?? false} data-no-drag="true" disabled={isDeleting} onChange={(event) => void previewDelete(deleteServer, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>同时从已启用 Target 配置中移除</strong><small>开启后会精准删除对应 live config entry；关闭时配置继续生效，但会成为未受资产中心管理的外部配置。</small></span></span></label>{deletePreview ? <div className="plan-lines">{deletePreview.plannedEffects.map((effect) => <span key={effect}>{effect}</span>)}{deletePreview.warnings.map((warning) => <span className="warning-text" key={warning}>{warning}</span>)}</div> : null}<ApplyConfirmationPanel actionLabel="确认删除 MCP" canApply={Boolean(deletePreview?.canApply)} description={deletePreview?.removeMcpTargetEntries ? "将删除 canonical MCP 和列出的 Target live config entry。" : "将删除 canonical MCP 与本机管理关系；Target live config 将被保留。"} isApplying={isDeleting} onApply={() => void applyDelete()} operationError={deletePreview?.canApply ? null : deleteMessage} result={null} title="执行高风险删除" /></section> : null}
     </div>
   );
+}
+
+function canonicalAssetId(server: McpItem) {
+  return server.id.startsWith("mcp:") ? server.id : `mcp:${server.name}`;
 }
 
 function McpEditor({
   editor,
   savePreview,
+  syncPreviews,
   busy,
   message,
   onChange,
   onClose,
   onPreviewSave,
   onApplySave,
+  onPreviewTargetSync,
+  onApplyTargetSync,
 }: McpEditorProps) {
   const update = <K extends keyof McpEditorState>(key: K, value: McpEditorState[K]) => {
     onChange({ ...editor, [key]: value });
@@ -390,13 +512,21 @@ function McpEditor({
 
       {editor.bindings.length > 0 ? (
         <div className="mcp-binding-list">
-          <strong>当前挂载</strong>
-          {editor.bindings.map((binding) => (
-            <div key={binding.targetId}>
-              <span><b>{binding.targetId}</b><small>{binding.status}</small></span>
-            </div>
-          ))}
-          <p>目标启用、同步和解除挂载统一在“挂载管理”中完成。</p>
+          <strong>目标同步状态</strong>
+          {editor.bindings.map((binding) => {
+            const preview = syncPreviews[binding.targetId];
+            return (
+              <div key={binding.targetId}>
+                <span><b>{binding.targetId}</b><small>{binding.status}</small></span>
+                {preview ? (
+                  <button className="asset-business-action" data-no-drag="true" disabled={busy || !preview.canApply} onClick={() => onApplyTargetSync(binding.targetId)} style={NO_DRAG_REGION_STYLE} type="button">确认同步</button>
+                ) : (
+                  <button className="asset-secondary-action" data-no-drag="true" disabled={busy || binding.status === "mounted"} onClick={() => onPreviewTargetSync(binding.targetId)} style={NO_DRAG_REGION_STYLE} type="button"><RefreshCw size={13} />生成同步预览</button>
+                )}
+              </div>
+            );
+          })}
+          <p><AlertTriangle size={13} />只有“确认同步”会精确 patch 对应 Claude/Codex live config；保存 canonical 不会自动同步。</p>
         </div>
       ) : null}
 

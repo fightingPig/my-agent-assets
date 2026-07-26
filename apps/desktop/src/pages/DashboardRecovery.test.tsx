@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
 
 const {
   listAssets,
+  listBackups,
   listProjects,
   listAuditLog,
   gitStatus,
@@ -17,6 +18,7 @@ const {
   initializationApply,
 } = vi.hoisted(() => ({
   listAssets: vi.fn(),
+  listBackups: vi.fn(),
   listProjects: vi.fn(),
   listAuditLog: vi.fn(),
   gitStatus: vi.fn(),
@@ -32,6 +34,7 @@ const {
 
 vi.mock("../app/data-api", () => ({
   listAssets,
+  listBackups,
   listProjects,
   listAuditLog,
   gitStatus,
@@ -46,9 +49,13 @@ vi.mock("../app/data-api", () => ({
 }));
 
 describe("Dashboard recovery status", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     listAssets.mockResolvedValue([]);
+    listBackups.mockResolvedValue([]);
     listProjects.mockResolvedValue([]);
     listAuditLog.mockResolvedValue([]);
     gitStatus.mockResolvedValue({
@@ -79,7 +86,10 @@ describe("Dashboard recovery status", () => {
     doctorReport.mockResolvedValue({
       assetCenterPath: "/tmp/home/.my-agent-assets",
       initialized: true,
-      checks: [],
+      checks: [
+        { id: "claude_runtime", label: "Claude Code Runtime", status: "ok", message: "已检测到本机配置。" },
+        { id: "codex_runtime", label: "Codex Runtime", status: "warning", message: "未检测到本机配置；不会自动创建。" },
+      ],
       contentDiagnostics: [],
     });
   });
@@ -114,6 +124,65 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText(/检测到 1 个未完成事务/)).toBeInTheDocument();
   });
 
+  it("describes projects as explicitly managed records", async () => {
+    recoveryStatus.mockResolvedValue({
+      writesBlocked: false,
+      journals: [],
+      recentRecoveries: [],
+      message: "没有未完成事务。",
+    });
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect((await screen.findAllByText("尚未维护项目")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("显式添加的本地运行目标").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("在项目列表添加已有本地目录后会显示在这里。").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/扫描根目录/)).toHaveLength(0);
+  });
+
+  it("summarizes mounts, backups, conflicts, and both runtime diagnostics", async () => {
+    recoveryStatus.mockResolvedValue({
+      writesBlocked: false,
+      journals: [],
+      recentRecoveries: [],
+      message: "没有未完成事务。",
+    });
+    listAssets.mockResolvedValue([{
+      id: "skill:review",
+      name: "review",
+      title: "review",
+      assetType: "skill",
+      status: "conflict",
+      category: "local",
+      description: "",
+      sourcePath: "/tmp/home/.my-agent-assets/assets/skills/review",
+      scope: "user",
+      updatedAt: null,
+      mountTargets: ["claude-user-skills", "codex-user-skills"],
+    }]);
+    listBackups.mockResolvedValue([{ id: "backup-1" }, { id: "backup-2" }]);
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect(await screen.findByText("2 条本机 asset-to-target binding")).toBeInTheDocument();
+    expect(screen.getByText("2 份 portable / local backup")).toBeInTheDocument();
+    expect(screen.getByText("1 项需要处理")).toBeInTheDocument();
+    expect(screen.getAllByText("Claude Code Runtime").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Codex Runtime").length).toBeGreaterThan(0);
+  });
+
   it("shows redacted local audit entries as recent activity", async () => {
     recoveryStatus.mockResolvedValue({
       writesBlocked: false,
@@ -140,7 +209,7 @@ describe("Dashboard recovery status", () => {
     expect(screen.getByText("已完成")).toBeInTheDocument();
   });
 
-  it("does not render raw backend errors that could contain local details", async () => {
+  it("keeps successful summaries when one read fails without exposing raw errors", async () => {
     listAssets.mockRejectedValue(new Error("token=secret-value /tmp/private"));
 
     render(<DashboardPage appInfo={{
@@ -151,7 +220,9 @@ describe("Dashboard recovery status", () => {
       backendReady: true,
     }} />);
 
-    expect(await screen.findByText(/本地概览操作未完成/)).toBeInTheDocument();
+    expect(await screen.findByText("部分读取失败（1 项）")).toBeInTheDocument();
+    expect(screen.getAllByText("Repository ready.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("尚未维护项目").length).toBeGreaterThan(0);
     expect(screen.queryByText(/secret-value|\/tmp\/private/)).not.toBeInTheDocument();
   });
 
@@ -261,31 +332,12 @@ describe("Dashboard recovery status", () => {
     }));
   });
 
-  it("exports only after a diagnostic package preview", async () => {
+  it("keeps diagnostic export out of the dashboard", async () => {
     recoveryStatus.mockResolvedValue({ writesBlocked: false, journals: [], recentRecoveries: [], message: "没有未完成事务。" });
-    diagnosticExportPreview.mockResolvedValue({
-      previewId: "diagnostic-export-1",
-      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
-      includedFiles: [{ logicalPath: "status-summary.json", kind: "status_summary" }],
-      warnings: ["脱敏"],
-      canApply: true,
-      generatedAtEpochSeconds: 100,
-      expiresAtEpochSeconds: 700,
-    });
-    diagnosticExportApply.mockResolvedValue({
-      previewId: "diagnostic-export-1",
-      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
-      journalPath: "/tmp/home/.my-agent-assets/operations/diagnostic.yaml",
-    });
-
     render(<DashboardPage appInfo={{ name: "My Agent Assets", version: "0.1.0", platform: "macos", arch: "aarch64", backendReady: true }} />);
-    fireEvent.click((await screen.findAllByRole("button", { name: "预览诊断包" })).at(-1)!);
-    await waitFor(() => expect(diagnosticExportPreview).toHaveBeenCalledTimes(1));
+    await screen.findByRole("heading", { name: "系统状态" });
+    expect(screen.queryByRole("button", { name: /诊断包/ })).not.toBeInTheDocument();
+    expect(diagnosticExportPreview).not.toHaveBeenCalled();
     expect(diagnosticExportApply).not.toHaveBeenCalled();
-    fireEvent.click((await screen.findAllByRole("button", { name: "确认导出" })).at(-1)!);
-    await waitFor(() => expect(diagnosticExportApply).toHaveBeenCalledWith({
-      previewId: "diagnostic-export-1",
-      previewGeneratedAtEpochSeconds: 100,
-    }));
   });
 });

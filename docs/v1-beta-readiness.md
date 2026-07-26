@@ -1,13 +1,14 @@
 # V1 Beta Readiness
 
-Date: 2026-06-27
+Date: 2026-07-26
 
 My Agent Assets V1 is ready for controlled local beta testing. It remains a local-first desktop application with no login, account, cloud workspace, billing, or authentication dependency.
 
 ## Implemented Features
 
 - Read-only discovery of asset-center Skills, Commands, and MCP servers
-- One-level project discovery under `~/workspace` and `~/code`
+- Explicit machine-local project management with nested project runtime
+  discovery bounded by configurable `max_depth`
 - User, project, and custom runtime asset scans
 - Exact MCP conflict preview from top-level `mcpServers.<name>` JSON
 - Import preview, preview-bound ordinary confirmation, apply, and backup
@@ -41,11 +42,15 @@ The following validation passed on Apple Silicon macOS:
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Passed |
-| `npm test` | 10 files, 73 tests passed |
+| `npm test` | 12 files, 100 tests passed |
 | `npm run build:renderer` | Passed |
 | `cargo fmt --all -- --check` | Passed |
-| `cargo test -p my-agent-assets-desktop` | 80 tests passed |
-| `npm run qa:visual` | 13 pages, 26 screenshots, 0 severe issues, 0 warnings |
+| `cargo test -p my-agent-assets-core --lib` | 143 tests passed |
+| `cargo test -p my-agent-assets-desktop` | 22 tests passed |
+| `cargo test -p my-agent-assets-cli` | 10 tests passed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed |
+| `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` | Passed |
+| `npm run qa:visual` | 13 pages, macOS/Windows, 52 screenshots, 0 severe issues, 0 warnings |
 | Tauri dev smoke | Started successfully with `MY_AGENT_ASSETS_HOME` set to an empty `/tmp` directory |
 | Tauri release build | `.app` and arm64 `.dmg` generated |
 | Packaged app smoke | Built `.app` executable launched with an empty fake HOME |
@@ -59,18 +64,24 @@ Visual QA artifacts:
 
 Build artifacts:
 
-- `target/release/bundle/macos/My Agent Assets.app`
-- `target/release/bundle/dmg/My Agent Assets_0.1.0_aarch64.dmg`
+- `target/aarch64-apple-darwin/release/bundle/macos/My Agent Assets.app`
+- `target/aarch64-apple-darwin/release/bundle/dmg/My Agent Assets_0.1.1-beta.1_aarch64.dmg`
 
 ## Known Limitations
 
 - The macOS build is ad-hoc signed and not notarized. Gatekeeper behavior on another Mac still requires manual validation.
-- Windows packaging, native titlebar behavior, DPI scaling, path handling, and symlink permissions were not validated in this macOS run.
+- A native Windows workflow produces unsigned MSI/NSIS test packages. Windows
+  installation, native titlebar, DPI scaling, path handling, symlink
+  permissions, upgrade, and uninstall still require manual qualification.
 - Automated Visual QA runs in headless Chrome. It does not validate native traffic lights, overlay dragging, Dock behavior, or OS window shadows.
-- Final shared-core integration expanded project discovery to configured scan roots and `max_depth`.
+- Project List only shows explicitly managed existing local directories; the
+  project registry is the single maintenance entry point. Project scans inspect
+  nested runtime roots with the shared configurable `max_depth`, defaulting to 5.
 - Asset content shown in details is read from canonical asset files through shared-core Tauri commands.
 - Automatic historical Restore remains out of scope; Backup History is manual-restore-only.
-- Git Pull is fast-forward only. Git Push requires a verifiable GitHub Private repository and stages only the canonical sync whitelist.
+- Git Pull is fast-forward only. Git Push defaults to a verifiable GitHub
+  Private repository and stages only the canonical sync whitelist; a local
+  explicit high-risk setting can allow public or unverifiable remotes.
 - There is no updater, notarized distribution channel, telemetry, account service, or cloud service.
 
 ## Manual Beta Checklist
@@ -87,8 +98,12 @@ Build artifacts:
 10. Verify Backup History lists manifests, reveals the selected manifest, and shows the manual restore guide without an automatic Restore button.
 11. Verify settings survive app restart.
 12. Verify Git Pull/Push only against a disposable local test remote.
-13. Repeat packaging and native-window checks on Windows before claiming Windows beta readiness.
+13. Install the unsigned MSI or NSIS artifact from workflow run `30205386686`
+    and complete native-window, DPI, path, upgrade, and uninstall checks before
+    claiming Windows beta readiness.
 
 ## Beta Decision
 
-The codebase satisfies the automated macOS V1 beta gate. Distribution beyond controlled local testing remains blocked on notarization and Windows-specific packaging/manual QA.
+The codebase satisfies the automated macOS V1 beta gate and the Windows
+automated packaging gate. Distribution beyond controlled local testing remains
+blocked on macOS notarization plus Windows signing and manual qualification.

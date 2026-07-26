@@ -46,12 +46,6 @@ use my_agent_assets_core::initialization::{
     apply_initialization, preview_initialization, InitializationApplyRequest,
     InitializationApplyResult, InitializationPreview,
 };
-use my_agent_assets_core::managed_projects::{
-    apply_add_project, apply_edit_project, apply_remove_project, preview_add_project,
-    preview_edit_project, preview_remove_project, ProjectAddApplyRequest, ProjectAddPreviewRequest,
-    ProjectChangePreview, ProjectChangeResult, ProjectEditApplyRequest, ProjectEditPreviewRequest,
-    ProjectRemoveApplyRequest, ProjectRemovePreviewRequest,
-};
 use my_agent_assets_core::mcp_management::{
     apply_mcp_save, load_mcp_asset, preview_mcp_save, McpAssetDefinition, McpSaveApplyRequest,
     McpSaveApplyResult, McpSavePreview, McpSavePreviewRequest,
@@ -61,12 +55,18 @@ use my_agent_assets_core::mount::{
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
     UnmountPreview, UnmountPreviewRequest,
 };
+use my_agent_assets_core::mount_registry::{load as load_mount_bindings, MountBinding};
 use my_agent_assets_core::operation::{
     recover_incomplete, recovery_status, RecoveryReport, RecoveryStatus,
 };
+use my_agent_assets_core::project_registry::{
+    apply_remove_project, apply_save_project, preview_remove_project, preview_save_project,
+    refresh_projects, ProjectChangePreview, ProjectChangeResult, ProjectRefreshRequest,
+    ProjectRefreshResult, ProjectRemoveApplyRequest, ProjectRemoveRequest, ProjectSaveApplyRequest,
+    ProjectSaveRequest,
+};
 use my_agent_assets_core::query::{
-    inspect_projects, list_assets, list_mount_bindings, list_projects, AssetQueryRequest,
-    AssetSummary, MountBindingSummary, ProjectInspection, ProjectInspectionRequest, ProjectSummary,
+    list_assets, list_projects, AssetQueryRequest, AssetSummary, ProjectSummary,
 };
 use my_agent_assets_core::target_management::{
     apply_register_target, apply_remove_target, preview_register_target, preview_remove_target,
@@ -184,58 +184,33 @@ pub fn list_projects_for_home(home: &Path) -> Result<Vec<ProjectSummary>, String
     list_projects(home).map_err(|error| error.to_string())
 }
 
-pub fn inspect_projects_command(
-    input: ProjectInspectionRequest,
-) -> Result<Vec<ProjectInspection>, String> {
-    let home =
-        home_dir().ok_or_else(|| "HOME is unavailable; project inspection skipped.".to_string())?;
-    inspect_projects_for_home(&home, input)
+pub fn list_mount_bindings_command() -> Result<Vec<MountBinding>, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; mount list skipped.".to_string())?;
+    let registry = load_mount_bindings(&home).map_err(|error| error.to_string())?;
+    Ok(registry.bindings.into_values().collect())
 }
 
-pub fn inspect_projects_for_home(
-    home: &Path,
-    input: ProjectInspectionRequest,
-) -> Result<Vec<ProjectInspection>, String> {
-    inspect_projects(home, &input).map_err(|error| error.to_string())
-}
-
-pub fn project_add_preview_command(
-    input: ProjectAddPreviewRequest,
+pub fn project_save_preview_command(
+    input: ProjectSaveRequest,
 ) -> Result<ProjectChangePreview, String> {
     let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; project registration preview skipped.".to_string())?;
-    preview_add_project(&home, &input).map_err(|error| error.to_string())
+        .ok_or_else(|| "HOME is unavailable; project save preview skipped.".to_string())?;
+    preview_save_project(&home, &input).map_err(|error| error.to_string())
 }
 
-pub fn project_add_apply_command(
-    input: ProjectAddApplyRequest,
-) -> Result<ProjectChangeResult, String> {
-    let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; project registration apply blocked.".to_string())?;
-    apply_add_project(&home, &input).map_err(|error| error.to_string())
-}
-
-pub fn project_edit_preview_command(
-    input: ProjectEditPreviewRequest,
-) -> Result<ProjectChangePreview, String> {
-    let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; project edit preview skipped.".to_string())?;
-    preview_edit_project(&home, &input).map_err(|error| error.to_string())
-}
-
-pub fn project_edit_apply_command(
-    input: ProjectEditApplyRequest,
+pub fn project_save_apply_command(
+    input: ProjectSaveApplyRequest,
 ) -> Result<ProjectChangeResult, String> {
     let home =
-        home_dir().ok_or_else(|| "HOME is unavailable; project edit apply blocked.".to_string())?;
-    apply_edit_project(&home, &input).map_err(|error| error.to_string())
+        home_dir().ok_or_else(|| "HOME is unavailable; project save apply blocked.".to_string())?;
+    apply_save_project(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn project_remove_preview_command(
-    input: ProjectRemovePreviewRequest,
+    input: ProjectRemoveRequest,
 ) -> Result<ProjectChangePreview, String> {
     let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; project removal preview skipped.".to_string())?;
+        .ok_or_else(|| "HOME is unavailable; project remove preview skipped.".to_string())?;
     preview_remove_project(&home, &input).map_err(|error| error.to_string())
 }
 
@@ -243,8 +218,16 @@ pub fn project_remove_apply_command(
     input: ProjectRemoveApplyRequest,
 ) -> Result<ProjectChangeResult, String> {
     let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; project removal apply blocked.".to_string())?;
+        .ok_or_else(|| "HOME is unavailable; project remove apply blocked.".to_string())?;
     apply_remove_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_refresh_command(
+    input: ProjectRefreshRequest,
+) -> Result<ProjectRefreshResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project refresh blocked.".to_string())?;
+    refresh_projects(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn canonical_import_preview_command(
@@ -269,12 +252,6 @@ pub fn list_mount_targets_command() -> Result<Vec<MountTarget>, String> {
     Ok(load_targets(&home)
         .map_err(|error| error.to_string())?
         .targets)
-}
-
-pub fn list_mount_bindings_command() -> Result<Vec<MountBindingSummary>, String> {
-    let home = home_dir()
-        .ok_or_else(|| "HOME is unavailable; mount binding listing skipped.".to_string())?;
-    list_mount_bindings(&home).map_err(|error| error.to_string())
 }
 
 pub fn target_registration_preview_command(
@@ -517,6 +494,24 @@ pub fn adopt_apply_command(input: AdoptApplyRequest) -> Result<AdoptApplyResult,
     apply_adopt(&home, &input).map_err(|error| error.to_string())
 }
 
+pub fn git_remote_preview_command(
+    input: my_agent_assets_core::git_remote::GitRemotePreviewRequest,
+) -> Result<my_agent_assets_core::git_remote::GitRemotePreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git remote preview skipped.".to_string())?;
+    my_agent_assets_core::git_remote::preview_git_remote(&home, &input)
+        .map_err(|error| error.to_string())
+}
+
+pub fn git_remote_apply_command(
+    input: my_agent_assets_core::git_remote::GitRemoteApplyRequest,
+) -> Result<my_agent_assets_core::git_remote::GitRemoteApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git remote apply blocked.".to_string())?;
+    my_agent_assets_core::git_remote::apply_git_remote(&home, &input)
+        .map_err(|error| error.to_string())
+}
+
 pub fn canonical_batch_import_preview_command(
     input: BatchImportPreviewRequest,
 ) -> Result<BatchImportPreview, String> {
@@ -540,17 +535,12 @@ mod tests {
     use my_agent_assets_core::import::{ImportApplyStatus, ImportResolution};
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{
-        atomic::{AtomicU64, Ordering},
-        Mutex,
-    };
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    static TEST_HOME_COUNTER: AtomicU64 = AtomicU64::new(0);
-    static SHARED_CORE_GIT_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static NEXT_TEST_HOME_ID: AtomicU64 = AtomicU64::new(1);
 
     #[test]
     fn adapter_contract_round_trip_works_with_fake_home() {
-        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
         let home = test_home("round-trip");
         initialize(&home);
         fs::create_dir_all(home.join(".claude/skills/review")).unwrap();
@@ -593,25 +583,25 @@ mod tests {
     }
 
     #[test]
-    fn project_query_adapter_uses_shared_core_depth_scanning() {
-        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
+    fn project_query_adapter_lists_only_explicitly_registered_projects() {
         let home = test_home("project-query");
         initialize(&home);
-        let project_path = home.join("workspace/group/project-a");
-        fs::create_dir_all(project_path.join("packages/app/.claude/skills/review")).unwrap();
-        fs::write(
-            project_path.join("packages/app/.claude/skills/review/SKILL.md"),
-            "# Review",
-        )
-        .unwrap();
-        let request = ProjectAddPreviewRequest {
-            path: project_path,
-            name: None,
+        fs::create_dir_all(home.join("workspace/group/project-a")).unwrap();
+        fs::write(home.join("workspace/group/project-a/package.json"), "{}").unwrap();
+
+        assert!(list_projects_for_home(&home).unwrap().is_empty());
+        let request = my_agent_assets_core::project_registry::ProjectSaveRequest {
+            id: None,
+            name: "project-a".into(),
+            title: "Project A".into(),
+            path: home.join("workspace/group/project-a"),
+            description: "explicit project".into(),
         };
-        let preview = preview_add_project(&home, &request).unwrap();
-        apply_add_project(
+        let preview =
+            my_agent_assets_core::project_registry::preview_save_project(&home, &request).unwrap();
+        my_agent_assets_core::project_registry::apply_save_project(
             &home,
-            &ProjectAddApplyRequest {
+            &my_agent_assets_core::project_registry::ProjectSaveApplyRequest {
                 preview_id: preview.preview_id,
                 preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
                 request,
@@ -622,20 +612,11 @@ mod tests {
         let projects = list_projects_for_home(&home).unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "project-a");
-        let inspected = inspect_projects_for_home(
-            &home,
-            ProjectInspectionRequest {
-                project_ids: vec![projects[0].id.clone()],
-            },
-        )
-        .unwrap();
-        assert_eq!(inspected[0].project.asset_counts.skills, 1);
         let _ = fs::remove_dir_all(home);
     }
 
     #[test]
     fn audit_log_adapter_returns_only_shared_core_redacted_entries() {
-        let _guard = SHARED_CORE_GIT_TEST_LOCK.lock().unwrap();
         let home = test_home("audit-log");
         initialize(&home);
         my_agent_assets_core::audit_log::append_operation(
@@ -689,9 +670,9 @@ mod tests {
     }
 
     fn test_home(name: &str) -> PathBuf {
-        let sequence = TEST_HOME_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let id = NEXT_TEST_HOME_ID.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "maa-shared-core-adapter-{name}-{}-{sequence}",
+            "maa-shared-core-adapter-{name}-{}-{id}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&path);

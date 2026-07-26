@@ -1,7 +1,8 @@
 use super::contracts::{
-    AppearanceTheme, DensityPreference, DesktopSettings, LogLevel, SettingsSaveInput,
+    AppearanceTheme, DensityPreference, DesktopSettings, LogLevel, SettingsApplyInput,
+    SettingsApplyResult, SettingsPreviewInput,
 };
-use super::settings::{settings_load_for_home, settings_save_for_home};
+use super::settings::{settings_apply_for_home, settings_load_for_home, settings_preview_for_home};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -54,12 +55,29 @@ fn custom_settings(home: &Path) -> DesktopSettings {
         plan_only_by_default: false,
         git_default_branch: "trunk".into(),
         git_remote: "upstream".into(),
+        allow_public_remote_push: false,
         appearance_theme: AppearanceTheme::Dark,
         density: DensityPreference::Comfortable,
         log_level: LogLevel::Debug,
         log_retention_days: 30,
         cli_path: "maa-dev".into(),
     }
+}
+
+fn save_settings(home: &Path, settings: DesktopSettings) -> SettingsApplyResult {
+    let request = SettingsPreviewInput { settings };
+    let preview =
+        settings_preview_for_home(home, request.clone()).expect("settings preview should succeed");
+    assert!(preview.can_apply, "{:?}", preview.warnings);
+    settings_apply_for_home(
+        home,
+        SettingsApplyInput {
+            preview_id: preview.preview_id,
+            preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            request,
+        },
+    )
+    .expect("settings apply should succeed")
 }
 
 #[test]
@@ -81,13 +99,7 @@ fn settings_save_writes_config_and_settings_load_reads_it_back() {
     let home = TempHome::new("save-load");
     let input = custom_settings(home.path());
 
-    let saved = settings_save_for_home(
-        home.path(),
-        SettingsSaveInput {
-            settings: input.clone(),
-        },
-    )
-    .expect("settings should save");
+    let saved = save_settings(home.path(), input.clone()).settings;
     let loaded = settings_load_for_home(home.path()).expect("saved settings should load");
 
     let expected_asset_center = home
@@ -116,8 +128,7 @@ fn settings_save_normalizes_empty_and_out_of_range_values() {
     settings.git_remote = " ".into();
     settings.cli_path = "".into();
 
-    let saved = settings_save_for_home(home.path(), SettingsSaveInput { settings })
-        .expect("settings should save");
+    let saved = save_settings(home.path(), settings).settings;
 
     assert_eq!(
         saved.asset_center_path,
@@ -153,17 +164,19 @@ fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
     let link = home.path().join(".my-agent-assets");
     create_test_directory_symlink(outside.path(), &link);
 
-    let result = settings_save_for_home(
+    let result = settings_preview_for_home(
         home.path(),
-        SettingsSaveInput {
+        SettingsPreviewInput {
             settings: custom_settings(home.path()),
         },
     );
 
-    assert!(result.is_err());
-    assert!(result
-        .expect_err("symlink path must fail")
-        .contains("Allowed root must not be a symlink"));
+    let preview = result.expect("unsafe path should return a blocked preview");
+    assert!(!preview.can_apply);
+    assert!(preview
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("Allowed root must not be a symlink")));
     assert!(!outside.config_path().exists());
 }
 
@@ -173,14 +186,43 @@ fn settings_save_ignores_inactive_asset_center_path_setting() {
     let mut settings = custom_settings(home.path());
     settings.asset_center_path = home.path().join("ignored").to_string_lossy().into_owned();
 
-    let saved = settings_save_for_home(home.path(), SettingsSaveInput { settings })
-        .expect("settings should save");
+    let saved = save_settings(home.path(), settings).settings;
 
     assert_eq!(
         saved.asset_center_path,
         home.path().join(".my-agent-assets").to_string_lossy()
     );
     assert!(!home.path().join("ignored").exists());
+}
+
+#[test]
+fn settings_preview_is_read_only_and_apply_requires_matching_preview() {
+    let home = TempHome::new("preview-contract");
+    let request = SettingsPreviewInput {
+        settings: custom_settings(home.path()),
+    };
+    let preview =
+        settings_preview_for_home(home.path(), request.clone()).expect("preview should succeed");
+
+    assert!(preview.can_apply);
+    assert!(!home.config_path().exists());
+    assert!(preview.preview_id.starts_with("settings-save-"));
+    assert_eq!(preview.preview_id.len(), "settings-save-".len() + 64);
+
+    let mut changed_request = request;
+    changed_request.settings.max_depth += 1;
+    let error = settings_apply_for_home(
+        home.path(),
+        SettingsApplyInput {
+            preview_id: preview.preview_id,
+            preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            request: changed_request,
+        },
+    )
+    .expect_err("changed request must invalidate preview");
+
+    assert!(error.contains("stale"));
+    assert!(!home.config_path().exists());
 }
 
 #[cfg(unix)]

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -388,6 +389,7 @@ pub struct DesktopSettings {
     pub plan_only_by_default: bool,
     pub git_default_branch: String,
     pub git_remote: String,
+    pub allow_public_remote_push: bool,
     pub appearance_theme: AppearanceTheme,
     pub density: DensityPreference,
     pub log_level: LogLevel,
@@ -445,8 +447,37 @@ pub struct SyncApplyInput {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SettingsSaveInput {
+pub struct SettingsPreviewInput {
     pub settings: DesktopSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsPreview {
+    pub preview_id: String,
+    pub settings: DesktopSettings,
+    pub affected_paths: Vec<PathBuf>,
+    pub planned_effects: Vec<String>,
+    pub warnings: Vec<String>,
+    pub can_apply: bool,
+    pub generated_at_epoch_seconds: u64,
+    pub expires_at_epoch_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsApplyInput {
+    pub preview_id: String,
+    pub preview_generated_at_epoch_seconds: u64,
+    pub request: SettingsPreviewInput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsApplyResult {
+    pub preview_id: String,
+    pub settings: DesktopSettings,
+    pub affected_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

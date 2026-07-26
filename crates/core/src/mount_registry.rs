@@ -1,4 +1,3 @@
-use crate::fs_sync::sync_directory;
 use crate::path_safety::{guard_write_path, validate_single_path_component};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -268,7 +267,7 @@ fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
         fs::rename(&temporary, path)?;
-        sync_directory(parent)
+        crate::operation::sync_directory(parent)
     })() {
         let _ = fs::remove_file(&temporary);
         return Err(error);

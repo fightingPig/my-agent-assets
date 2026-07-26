@@ -1,13 +1,13 @@
-import { AlertTriangle, Check, FolderSearch, House, ScanSearch } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { AlertTriangle, Check, FolderOpen, FolderSearch, House, ScanSearch } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   canonicalBatchImportApply,
   canonicalBatchImportPreview,
   discoverRuntimeSources,
+  listProjects,
   adoptApply,
   previewAdopt,
-  listProjects,
 } from "../app/data-api";
 import type {
   ApplyResult,
@@ -20,58 +20,38 @@ import type {
 } from "../app/contracts";
 import type { ConflictResolverContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
-import { isTauriRuntime, NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 const scopes = [
   { id: "user", title: "用户级", detail: "扫描 Claude Code 与 Codex 用户级来源", icon: House },
-  { id: "projects", title: "维护项目", detail: "扫描一个或全部已维护项目的来源", icon: FolderSearch },
-  { id: "custom", title: "高级自定义来源", detail: "按明确路径和格式预览外部来源", icon: ScanSearch },
+  { id: "project", title: "项目级", detail: "扫描显式项目的 Claude/Codex 来源", icon: FolderSearch },
+  { id: "custom", title: "自定义路径", detail: "预览指定目录下的资产", icon: ScanSearch },
 ] as const;
-
-const staticResults = [
-  { id: "demo:api-design", name: "api-design", type: "Skill", source: "用户级", result: "新增", eligible: true },
-  { id: "demo:format-code", name: "format-code", type: "Command", source: "project-a", result: "新增", eligible: true },
-  { id: "demo:filesystem", name: "Filesystem", type: "MCP", source: "my-app", result: "更新", eligible: true },
-  { id: "demo:db-review", name: "db-review", type: "Skill", source: "project-a", result: "冲突", eligible: true },
-];
 
 const userScanScope: RuntimeDiscoveryScope = { kind: "user" };
-const customSourceKinds = [
-  {
-    id: "skill_directory",
-    label: "Skill 目录",
-    detail: "读取 SKILL.md 目录和直接 .md Skill 文件",
-    assetKind: "skill",
-    sourceFormat: "skill_directory",
-    picker: "directory",
-  },
-  {
-    id: "command_directory",
-    label: "Command 目录",
-    detail: "读取 Claude-compatible .md Command 文件",
-    assetKind: "command",
-    sourceFormat: "markdown",
-    picker: "directory",
-  },
-  {
-    id: "claude_mcp_json",
-    label: "Claude MCP JSON",
-    detail: "读取顶层 mcpServers 字段",
-    assetKind: "mcp",
-    sourceFormat: "claude_mcp_json",
-    picker: "json",
-  },
-  {
-    id: "codex_mcp_toml",
-    label: "Codex MCP TOML",
-    detail: "读取 [mcp_servers.<name>] 配置",
-    assetKind: "mcp",
-    sourceFormat: "codex_mcp_toml",
-    picker: "toml",
-  },
+const customSourceOptions = [
+  { value: "skill_directory", label: "Skill 目录（SKILL.md）", assetKind: "skill", sourceFormat: "skill_directory" },
+  { value: "command_directory", label: "Claude Command 目录（.md）", assetKind: "command", sourceFormat: "markdown" },
+  { value: "claude_mcp_json", label: "Claude MCP JSON", assetKind: "mcp", sourceFormat: "claude_mcp_json" },
+  { value: "codex_mcp_toml", label: "Codex MCP TOML", assetKind: "mcp", sourceFormat: "codex_mcp_toml" },
 ] as const;
 
-type CustomSourceKind = (typeof customSourceKinds)[number];
+type CustomSourceOption = (typeof customSourceOptions)[number];
+type ScanRow = {
+  sourceId: string | null;
+  name: string;
+  type: string;
+  source: string;
+  result: string;
+  eligibleImport: boolean;
+};
+
+const staticResults: ScanRow[] = [
+  { sourceId: "demo:api-design", name: "api-design", type: "Skill", source: "用户级", result: "新增", eligibleImport: true },
+  { sourceId: "demo:format-code", name: "format-code", type: "Command", source: "project-a", result: "新增", eligibleImport: true },
+  { sourceId: "demo:filesystem", name: "Filesystem", type: "MCP", source: "my-app", result: "更新", eligibleImport: true },
+  { sourceId: "demo:db-review", name: "db-review", type: "Skill", source: "project-a", result: "冲突", eligibleImport: true },
+];
 
 export function ScanImportPage({
   demoMode = false,
@@ -81,11 +61,6 @@ export function ScanImportPage({
   onOpenConflicts?: (context: ConflictResolverContext) => void;
 }) {
   const [selectedScope, setSelectedScope] = useState<(typeof scopes)[number]["id"]>("user");
-  const [customSourceKind, setCustomSourceKind] = useState<CustomSourceKind>(customSourceKinds[0]);
-  const [customPath, setCustomPath] = useState(demoMode ? "~/code/design-system/.agents/skills" : "");
-  const [managedProjects, setManagedProjects] = useState<readonly ProjectSummary[]>([]);
-  const [selectedProjectIds, setSelectedProjectIds] = useState<readonly string[]>([]);
-  const [selectedSourceIds, setSelectedSourceIds] = useState<readonly string[]>([]);
   const [scanResult, setScanResult] = useState<RuntimeDiscoveryResult | null>(null);
   const [importPreview, setImportPreview] = useState<BatchImportPreview | null>(null);
   const [adoptPreview, setAdoptPreview] = useState<AdoptPreview | null>(null);
@@ -97,56 +72,75 @@ export function ScanImportPage({
   const [isAdopting, setIsAdopting] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [managedProjects, setManagedProjects] = useState<ProjectSummary[]>([]);
+  const [selectedProjectPath, setSelectedProjectPath] = useState("");
+  const [customPath, setCustomPath] = useState("");
+  const [customSource, setCustomSource] = useState<CustomSourceOption>(customSourceOptions[0]);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>(
+    demoMode ? staticResults.flatMap((row) => row.sourceId ? [row.sourceId] : []) : [],
+  );
 
-  const input = useMemo(() => toScanScope(selectedScope, selectedProjectIds, customPath, customSourceKind), [
-    selectedScope,
-    selectedScope === "projects" ? selectedProjectIds : null,
-    selectedScope === "custom" ? customPath : null,
-    selectedScope === "custom" ? customSourceKind : null,
-  ]);
+  const input = useMemo(
+    () => toScanScope(selectedScope, selectedProjectPath, customPath, customSource, managedProjects),
+    [customPath, customSource, managedProjects, selectedProjectPath, selectedScope],
+  );
 
   useEffect(() => {
-    if (demoMode) {
-      setManagedProjects([]);
-      return undefined;
-    }
     let cancelled = false;
-    listProjects().then((projects) => {
-      if (!cancelled) {
+    if (demoMode) return undefined;
+    listProjects()
+      .then((projects) => {
+        if (cancelled) return;
         setManagedProjects(projects);
-        setSelectedProjectIds(projects.map((project) => project.id));
-      }
-    }).catch(() => {
-      if (!cancelled) setManagedProjects([]);
-    });
-    return () => { cancelled = true; };
+        setSelectedProjectPath((current) => current || (projects.length > 0 ? "__all__" : ""));
+      })
+      .catch(() => {
+        if (!cancelled) setManagedProjects([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [demoMode]);
+
+  const chooseCustomPath = async () => {
+    const isDirectory = customSource.assetKind !== "mcp";
+    const selected = await open({
+      directory: isDirectory,
+      multiple: false,
+      title: isDirectory ? "选择自定义资产目录" : "选择 MCP 配置文件",
+      filters: isDirectory
+        ? undefined
+        : [{ name: "MCP 配置", extensions: customSource.sourceFormat === "codex_mcp_toml" ? ["toml"] : ["json"] }],
+    });
+    if (typeof selected === "string") setCustomPath(selected);
+  };
 
   useEffect(() => {
     let cancelled = false;
     if (!input) {
       setScanResult(null);
+      setSelectedSourceIds([]);
       setImportPreview(null);
       setAdoptPreview(null);
-      setSelectedSourceIds([]);
-      setOperationError(null);
-      setStateLabel("请选择自定义路径");
+      setStateLabel(selectedScope === "project" ? "请选择已维护项目" : "请选择自定义来源类型并输入路径");
       return undefined;
     }
     setStateLabel("读取中");
     setImportPreview(null);
     setAdoptPreview(null);
-    setSelectedSourceIds([]);
     setOperationError(null);
     discoverRuntimeSources(input)
       .then((result) => {
         if (cancelled) return;
         if (result && typeof result === "object" && "sources" in result) {
           setScanResult(result);
-          setSelectedSourceIds(result.sources.filter((source) => source.eligibleImport).map((source) => source.sourceId));
+          setSelectedSourceIds(result.sources
+            .filter((source) => source.eligibleImport)
+            .map((source) => source.sourceId));
           setStateLabel(result.sources.length > 0 ? "只读真实数据" : "未发现本地资产");
         } else {
           setScanResult(null);
+          setSelectedSourceIds([]);
           setImportPreview(null);
           setStateLabel("未返回扫描结果");
         }
@@ -154,6 +148,7 @@ export function ScanImportPage({
       .catch((error) => {
         if (cancelled) return;
         setScanResult(null);
+        setSelectedSourceIds([]);
         setImportPreview(null);
         setOperationError(errorMessage(error));
         setStateLabel(`读取失败：${errorMessage(error)}`);
@@ -161,29 +156,7 @@ export function ScanImportPage({
     return () => {
       cancelled = true;
     };
-  }, [input, refreshKey]);
-
-  const chooseCustomPath = async () => {
-    if (!isTauriRuntime()) {
-      setOperationError("高级自定义来源只能在桌面应用中通过系统选择器选择。");
-      return;
-    }
-    try {
-      const selected = await open({
-        directory: customSourceKind.picker === "directory",
-        multiple: false,
-        title: `选择${customSourceKind.label}`,
-        filters: customSourceKind.picker === "json"
-          ? [{ name: "JSON", extensions: ["json"] }]
-          : customSourceKind.picker === "toml"
-            ? [{ name: "TOML", extensions: ["toml"] }]
-            : undefined,
-      });
-      if (typeof selected === "string") setCustomPath(selected);
-    } catch (error) {
-      setOperationError(errorMessage(error));
-    }
-  };
+  }, [input, refreshKey, selectedScope]);
 
   const rows = scanResult?.sources.length
     ? scanResult.sources.map(toScanRow)
@@ -195,25 +168,42 @@ export function ScanImportPage({
       : { total: 0, skills: 0, commands: 0, mcps: 0 };
   const warning = scanResult?.warnings[0];
   const previewWarning = importPreview?.warnings[0];
-  const sourceIds = scanResult?.sources.length
-    ? selectedSourceIds
-    : demoMode
-      ? staticResults.filter((item) => item.eligible).map((item) => item.id)
-      : selectedSourceIds;
+  const adoptWarning = adoptPreview?.warnings[0];
+  const eligibleSourceIds = scanResult?.sources
+    .filter((source) => source.eligibleImport)
+    .map((source) => source.sourceId)
+    ?? (demoMode ? staticResults.flatMap((row) => row.eligibleImport && row.sourceId ? [row.sourceId] : []) : []);
+  const sourceIds = selectedSourceIds.filter((sourceId) => eligibleSourceIds.includes(sourceId));
   const conflictCount = importPreview?.items.filter((item) => item.disposition === "conflict").length ?? 0;
   const hasConflicts = conflictCount > 0;
   const planSummary = importPreview?.items
     .map((item) => `${item.assetId}：${dispositionLabel(item.disposition)}`)
     .join(" / ");
-  const canGeneratePlan = Boolean(input && sourceIds.length > 0 && !isPlanning);
+  const adoptPlanSummary = adoptPreview
+    ? [...adoptPreview.importPlan, ...adoptPreview.mountPlan, ...adoptPreview.backupPlan].join(" / ")
+    : "";
+  const canGeneratePlan = Boolean(input) && sourceIds.length > 0 && !isPlanning;
   const canApply = Boolean(importPreview?.canApply && importPreview.previewId && !hasConflicts);
   const canAdopt = Boolean(adoptPreview?.canApply && adoptPreview.previewId);
 
+  const handleSourceSelection = (sourceId: string, selected: boolean) => {
+    setSelectedSourceIds((current) => selected
+      ? [...new Set([...current, sourceId])]
+      : current.filter((candidate) => candidate !== sourceId));
+    setImportPreview(null);
+    setAdoptPreview(null);
+    setApplyResult(null);
+    setAdoptResult(null);
+    setOperationError(null);
+    setStateLabel("已更新资产选择");
+  };
+
   const handlePlanImport = async () => {
-    if (sourceIds.length === 0 || !input) return;
+    if (!input || sourceIds.length === 0) return;
 
     setIsPlanning(true);
     setOperationError(null);
+    setAdoptPreview(null);
     setStateLabel("生成导入计划中");
     try {
       const result = await canonicalBatchImportPreview({
@@ -235,7 +225,7 @@ export function ScanImportPage({
   };
 
   const handleApplyImport = async () => {
-    if (!canApply || !importPreview?.previewId || !input) return;
+    if (!input || !canApply || !importPreview?.previewId) return;
 
     setIsApplying(true);
     setOperationError(null);
@@ -265,9 +255,10 @@ export function ScanImportPage({
   };
 
   const handlePlanAdopt = async () => {
-    if (sourceIds.length === 0 || !input) return;
+    if (!input || sourceIds.length === 0) return;
     setIsPlanning(true);
     setOperationError(null);
+    setImportPreview(null);
     setStateLabel("生成接管计划中");
     try {
       const result = await previewAdopt({
@@ -289,7 +280,7 @@ export function ScanImportPage({
   };
 
   const handleApplyAdopt = async () => {
-    if (!adoptPreview?.canApply || !input) return;
+    if (!input || !adoptPreview?.canApply) return;
     setIsAdopting(true);
     setOperationError(null);
     setStateLabel("执行导入并接管中");
@@ -318,23 +309,8 @@ export function ScanImportPage({
   };
 
   const handleOpenConflicts = () => {
-    if (!importPreview || !hasConflicts || !input) return;
+    if (!input || !importPreview || !hasConflicts) return;
     onOpenConflicts?.({ scope: input, preview: importPreview });
-  };
-
-  const toggleProject = (projectId: string) => {
-    setSelectedProjectIds((current) => current.includes(projectId)
-      ? current.filter((id) => id !== projectId)
-      : [...current, projectId]);
-  };
-
-  const toggleSource = (sourceId: string) => {
-    setSelectedSourceIds((current) => current.includes(sourceId)
-      ? current.filter((id) => id !== sourceId)
-      : [...current, sourceId]);
-    setImportPreview(null);
-    setAdoptPreview(null);
-    setApplyResult(null);
   };
 
   return (
@@ -348,8 +324,8 @@ export function ScanImportPage({
         <div className="scope-card-grid">
           {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
         </div>
-        {selectedScope === "projects" ? <div className="managed-project-scope-list"><div><strong>维护项目</strong><span>{selectedProjectIds.length === managedProjects.length ? "全部维护项目" : `已选 ${selectedProjectIds.length} 个`}</span></div>{managedProjects.map((project) => <label key={project.id}><input checked={selectedProjectIds.includes(project.id)} data-no-drag="true" onChange={() => toggleProject(project.id)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span>{project.name}</span><small>{project.path}</small></label>)}{managedProjects.length === 0 ? <p className="muted-text">尚未添加维护项目。请先在项目列表中选择目录并添加。</p> : null}</div> : null}
-        {selectedScope === "custom" ? <div className="custom-scan-source"><div><strong>高级自定义来源</strong><span>只扫描你明确选择的本地目录或配置文件，不会自动枚举其他路径。</span></div><label><span>来源类型</span><select aria-label="高级自定义来源类型" data-no-drag="true" onChange={(event) => { const next = customSourceKinds.find((item) => item.id === event.target.value) ?? customSourceKinds[0]; setCustomSourceKind(next); setCustomPath(demoMode ? "~/code/design-system/.agents/skills" : ""); }} style={NO_DRAG_REGION_STYLE} value={customSourceKind.id}>{customSourceKinds.map((kind) => <option key={kind.id} value={kind.id}>{kind.label}</option>)}</select></label><label><span>已选路径</span><input aria-label="高级自定义来源路径" data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={customPath || "尚未选择"} /></label><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseCustomPath()} style={NO_DRAG_REGION_STYLE} type="button">选择路径</button><small>{customSourceKind.detail}</small></div> : null}
+        {selectedScope === "project" && !demoMode ? <label className="scan-project-picker"><span>已维护项目</span><select aria-label="选择已维护项目" data-no-drag="true" disabled={managedProjects.length === 0} onChange={(event) => setSelectedProjectPath(event.target.value)} style={NO_DRAG_REGION_STYLE} value={selectedProjectPath}><option value="">{managedProjects.length === 0 ? "请先在项目列表添加项目" : "选择项目范围"}</option><option value="__all__">全部已维护项目</option>{managedProjects.map((project) => <option key={project.id} value={project.path}>{project.name} · {project.path}</option>)}</select></label> : null}
+        {selectedScope === "custom" && !demoMode ? <div className="scan-custom-source"><label><span>来源类型</span><select aria-label="自定义来源类型" data-no-drag="true" onChange={(event) => { setCustomSource(customSourceOptions.find((option) => option.value === event.target.value) ?? customSourceOptions[0]); setCustomPath(""); }} style={NO_DRAG_REGION_STYLE} value={customSource.value}>{customSourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>已授权路径</span><div className="path-picker-control"><input aria-label="自定义来源路径" data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={customPath} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseCustomPath()} style={NO_DRAG_REGION_STYLE} type="button"><FolderOpen size={14} />选择</button></div></label></div> : null}
       </section>
 
       <div className="scan-summary-grid">
@@ -357,9 +333,9 @@ export function ScanImportPage({
       </div>
 
       <section className="panel operation-section">
-        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}</p></div><span>{rows.length} 项待确认</span></div>
-        <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>选择</span><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row selectable" role="row" key={result.id}><input aria-label={`选择 ${result.name}`} checked={sourceIds.includes(result.id)} data-no-drag="true" disabled={!result.eligible} onChange={() => toggleSource(result.id)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><strong>{result.name}</strong><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
-        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary ?? (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
+        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath === "__all__" ? "全部已维护项目" : selectedProjectPath}` : ""}</p></div><span>{sourceIds.length} / {eligibleSourceIds.length} 项已选择</span></div>
+        <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={result.sourceId ?? `${result.type}:${result.name}`}><label className="scan-source-select"><input aria-label={`选择 ${result.name}`} checked={result.sourceId ? sourceIds.includes(result.sourceId) : true} data-no-drag="true" disabled={!result.sourceId || !result.eligibleImport} onChange={(event) => result.sourceId && handleSourceSelection(result.sourceId, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><strong>{result.name}</strong></label><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
+        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? adoptWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary || adoptPlanSummary || (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
         <div className="operation-actions">{hasConflicts ? <button className="asset-secondary-action" data-no-drag="true" onClick={handleOpenConflicts} style={NO_DRAG_REGION_STYLE} type="button">处理冲突</button> : null}<button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanAdopt} style={NO_DRAG_REGION_STYLE} type="button">生成接管计划</button></div>
         <ApplyConfirmationPanel
           actionLabel="确认导入"
@@ -371,6 +347,13 @@ export function ScanImportPage({
           result={applyResult}
           title="执行导入"
         />
+        <div className="operation-warning high-risk-mode">
+          <AlertTriangle size={17} />
+          <div>
+            <strong>高风险接管模式</strong>
+            <span>接管会在导入后替换当前生效位置。仅在明确需要让资产中心成为该位置的唯一真实来源时使用。</span>
+          </div>
+        </div>
         <ApplyConfirmationPanel
           actionLabel="导入并接管"
           canApply={canAdopt}
@@ -392,31 +375,36 @@ function errorMessage(_error: unknown) {
 
 function toScanScope(
   selectedScope: (typeof scopes)[number]["id"],
-  selectedProjectIds: readonly string[],
+  selectedProjectPath: string,
   customPath: string,
-  customSourceKind: CustomSourceKind,
+  customSource: CustomSourceOption,
+  managedProjects: ProjectSummary[],
 ): RuntimeDiscoveryScope | null {
-  if (selectedScope === "projects") return { kind: "managed_projects", projectIds: [...selectedProjectIds] };
+  if (selectedScope === "project") {
+    if (selectedProjectPath === "__all__") {
+      return { kind: "managed_projects", projectIds: managedProjects.map((project) => project.id) };
+    }
+    return selectedProjectPath ? { kind: "project", projectPath: selectedProjectPath } : null;
+  }
   if (selectedScope === "custom") {
-    if (!customPath.trim()) return null;
-    return {
+    return customPath.trim() ? {
       kind: "custom",
-      path: customPath,
-      assetKind: customSourceKind.assetKind,
-      sourceFormat: customSourceKind.sourceFormat,
-    };
+      path: customPath.trim(),
+      assetKind: customSource.assetKind,
+      sourceFormat: customSource.sourceFormat,
+    } : null;
   }
   return userScanScope;
 }
 
 function toScanRow(asset: DiscoveredRuntimeSource) {
   return {
-    id: asset.sourceId,
+    sourceId: asset.sourceId,
     name: asset.assetName,
     type: asset.assetKind === "skill" ? "Skill" : asset.assetKind === "command" ? "Command" : "MCP",
     source: `${providerLabel(asset.provider)} · ${asset.scope === "user" ? "用户级" : asset.scope === "project" ? "项目级" : "自定义"}`,
     result: asset.eligibleImport ? "发现" : asset.isManaged ? "已管理" : "无效",
-    eligible: asset.eligibleImport,
+    eligibleImport: asset.eligibleImport,
   };
 }
 

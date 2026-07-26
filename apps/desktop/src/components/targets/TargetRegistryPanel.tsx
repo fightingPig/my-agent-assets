@@ -1,6 +1,6 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { FolderCog, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   listMountTargets,
   targetRegistrationApply,
@@ -19,11 +19,11 @@ import type {
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 import { ApplyConfirmationPanel } from "../ui/ApplyConfirmationPanel";
 
-const TARGET_KINDS: readonly { value: MountTargetKind; label: string; picker: "directory" | "json" | "toml" }[] = [
-  { value: "custom_skill_directory", label: "自定义 Skill 目录", picker: "directory" },
-  { value: "custom_command_directory", label: "Claude-compatible Command 目录", picker: "directory" },
-  { value: "custom_claude_mcp_json", label: "自定义 Claude MCP JSON", picker: "json" },
-  { value: "custom_codex_mcp_toml", label: "自定义 Codex MCP TOML", picker: "toml" },
+const TARGET_KINDS: readonly { value: MountTargetKind; label: string; directory: boolean }[] = [
+  { value: "custom_skill_directory", label: "自定义 Skill 目录", directory: true },
+  { value: "custom_command_directory", label: "Claude-compatible Command 目录", directory: true },
+  { value: "custom_claude_mcp_json", label: "自定义 Claude MCP JSON", directory: false },
+  { value: "custom_codex_mcp_toml", label: "自定义 Codex MCP TOML", directory: false },
 ];
 
 type PendingChange =
@@ -32,6 +32,7 @@ type PendingChange =
 
 export function TargetRegistryPanel() {
   const [targets, setTargets] = useState<RegisteredMountTarget[]>([]);
+  const [targetId, setTargetId] = useState("");
   const [targetKind, setTargetKind] = useState<MountTargetKind>("custom_skill_directory");
   const [location, setLocation] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
@@ -48,23 +49,8 @@ export function TargetRegistryPanel() {
     refreshTargets().catch((loadError) => setError(errorMessage(loadError)));
   }, []);
 
-  const chooseLocation = async () => {
-    const kind = TARGET_KINDS.find((item) => item.value === targetKind) ?? TARGET_KINDS[0];
-    const selected = await open({
-      directory: kind.picker === "directory",
-      multiple: false,
-      title: `选择${kind.label}`,
-      filters: kind.picker === "json"
-        ? [{ name: "JSON", extensions: ["json"] }]
-        : kind.picker === "toml"
-          ? [{ name: "TOML", extensions: ["toml"] }]
-          : undefined,
-    });
-    if (typeof selected === "string") setLocation(selected);
-  };
-
   const previewRegistration = async () => {
-    const request = { id: targetIdFor(targetKind, location), kind: targetKind, location };
+    const request = { id: targetId.trim(), kind: targetKind, location: location.trim() };
     setIsPreviewing(true);
     setError(null);
     setResult(null);
@@ -111,7 +97,9 @@ export function TargetRegistryPanel() {
         });
       setResult(toApplyResult(applyResult, pending.kind));
       setPending(null);
-      if (applyResult.operation === "add") setLocation("");
+      if (applyResult.operation === "add") {
+        setTargetId("");
+      }
       await refreshTargets();
     } catch (applyError) {
       setResult(null);
@@ -122,18 +110,39 @@ export function TargetRegistryPanel() {
   };
 
   const selectedKind = TARGET_KINDS.find((item) => item.value === targetKind) ?? TARGET_KINDS[0];
-  const customTargets = targets.filter((target) => target.scope === "custom");
+
+  const chooseLocation = async () => {
+    const selected = await open({
+      directory: selectedKind.directory,
+      multiple: false,
+      title: selectedKind.directory ? "选择高级自定义目标目录" : "选择高级自定义 MCP 配置文件",
+      filters: selectedKind.directory
+        ? undefined
+        : [{ name: "MCP 配置", extensions: targetKind.includes("toml") ? ["toml"] : ["json"] }],
+    });
+    if (typeof selected === "string") setLocation(selected);
+  };
 
   return (
     <div className="target-registry-settings">
       <div className="section-heading">
         <div>
-          <h4>高级自定义 Target</h4>
-          <p>标准用户级和维护项目目标由系统派生。这里只登记额外目录或配置文件。</p>
+          <h4>运行目标注册</h4>
+          <p>仅注册非标准目录或 MCP 文件。已维护项目的标准 Target 由后端自动推导。</p>
         </div>
         <FolderCog size={16} />
       </div>
       <div className="settings-controls">
+        <label>
+          <span>目标 ID</span>
+          <input
+            data-no-drag="true"
+            onChange={(event) => setTargetId(event.target.value)}
+            placeholder="project-a-claude-skills"
+            style={NO_DRAG_REGION_STYLE}
+            value={targetId}
+          />
+        </label>
         <label>
           <span>目标类型</span>
           <select
@@ -141,6 +150,7 @@ export function TargetRegistryPanel() {
             onChange={(event) => {
               const kind = event.target.value as MountTargetKind;
               setTargetKind(kind);
+              const option = TARGET_KINDS.find((item) => item.value === kind);
               setLocation("");
               setPending(null);
             }}
@@ -151,26 +161,16 @@ export function TargetRegistryPanel() {
           </select>
         </label>
         <label>
-          <span>已选路径</span>
-          <input data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={location || "尚未选择"} />
+          <span>{selectedKind.directory ? "目标目录" : "配置文件"}</span>
+          <div className="path-picker-control"><input data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={location} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseLocation()} style={NO_DRAG_REGION_STYLE} type="button">选择</button></div>
         </label>
       </div>
       <div className="settings-actions">
         <button
           className="asset-secondary-action"
           data-no-drag="true"
-          disabled={isPreviewing}
-          onClick={() => void chooseLocation()}
-          style={NO_DRAG_REGION_STYLE}
-          type="button"
-        >
-          选择路径
-        </button>
-        <button
-          className="asset-secondary-action"
-          data-no-drag="true"
-          disabled={isPreviewing || !location}
-          onClick={() => void previewRegistration()}
+          disabled={isPreviewing || !targetId.trim() || !location.trim()}
+          onClick={previewRegistration}
           style={NO_DRAG_REGION_STYLE}
           type="button"
         >
@@ -178,7 +178,7 @@ export function TargetRegistryPanel() {
         </button>
       </div>
       <div className="reference-list">
-        {customTargets.map((target) => (
+        {targets.map((target) => (
           <div key={target.id}>
             <FolderCog size={15} />
             <span>{target.id}</span>
@@ -187,17 +187,17 @@ export function TargetRegistryPanel() {
               aria-label={`移除目标 ${target.id}`}
               className="icon-button"
               data-no-drag="true"
-              disabled={isPreviewing}
+              disabled={target.scope === "user" || isPreviewing}
               onClick={() => previewRemoval(target.id)}
               style={NO_DRAG_REGION_STYLE}
-              title="预览移除自定义 Target"
+              title={target.scope === "user" ? "内置用户级目标不可在此移除" : "预览移除目标"}
               type="button"
             >
               <Trash2 size={14} />
             </button>
           </div>
         ))}
-        {customTargets.length === 0 ? <p className="muted-text">暂无高级自定义 Target。</p> : null}
+        {targets.length === 0 ? <p className="muted-text">暂无已授权运行目标。</p> : null}
       </div>
       {pending ? (
         <ApplyConfirmationPanel
@@ -217,16 +217,6 @@ export function TargetRegistryPanel() {
       ) : null}
     </div>
   );
-}
-
-function targetIdFor(kind: MountTargetKind, location: string) {
-  const filename = location.split(/[\\/]/).filter(Boolean).at(-1) ?? "target";
-  const safeName = filename
-    .toLocaleLowerCase()
-    .replace(/\.[^.]+$/, "")
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "target";
-  return `custom-${kind.replace(/^custom_/, "").replace(/_/g, "-")}-${safeName}`;
 }
 
 function toApplyResult(

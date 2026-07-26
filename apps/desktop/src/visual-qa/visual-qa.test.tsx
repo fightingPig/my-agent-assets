@@ -5,7 +5,12 @@ import { PAGE_REGISTRY } from "../app/pages";
 import entrySource from "../visual-qa.tsx?raw";
 import { isExpectedVisualQaReport } from "../../scripts/visual-qa-readiness.mjs";
 import { parseVisualQaQuery, VISUAL_QA_PAGES } from "./config";
-import { collectVisualQaReport, createVisualQaSummary, OVERFLOW_TOLERANCE } from "./diagnostics";
+import {
+  collectVisualQaReport,
+  createVisualQaSummary,
+  MIN_READABLE_FONT_SIZE,
+  OVERFLOW_TOLERANCE,
+} from "./diagnostics";
 
 afterEach(() => cleanup());
 
@@ -92,6 +97,44 @@ describe("Visual QA harness", () => {
     });
     expect(report.severeIssues).toContain("page has horizontal overflow greater than 1px.");
     expect(report.warningIssues).toEqual([]);
+  });
+
+  it("reports visible text below the readability baseline", () => {
+    document.body.innerHTML = `
+      <div id="root">
+        <main class="app-main">
+          <header></header>
+          <section class="qa-page">
+            <span class="readable-copy" style="font-size: 12px">Readable</span>
+            <span class="tiny-copy" style="font-size: 11px">Too small</span>
+          </section>
+        </main>
+      </div>
+    `;
+    const elements = document.querySelectorAll<HTMLElement>("#root, .app-main, .qa-page, span");
+    for (const element of elements) {
+      element.getBoundingClientRect = () => ({
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 100,
+        bottom: 20,
+        left: 0,
+        width: 100,
+        height: 20,
+        toJSON: () => ({}),
+      });
+    }
+
+    const report = collectVisualQaReport({ pageId: "dashboard", pageTitle: "首页", platform: "macos" });
+
+    expect(MIN_READABLE_FONT_SIZE).toBe(12);
+    expect(report.severeIssues).toContain(
+      ".tiny-copy uses 11px text, below the 12px readability baseline.",
+    );
+    expect(report.severeIssues).not.toContain(
+      ".readable-copy uses 12px text, below the 12px readability baseline.",
+    );
   });
 
   it("builds run-level summary metadata and issue totals", () => {

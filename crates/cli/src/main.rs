@@ -216,6 +216,7 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
             }
         }
         "remove" => {
+            let remove_mcp_target_entries = take_flag(&mut args, "--remove-mcp-target-configs");
             let request = DeletePreviewRequest {
                 asset_id: next_arg(&mut args, "asset ID")?,
                 mode: if take_flag(&mut args, "--unmount-all") {
@@ -223,6 +224,7 @@ fn run_args(mut args: Vec<String>) -> Result<()> {
                 } else {
                     DeleteMode::RequireUnmounted
                 },
+                remove_mcp_target_entries,
             };
             let preview = preview_delete(&home, &request)?;
             if apply {
@@ -610,10 +612,10 @@ fn print_help() {
     println!(
         "My Agent Assets CLI\n\n\
 Usage:\n  maa [--home <home>] <command> [options]\n\n\
-Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--apply]\n  backup list\n  backup delete <entry-id> [--apply]\n  list\n  status\n  doctor\n  sync pull|push [--apply]\n\n\
+Commands:\n  init [--apply]\n  scan [--scope user|project|custom] [scope options]\n  import <source-id> [scope options] [--resolution ...] [--apply]\n  adopt <source-id> [scope options] [--resolution ...] [--apply]\n  target list\n  target add <target-kind> <target-id> --project <path>|--path <path> [--apply]\n  target remove <target-id> [--apply]\n  mount <asset-id> --target <target-id> [--apply]\n  unmount <asset-id> --target <target-id> [--apply]\n  remove <asset-id> [--unmount-all] [--remove-mcp-target-configs] [--apply]\n  backup list\n  backup delete <entry-id> [--apply]\n  list\n  status\n  doctor\n  sync pull|push [--apply]\n\n\
 Scope options:\n  --scope user\n  --scope project --project <path>\n  --scope custom --path <path> --type skill|command|mcp \\\n    --format skill-directory|markdown|claude-mcp-json|codex-mcp-toml\n\n\
 Conflict resolution:\n  --resolution unresolved|skip|overwrite|rename [--rename-to <name>]\n\n\
-Writes always show a preview unless --apply is explicitly supplied. Push requires a live GitHub Private visibility check. Automatic historical Restore is disabled.\n"
+Writes always show a preview unless --apply is explicitly supplied. MCP deletion preserves Target live config unless --remove-mcp-target-configs is supplied. Push defaults to a live GitHub Private visibility check; Settings can explicitly allow a public or unverifiable remote. Automatic historical Restore is disabled.\n"
     );
 }
 

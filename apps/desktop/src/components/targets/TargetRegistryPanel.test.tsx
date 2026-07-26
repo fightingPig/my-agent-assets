@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TargetRegistryPanel } from "./TargetRegistryPanel";
 
@@ -8,14 +9,12 @@ const {
   targetRegistrationApply,
   targetRemovalPreview,
   targetRemovalApply,
-  openDialog,
 } = vi.hoisted(() => ({
   listMountTargets: vi.fn(),
   targetRegistrationPreview: vi.fn(),
   targetRegistrationApply: vi.fn(),
   targetRemovalPreview: vi.fn(),
   targetRemovalApply: vi.fn(),
-  openDialog: vi.fn(),
 }));
 
 vi.mock("../../app/data-api", () => ({
@@ -26,8 +25,6 @@ vi.mock("../../app/data-api", () => ({
   targetRemovalApply,
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({ open: openDialog }));
-
 describe("TargetRegistryPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,17 +33,18 @@ describe("TargetRegistryPanel", () => {
       previewId: "target-add-1",
       operation: "add",
       target: {
-        id: "custom-skill-directory-skills",
-        kind: "custom_skill_directory",
-        provider: "custom",
+        id: "project-a-skills",
+        kind: "claude_project_skills",
+        provider: "claude_code",
         accepts: ["skill"],
         adapter: "symlink_directory",
-        scope: "custom",
-        path: "/tmp/custom/skills",
+        scope: "project",
+        path: "/tmp/project-a/.claude/skills",
+        projectPath: "/tmp/project-a",
         providerState: "initialized",
         status: "ready",
       },
-      affectedPaths: ["/tmp/targets.yaml", "/tmp/custom/skills"],
+      affectedPaths: ["/tmp/targets.yaml", "/tmp/project-a/.claude/skills"],
       blockingBindings: [],
       warnings: [],
       canApply: true,
@@ -56,23 +54,26 @@ describe("TargetRegistryPanel", () => {
     targetRegistrationApply.mockResolvedValue({
       previewId: "target-add-1",
       operation: "add",
-      targetId: "custom-skill-directory-skills",
+      targetId: "project-a-skills",
       registryPath: "/tmp/targets.yaml",
       backupPath: "/tmp/backups/targets.yaml",
     });
+    vi.mocked(open).mockResolvedValue("/tmp/custom-skills");
   });
 
-  it("previews and confirms registration without deriving runtime paths in React", async () => {
-    openDialog.mockResolvedValue("/tmp/custom/skills");
+  it("previews and confirms an advanced custom target selected natively", async () => {
     render(<TargetRegistryPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "选择路径" }));
-    await waitFor(() => expect(openDialog).toHaveBeenCalledWith(expect.objectContaining({ directory: true })));
+    fireEvent.change(screen.getByLabelText("目标 ID"), {
+      target: { value: "project-a-skills" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "预览注册" }));
 
     await waitFor(() => expect(targetRegistrationPreview).toHaveBeenCalledWith({
-      id: "custom-skill-directory-skills",
+      id: "project-a-skills",
       kind: "custom_skill_directory",
-      location: "/tmp/custom/skills",
+      location: "/tmp/custom-skills",
     }));
     expect(targetRegistrationPreview.mock.calls[0][0]).not.toHaveProperty("runtimePath");
 
@@ -81,14 +82,14 @@ describe("TargetRegistryPanel", () => {
       previewId: "target-add-1",
       previewGeneratedAtEpochSeconds: 100,
       request: {
-        id: "custom-skill-directory-skills",
+        id: "project-a-skills",
         kind: "custom_skill_directory",
-        location: "/tmp/custom/skills",
+        location: "/tmp/custom-skills",
       },
     }));
   });
 
-  it("hides standard targets and previews custom target removal", async () => {
+  it("keeps built-in user targets non-removable and previews custom removal", async () => {
     listMountTargets.mockResolvedValue([
       {
         id: "claude-user-skills",
@@ -143,8 +144,8 @@ describe("TargetRegistryPanel", () => {
     });
 
     render(<TargetRegistryPanel />);
-    expect(screen.queryByRole("button", { name: "移除目标 claude-user-skills" })).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "移除目标 custom-skills" }));
+    expect(await screen.findByRole("button", { name: "移除目标 claude-user-skills" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "移除目标 custom-skills" }));
     await waitFor(() => expect(targetRemovalPreview).toHaveBeenCalledWith({
       targetId: "custom-skills",
     }));

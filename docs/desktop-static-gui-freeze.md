@@ -65,7 +65,7 @@ Run Visual QA from `apps/desktop`:
 npm run qa:visual
 ```
 
-The runner uses `CHROME_BIN` when provided, otherwise it checks the default macOS Google Chrome path. It starts an isolated Vite server on an available port and generates 13 pages at `1440x900` and `1180x760` for a total of 26 screenshots.
+The runner uses `CHROME_BIN` when provided, otherwise it checks the default macOS Google Chrome path. It starts an isolated Vite server on an available port and generates 13 pages for macOS and Windows at `1440x900` and `1180x760`, for a total of 52 screenshots.
 
 Artifacts are generated under:
 
@@ -114,6 +114,7 @@ Future integration should place filesystem, Git, scan, mount, MCP compile, backu
 - Asset Detail and Project Detail are reached from list inspector actions rather than primary sidebar navigation.
 - Codex support has since expanded to compatible Skill/MCP discovery, import, and mount targets; Codex Commands, AGENTS.md assets, and OAuth token management remain prohibited.
 - Destructive apply-style business actions were intentionally disabled at static freeze time. Later controlled-write milestones added Settings save, Scan Import, Mount Manager, Sync, Target Registry, Backup History reveal, and other preview/apply flows without changing the frozen page layout.
-- Visual QA currently batch-generates macOS-layout screenshots only.
+- Visual QA batch-generates macOS and Windows layout screenshots at both
+  supported validation viewports.
 - Headless Chrome does not validate native Tauri window chrome, macOS traffic lights, or Windows native titlebar behavior.
 - Visual QA detects structural overflow and clipping risks, but final product review still requires human inspection on installed macOS and Windows builds.

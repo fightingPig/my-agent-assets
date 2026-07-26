@@ -161,7 +161,10 @@ Importing a Claude or Codex MCP entry:
 
 Import must not automatically write back to the source or distribute the entry to other targets. Live configuration changes happen only after an explicit upsert, toggle, mount, unmount, delete, or sync operation.
 
-Disabling a target removes only that server from that target. Deleting an MCP asset removes it from all previously enabled targets before deleting canonical storage.
+Disabling a target removes only that server from that target. Deleting an MCP
+asset preserves live Target entries by default; the user may explicitly opt in
+to removing the selected server from all enabled targets before canonical
+storage is deleted.
 
 ## Machine-local State
 
@@ -170,13 +173,14 @@ The file-based state model is:
 ```text
 assets.yaml   # synchronized canonical asset index
 config.yaml   # machine-local settings
+projects.yaml # machine-local explicitly managed projects
 targets.yaml  # machine-local authorized targets
 mounts.yaml   # machine-local asset-target bindings and state
 ```
 
 Every state file has a `schemaVersion`. Unknown newer versions block writes. Corrupt state is diagnosed rather than silently replaced.
 
-`config.yaml`, `targets.yaml`, and `mounts.yaml` are not Git-synchronized.
+`config.yaml`, `projects.yaml`, `targets.yaml`, and `mounts.yaml` are not Git-synchronized.
 
 ## Git And Backups
 

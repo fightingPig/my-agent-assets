@@ -2,7 +2,7 @@
 
 This file tracks progress toward `my_agent_assets_final_goal.md`.
 
-Gate labels are requirement ordering and verification checkpoints. Implementation proceeds continuously on `codex/final-product-v1`; a Gate does not require a pause, standalone commit, or push.
+Gate labels are requirement ordering and verification checkpoints. Current implementation proceeds continuously on `codex/final-product-v1-next`, derived from the frozen `codex/final-product-v1` baseline; a Gate does not require a pause, standalone commit, or push.
 
 ## Gate 0: Current-state audit and model correction
 
@@ -63,7 +63,7 @@ Validation:
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
 - `scripts/e2e_fake_runtime.sh`: passed with Claude/Codex import and targetId mount flow
-- Visual QA: 26 screenshots, 0 severe issues, 0 warnings
+- Visual QA: 52 macOS/Windows screenshots, 0 severe issues, 0 warnings
 - real GitHub Private fake-device sync E2E: passed with temporary branch creation, device-B clone verification, and cleanup
 
 Implemented:
@@ -160,8 +160,8 @@ Implemented:
 - implemented shared Git status and SHA-256-bound Pull/Push preview/apply
 - Pull requires a clean worktree, creates a local canonical backup, and uses fast-forward only
 - Push uses a temporary Git index and stages only `.gitignore`, `assets/`, `assets.yaml`, and `backups/portable/`
-- Push performs live `gh api` visibility verification before preview and again under lock before apply; only `PRIVATE` is accepted
-- Push blocks public/internal/unknown/unverifiable remotes, non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity
+- Push performs live `gh api` visibility verification before preview and again under lock before apply; `PRIVATE` is required by default
+- Push blocks public/internal/unknown/unverifiable remotes unless the user explicitly enables the local public-remote setting; every opt-out preview and confirmation warns about the resulting exposure risk, while non-whitelist changes, staged user changes, remote-ahead state, divergence, and changed remote identity remain blocked
 - Push never uses force, stash, merge, rebase, or reset; failed Push restores only the app-created branch ref
 - migrated Tauri, CLI, and Sync UI to the shared Git service
 - added shared target registration requests that expand `~`, canonicalize
@@ -192,9 +192,18 @@ Implemented:
   shared-core runtime discovery adapter
 - moved `list_assets` and `list_projects` filesystem queries into shared core;
   Desktop is now a transport adapter and CLI `list` uses the same asset query
-- unified project discovery on `config.yaml.scan_roots` and configurable
-  `max_depth` (default 5), including nested projects, fixed skip rules, and no
-  directory-symlink traversal
+- replaced automatic project-list discovery with explicit project management in
+  `projects.yaml`: users add existing local directories, edit metadata/path,
+  or remove only management records; project directories are never created or
+  deleted by this feature, and active mount bindings block unsafe path changes
+  or removal
+- project scans now select an explicitly managed project and recursively inspect
+  nested runtime roots up to the shared configurable `max_depth` (default 5);
+  the fixed skip list and no-directory-link rule apply equally to Desktop and CLI
+- changed V1 Skills to directory-only `skills/<name>/SKILL.md` sources and
+  canonical directories; direct Markdown Skills are ignored
+- MCP deletion now preserves enabled Target live configuration by default and
+  offers an explicit high-risk opt-in to remove corresponding Target entries
 - migrated Import, Batch Import, Adopt, Mount, Unmount, Delete, and Target
   Registry preview fingerprints from FNV/DefaultHasher to one domain-separated
   SHA-256 implementation that includes normalized request data, timestamp, and
@@ -284,38 +293,123 @@ Implemented:
   shows total size, oldest backup, and a configurable 1 GiB default cleanup
   reminder without automatic deletion; `maa backup list` and `maa backup
   delete <entry-id> [--apply]` call the same shared-core workflow
-- fixed Windows atomic-write compatibility: directory durability sync remains
-  enabled on Unix, while Windows no longer calls `FlushFileBuffers` on
-  read-only directory/file handles; asset, target, mount, managed-project,
-  diagnostic, and runtime atomic writes now share the same platform policy
-- made Windows fixture paths portable and added a Windows-safe directory
-  junction invocation; the native Windows regression workflow passed core and
-  desktop tests before producing unsigned MSI/NSIS test packages
-- refreshed full validation on `933e281`: TypeScript, 91 Vitest tests,
-  renderer build, Visual QA (26 screenshots, zero severe/warnings), Rust fmt,
-  core (127), desktop (21), CLI (10), Clippy, and fake-HOME E2E passed
-- rebuilt the ad-hoc macOS package at `933e281`; `codesign --verify --deep
-  --strict` and `hdiutil verify` passed, with DMG SHA-256
-  `10c52fa6338b5edd0b625b2257d318693b642c0371c8c9aeaeac4fe19e6eb5f5`
-- launched that bundled executable with an empty disposable
-  `MY_AGENT_ASSETS_HOME`; it started and left the fake HOME empty, without
-  touching the real asset center
-- ran Tauri dev smoke with a second empty disposable `MY_AGENT_ASSETS_HOME`;
-  the Vite server and native desktop process both reached running state and
-  were then stopped without creating an asset center
-- fast-forwarded the validated candidate to `main`; GitHub Actions run
-  `30034252588` passed Windows tests and produced unsigned MSI/NSIS artifacts
+- made `projects.yaml` an initialized, schema-validated, machine-local registry
+  and ensured it remains excluded from Git even when an older asset center did
+  not yet contain the local project registry entry in `.gitignore`
+- made standard Claude Code and Codex user Target readiness refresh from current
+  runtime presence on every registry read instead of freezing initialization
+  state in `targets.yaml`; Doctor now reports installed, initialized, and missing
+  runtime states separately
+- restricted project discovery to paths explicitly present in `projects.yaml`
+  and restored the shared recursive monorepo scan inside that selected project,
+  honoring configurable `max_depth`, the fixed skip list, directory-link
+  blocking, and warning-based read/config failure degradation
+- completed Dashboard real summaries for backups, bindings, conflicts,
+  Claude/Codex runtime diagnostics, and direct page navigation; Project Detail
+  now displays registered project Target paths/status and classifies mounted
+  assets by canonical asset ID
+- made Scan Import selection explicit: only checked, import-eligible source IDs
+  enter Import or Adopt previews, and changing the selection invalidates every
+  existing preview/result before a new write can be confirmed
+- made Conflict Resolver require an explicit skip, rename, or overwrite decision
+  for every actual `disposition=conflict` item; structurally unchanged entries
+  are no longer incorrectly included in the conflict decision list
+- replaced the direct Desktop settings save transport with ten-minute
+  SHA-256-bound `settings_preview` / `settings_apply`; Settings and the Sync
+  public-remote policy both require an ordinary explicit confirmation, and
+  success is shown only after persisted settings are reloaded
+- added a process-instance nonce to every shared preview fingerprint, including
+  the separate Git Pull/Push fingerprint, so a backend restart invalidates all
+  previously issued preview IDs
+- enabled the Windows unsigned test-package workflow for pushes to
+  `codex/final-product-v1-next`
+- current validation on 2026-07-26 passed 100 frontend tests, 143 shared-core
+  tests, 22 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
+  Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
+  Visual QA for 13 pages across macOS and Windows/52 screenshots with zero
+  issues, ad-hoc macOS signing,
+  and DMG checksum verification
+- Windows workflow run `30205386686` passed frontend contract validation and
+  the complete Rust workspace on a native Windows runner, including junction
+  mount/unmount and CLI lifecycle tests, then produced unsigned MSI and NSIS
+  test installers from commit `bf67044`
+- verified the Windows artifact archive and installers:
+  - archive SHA-256:
+    `1282fea4f7e20484e37f79d7dc017b1fc977b73839870e60b7b30e0c136761fe`
+  - MSI SHA-256:
+    `7b87f9ffe5f36b0dfd6f8ff7883f0af96e62ab468cb5d4ef2bf63613807db954`
+  - NSIS SHA-256:
+    `e57c4e9acdf7d64b48555339db47ebec85d84ce69da4f60335f9aa17650a4eae`
+- added a Windows-only Tauri bundle override so the MSI product version uses
+  the compatible numeric prerelease `0.1.1-1` while application/runtime
+  version reporting remains `0.1.1-beta.1`
+- rebuilt and installed the current Apple Silicon candidate from `7e97e2c`;
+  ad-hoc signature and DMG verification passed, with DMG SHA-256
+  `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`
+- completed the readability-first page pass without changing the frozen
+  AppShell: page titles are 32px, section headings are approximately 18px,
+  body copy is 15-16px, and secondary/table/code text is 12-14px
+- replaced automatic project discovery with explicit project maintenance,
+  native directory selection, overlap rejection, current/all refresh, persisted
+  asset-health summaries, and backend-derived Claude/Codex project targets
+- separated Mount Manager into new/current mount workspaces and added
+  preview-bound unmount, while Project Detail and Asset Detail remain
+  read-oriented and route mount changes to Mount Manager
+- moved diagnostic export to Settings, removed the global provider switch,
+  added managed-project/all/custom Scan sources, and added preview-bound Git
+  remote URL configuration without running fetch, pull, or push
+- bumped the desktop, CLI, and shared-core candidate version to
+  `0.1.1-beta.1`
+- regenerated Visual QA for all 13 pages on macOS and Windows at 1440x900 and
+  1180x760: 52 screenshots, 0 severe issues, and 0 warnings
+- generated `My Agent Assets_0.1.1-beta.1_aarch64.dmg`; the application binary
+  is arm64, the ad-hoc signature passes strict verification, `hdiutil verify`
+  passes, and the DMG SHA-256 is
+  `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949`
+- added a tag-driven cross-platform Beta release workflow that validates and
+  builds one Apple Silicon DMG plus unsigned Windows x64 MSI/NSIS installers
+  from the same `v*-beta.*` commit; its publish job fails closed unless GitHub
+  reports that the repository is private
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
   multi-step workflow
-- Windows packaging/signing and real Windows manual qualification remain
-  external manual acceptance work before V1 Stable can be claimed
+- Windows production signing and real Windows manual qualification remain
+  external acceptance work before V1 Stable can be claimed; the generated
+  unsigned MSI/NSIS files are test packages only
+- Apple Developer ID signing and notarization remain external release work;
+  the macOS Beta candidate is ad-hoc signed
+- private prerelease publication is blocked because the current GitHub
+  repository is public; the workflow refuses to publish until repository
+  visibility is explicitly changed to private
+
+Latest installed-app acceptance:
+- launched `~/Applications/My Agent Assets.app` with isolated fake HOME
+  `/tmp/my-agent-assets-native-qa-L5WHnt`
+- discovered five user sources, deselected the Command to leave four selected,
+  and generated exactly two content conflicts
+- Conflict Resolver showed `0 / 2 已决策` for `claude-review` and
+  `codex-review`, excluded unchanged MCP entries, and kept unresolved apply
+  actions disabled
+- Finder icon view showed the intended non-placeholder product icon for the
+  installed app; Dock and app-switcher appearance remain a direct visual check
+- mounted Skills to Claude Code, Codex, and a registered project target;
+  mounted a Claude Command and confirmed Command-to-Codex remains blocked
+- mounted MCP assets to isolated Claude JSON and Codex TOML while preserving
+  unrelated configuration
+- verified 15 real backup records, affected paths, manifest reveal, and the
+  manual restore guide
+- completed a preview-bound Push to a disposable local remote and verified the
+  persisted `git-sync` history after restart
+- fixed the warning-free mount preview summary and post-sync history refresh
+  defects discovered during this installed-app run
+- stopped the installed app and removed `MY_AGENT_ASSETS_HOME` from the launch
+  environment after the test
 
 Next:
-- continue the requirement-by-requirement final-goal audit and close the next
-  implementation, packaging, or evidence gap that is still weaker than the
-  final acceptance criteria
+- publish the exact `0.1.1-beta.1` source commit, let the native Windows
+  workflow produce matching unsigned MSI/NSIS installers, and complete the
+  remaining clean-machine macOS and Windows manual qualification
 
 ## Progress Update Template
 

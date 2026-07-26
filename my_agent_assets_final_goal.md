@@ -110,6 +110,17 @@ Runtime Source 是扫描来源，例如：
 <project>/.codex/config.toml
 ```
 
+Skill 来源统一按目录资产处理，必须满足：
+
+```text
+skills/<name>/SKILL.md
+```
+
+Claude Code、Codex 与兼容 Custom source 都不把 `skills/<name>.md`
+作为 V1 Skill。导入与挂载的粒度都是完整 `<name>/` 目录，确保
+`scripts/`、`references/`、`assets/` 等附属内容不会丢失。Command 才是
+单个 `.md` 文件。
+
 Mount Target 是挂载目标，例如：
 
 ```text
@@ -244,10 +255,16 @@ Import 已有 Claude/Codex MCP 配置时：
 - 只有用户显式执行 upsert、toggle、mount 或 sync 时才编译 live config。
 
 禁用某个 target 时，只从该 target 的 live config 精准删除当前 server。
-删除 MCP asset 时，先从所有曾启用的 target live config 中删除；所有目标处理完成后再删除 canonical asset。
+删除 MCP asset 时，删除确认必须提供“同时从已启用 Target live config 中移除”
+选项，默认不勾选。未勾选时只删除 canonical asset 及本机管理关系；保留的
+live config 继续生效，但标记为未受资产中心管理的外部配置，后续可重新扫描导入。
+勾选后才从列出的 Target live config 精准删除 entry，所有目标处理完成后再删除
+canonical asset。
 
 本版本不区分 MCP spec 中的普通值与敏感值，Import 按原配置写入 canonical definition。
-由于 canonical MCP 可能包含密码、token 或 Authorization header，Git Push 必须受“仅 GitHub Private 仓库”强校验约束，日志和错误输出仍不得打印配置值。
+由于 canonical MCP 可能包含密码、token 或 Authorization header，Git Push 默认
+受 GitHub Private 仓库强校验约束；用户只有在同步页显式开启公开远程 Push 后，
+才能向公开或无法验证可见性的远程仓库 Push。日志和错误输出仍不得打印配置值。
 
 ---
 
@@ -405,17 +422,24 @@ App 不提供自动 Restore：
 
 ---
 
-### 2.11 GitHub Private Remote 强校验
+### 2.11 Git 远程 Push 安全策略
 
-本版本允许 canonical MCP 和 portable backup 原样进入 Git，但远程 Push 只支持能够通过认证 API 验证为 Private 的 GitHub repository。
+本版本允许 canonical MCP 和 portable backup 原样进入 Git。默认情况下，远程
+Push 只支持能够通过认证 API 验证为 Private 的 GitHub repository。
 
 - 本地使用、commit 和无 remote 场景不要求 GitHub。
 - `sync push` 前必须读取当前 remote，并通过用户本机已有的 `gh` 登录状态或 GitHub API 凭证查询 repository visibility。
 - 只有明确返回 `PRIVATE` 才允许 Push。
-- Public、Internal、认证失败、API 不可用、remote 无法识别或隐私状态未知时，一律 fail closed，禁止 Push。
+- 默认开关关闭时，Public、Internal、认证失败、API 不可用、remote 无法识别或
+  隐私状态未知时，一律 fail closed，禁止 Push。
+- 同步页提供默认关闭的“允许推送到公开仓库”本地偏好。开启后允许 GitHub Public
+  repository 和任意 Git remote Push；对公开、未知或无法验证可见性的 remote，
+  Preview 与确认区必须高亮提示资产、portable backup 与配置可能对仓库访问者可见。
+- 开关本身不触发 Git 操作，也不是账号、登录或云绑定功能。
 - 每次 Push 都重新验证，不能永久缓存结果。
 - Preview 后 remote URL、repository identity 或 visibility 变化时，旧 Preview 失效。
-- V1 不支持无法验证隐私状态的 GitLab、自建 Git 或普通 SSH remote Push。
+- 开启公开远程 Push 后支持 GitLab、自建 Git、普通 SSH/HTTPS remote 等任意 Git
+  remote；关闭时仍不支持无法验证为 GitHub Private 的 remote Push。
 - App 不提供 GitHub 登录、OAuth、账号绑定或 token 管理，只使用本机已有 Git/`gh` 环境。
 - UI 必须明确提示：Private repository 仍会向所有仓库成员暴露配置，Git history 也可能长期保留已提交内容。
 - 日志、错误、诊断报告和 operation journal 不得输出 MCP 配置值或认证凭据。
@@ -439,7 +463,9 @@ Push：
 - 只 stage Git 同步白名单。
 - Preview 展示待提交文件和 commit message。
 - 用户确认后 commit。
-- Push 前再次验证 GitHub repository visibility 为 `PRIVATE`。
+- 默认安全模式下，Push 前再次验证 GitHub repository visibility 为 `PRIVATE`。
+- 开启“允许推送到公开仓库”后，必须在 Preview 和普通确认中再次突出说明远程
+  可见性无法保证或可能为公开；不得静默绕过该风险提示。
 - 只允许普通 Push，禁止 force push。
 - 远端领先或分叉时阻止，要求先完成安全 Pull/手动处理。
 
@@ -469,18 +495,20 @@ Scan/Import 永远不创建客户端目录或配置。
 
 ### 2.13 文件型状态模型
 
-不使用数据库。资产中心使用四个由 serde 正式解析的 YAML 文件：
+不使用数据库。资产中心使用五个由 serde 正式解析的 YAML 文件：
 
 ```text
 ~/.my-agent-assets/
 ├── assets.yaml
 ├── config.yaml
+├── projects.yaml
 ├── targets.yaml
 └── mounts.yaml
 ```
 
 - `assets.yaml`：Git 同步的 canonical asset 索引，只保存 asset ID、type、name 和可移植 metadata，不保存来源绝对路径、target binding 或本机状态。
 - `config.yaml`：机器本地 scan roots、max depth、Git branch/remote 偏好、UI、日志和 CLI 设置；固定 asset center root 不作为可编辑配置。
+- `projects.yaml`：机器本地显式维护项目 registry，只保存用户登记的项目路径和显示 metadata，不进入 Git。
 - `targets.yaml`：机器本地已授权 Mount Targets。
 - `mounts.yaml`：机器本地 asset-to-target bindings，以及 `mounted/outOfSync/orphaned` 等状态。
 
@@ -491,19 +519,22 @@ Scan/Import 永远不创建客户端目录或配置。
 - 旧版本升级必须先创建 local backup，再执行显式 migration。
 - 文件损坏时返回诊断并保留原文，不得自动重建覆盖。
 - 所有写入遵守 ordered lock、stale revalidation 和 atomic replace。
-- `config.yaml`、`targets.yaml`、`mounts.yaml` 必须加入 `.gitignore`。
+- `config.yaml`、`projects.yaml`、`targets.yaml`、`mounts.yaml` 必须加入 `.gitignore`。
 - 禁止使用自定义管道分隔文本伪装成 YAML。
 - 不引入 SQLite 或其他数据库。
 
 ---
 
-### 2.14 统一项目扫描深度
+### 2.14 显式维护项目与统一扫描深度
 
-GUI 与 CLI 必须调用共享 core 的同一项目发现逻辑：
+GUI 与 CLI 必须调用共享 core 的同一项目扫描逻辑：
 
-- 使用 `config.yaml` 中的 `scan_roots`。
+- 项目列表是项目路径的唯一维护入口：用户显式添加已有本地目录、编辑显示名称/
+  路径/扫描元数据，或仅移除管理记录。不得自动把 `~/workspace`、`~/code` 下的
+  所有目录当作已维护项目。
+- Scan 只扫描用户级来源、显式维护项目和已登记的高级自定义来源；不扫描整盘。
 - 使用可配置的 `max_depth`，默认值为 `5`。
-- Desktop 当前只扫描根目录下一层的实现必须收敛到共享 core，不保留与 CLI 不同的发现语义。
+- Desktop 与 CLI 不保留不同的发现语义。
 - 继续沿用项目已经固定的目录跳过、不跟随目录 symlink 和读取失败降级规则，不在本目标中重新设计扫描算法。
 
 ---
@@ -525,6 +556,7 @@ GUI 与 CLI 必须调用共享 core 的同一项目发现逻辑：
 ├── backups/local/
 ├── assets.yaml
 ├── config.yaml
+├── projects.yaml
 ├── targets.yaml
 ├── mounts.yaml
 └── .gitignore
@@ -678,6 +710,42 @@ Unit、integration、E2E、Visual QA 和 Computer Use 自动化全部使用临�
 - 用户需要改名时，创建或导入新名称、重新挂载，再按安全 Delete 流程删除旧资产。
 - V1 不实现跨 canonical storage、registry、bindings 和 live configs 的事务性 Rename。
 
+### 2.26 页面功能边界
+
+页面布局由 Static GUI Freeze 约束；以下定义 V1 页面功能，不要求重做既有
+AppShell 或页面视觉结构。
+
+- **首页**：真实汇总 asset、project、mount、conflict、backup、Git 与用户级
+  Claude/Codex runtime 诊断；提供跳转入口，不直接执行写操作。
+- **Skills / Commands**：展示 canonical 内容、状态、挂载、项目引用与只读预览。
+  Skill 以完整目录为单位；Command 只面向 Claude-compatible target。两者支持
+  导入、挂载、卸载、外部打开、冲突处理与安全删除，但不提供内置编辑器。
+- **MCP Servers**：管理 canonical JSON spec、Target enable state、编译预览和
+  out-of-sync 状态。编辑 canonical 不自动同步 live config；用户显式 Sync/Mount
+  才会编译。删除时可选清理 live Target，默认保留。
+- **项目列表 / 项目详情**：只管理用户显式登记的本地项目。支持添加已有目录、
+  编辑显示名称/路径/扫描元数据、移除管理记录与查看 runtime、assets、mounts、
+  Git 和诊断。不得创建或删除实际项目目录；存在 mount binding 时阻止直接移除或
+  修改路径，需先卸载或迁移绑定。
+- **扫描导入**：扫描用户级、已维护项目和高级自定义来源，先显示发现项、warning
+  和 conflict，再导入或导入并接管。未解决 conflict 不得 Apply；Scan 不触发 Git
+  Sync 或 MCP health check。
+- **挂载管理**：按 canonical asset + registered target 建立/解除 binding；展示
+  target runtime 路径、Provider capability、已有内容及 Preview。Skill/Command
+  使用链接机制，MCP 使用 renderer patch。不得直接编辑运行时副本。
+- **冲突处理**：仅支持 skip、rename、overwrite；Skill/Command 按 kind + name
+  冲突，MCP 展示 canonical 与候选 JSON 原文。不得自动 rename、merge 或 AI 去重。
+- **备份历史**：展示 portable/local backup、manifest、影响路径、大小与手动
+  Restore 教程；支持 Reveal 和删除未被 journal 引用的 backup，不提供应用内
+  Restore 写操作。
+- **同步**：展示 Git 状态、预览 Pull/Push、历史与风险。默认 GitHub Private
+  Remote 强校验；用户显式开启公开远程开关后可以 Push 到任意 remote，但必须
+  明示公开/未知可见性风险。
+- **设置**：包含扫描策略（`max_depth` 默认 5）、备份/确认策略、同步偏好、
+  外观、日志、CLI 与高级 Custom Target Registry。资产中心路径只读；项目路径
+  只在项目列表维护；Claude/Codex 标准 runtime 路径只在诊断、项目与挂载流程中
+  自动发现和展示，不作为普通可编辑设置。
+
 ---
 
 ## 3. 正确业务语义
@@ -816,8 +884,9 @@ Delete Asset 删除 canonical asset：
 - Preview 展示所有将解除的 targets、将修改的 live configs 和将删除的 canonical 文件。
 - Apply 前创建 local backup。
 - Skill/Command 安全移除全部链接后再删除 canonical。
-- MCP 从所有已启用 targets 精准删除 entry 后再删除 canonical。
-- 任一 target 无法处理时，整体失败并回滚，不得留下断链或部分删除。
+- MCP 默认只删除 canonical asset 与本机管理关系；删除确认中用户可选同时从已启用
+  targets 精准删除 entry。未选择时，live config 保留为外部未管理配置。
+- 选择同步清理 Target 时，任一 target 无法处理则整体失败并回滚，不得留下部分删除。
 - 删除完成后保留 backup history 和手动 Restore 教程。
 - Git Pull 导致远端 canonical asset 消失时，本机 binding 标记为 `orphaned`；用户选择清理、重新绑定或保留，不自动删除 runtime 内容。
 
@@ -1405,7 +1474,7 @@ feat(desktop): preview mounts through target adapters
 - map canonical `headers` to Codex `http_headers`
 - remove legacy `[mcp.servers.<name>]` when deleting a Codex server
 - disabling a target removes only that server from that target
-- deleting an MCP asset removes it from every previously enabled target before deleting canonical storage
+- deleting an MCP asset preserves live Target entries by default; explicit high-risk confirmation may remove it from every previously enabled target before deleting canonical storage
 - do not symlink the whole Claude JSON or Codex TOML config
 - do not manage OAuth token
 
@@ -1433,7 +1502,7 @@ feat(desktop): preview mounts through target adapters
 - TOML comments and unrelated fields preserved。
 - MCP import does not trigger reverse synchronization。
 - target disable precisely removes one server。
-- MCP delete cleans all previously enabled targets。
+- MCP delete 默认保留所有已启用 Target 的 live entry；显式选择清理并确认后才精准删除这些 entries。
 - mounted Skill/Command cannot be directly deleted。
 - unmount only removes a link that still targets the canonical asset。
 - user-replaced runtime content blocks unmount/delete。
@@ -1630,16 +1699,18 @@ MCP 冲突同时展示 existing/candidate canonical JSON，并允许展开原始
 
 能配置：
 
-- default scan roots
-- default Claude user paths
-- default Codex user paths
-- project scan roots
-- Git remote/branch
-- UI display preferences
+- 扫描策略与 `max_depth`（默认 `5`）
+- backup、preview 与高风险提示偏好
+- Git branch/remote 与“允许推送到公开仓库”本地开关
+- 外观、日志和 CLI 路径
+- Advanced Custom Target Registry
 
 只读展示：
 
 - fixed asset center root: `~/.my-agent-assets`
+
+已维护项目路径只在项目列表维护。Claude Code/Codex 标准 runtime 路径由 adapter
+自动发现，并只读显示在诊断、项目详情和挂载管理中。
 
 ### 清理
 
@@ -1741,8 +1812,10 @@ feat(cli): align commands with canonical asset workflow
 - 确认 canonical asset center 中保存的是可同步内容。
 - Git 只 stage 同步白名单，不执行无约束的 `git add .`。
 - 同步 `backups/portable/`，忽略 `backups/local/`。
-- Push 只允许经过 API 实时验证的 GitHub Private repository。
-- visibility 未明确返回 `PRIVATE` 时禁止 Push。
+- 默认 Push 只允许经过 API 实时验证的 GitHub Private repository。
+- 默认安全模式下，visibility 未明确返回 `PRIVATE` 时禁止 Push；用户显式开启
+  公开远程开关后可以 Push 到任意 Git remote，但预览与确认必须高亮公开/未知
+  可见性风险。
 - Pull 只允许 clean worktree 上的 fast-forward。
 - Push 禁止 force，远端领先或分叉时必须阻止。
 - 不自动 stash、merge、rebase 或 reset。

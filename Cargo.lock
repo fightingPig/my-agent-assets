@@ -1585,6 +1585,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "junction"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "160f2eade097f30263b548aae5deb12ad349c909baa710fa24b92c9090b2e006"
+dependencies = [
+ "scopeguard",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1750,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-cli"
-version = "0.1.0"
+version = "0.1.1-beta.1"
 dependencies = [
  "my-agent-assets-core",
  "serde",
@@ -1759,9 +1769,10 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-core"
-version = "0.1.0"
+version = "0.1.1-beta.1"
 dependencies = [
  "humantime",
+ "junction",
  "libc",
  "serde",
  "serde_json",
@@ -1774,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-desktop"
-version = "0.1.0"
+version = "0.1.1-beta.1"
 dependencies = [
  "my-agent-assets-core",
  "serde",

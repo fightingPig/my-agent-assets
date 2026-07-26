@@ -1,4 +1,3 @@
-use crate::fs_sync::sync_directory;
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
@@ -372,7 +371,7 @@ impl MountTarget {
     }
 }
 
-pub(crate) fn directory_mount_adapter() -> MountAdapter {
+fn directory_mount_adapter() -> MountAdapter {
     if cfg!(windows) {
         MountAdapter::WindowsDirectoryJunction
     } else {
@@ -556,7 +555,85 @@ pub fn load(home: &Path) -> Result<TargetRegistry> {
             path.display()
         ))
     })?;
-    TargetRegistry::from_yaml(&yaml)
+    let mut registry = TargetRegistry::from_yaml(&yaml)?;
+    refresh_standard_user_target_states(home, &mut registry);
+    Ok(registry)
+}
+
+pub fn detect_provider_state(home: &Path, provider: RuntimeProvider) -> ProviderState {
+    let initialized = match provider {
+        RuntimeProvider::ClaudeCode => {
+            home.join(".claude").exists() || home.join(".claude.json").exists()
+        }
+        RuntimeProvider::Codex => home.join(".codex").exists(),
+        RuntimeProvider::Custom => true,
+    };
+    let executable = match provider {
+        RuntimeProvider::ClaudeCode => command_exists("claude"),
+        RuntimeProvider::Codex => command_exists("codex"),
+        RuntimeProvider::Custom => true,
+    };
+    provider_state_from_presence(initialized, executable)
+}
+
+fn refresh_standard_user_target_states(home: &Path, registry: &mut TargetRegistry) {
+    let claude = detect_provider_state(home, RuntimeProvider::ClaudeCode);
+    let codex = detect_provider_state(home, RuntimeProvider::Codex);
+    for target in &mut registry.targets {
+        let state = match target.kind {
+            MountTargetKind::ClaudeUserSkills
+            | MountTargetKind::ClaudeUserCommands
+            | MountTargetKind::ClaudeUserMcpJson => Some(claude),
+            MountTargetKind::CodexUserSkills | MountTargetKind::CodexUserMcpToml => Some(codex),
+            _ => None,
+        };
+        if let Some(state) = state {
+            target.provider_state = state;
+            target.status = status_for_provider_state(state);
+        }
+    }
+}
+
+fn provider_state_from_presence(initialized: bool, executable: bool) -> ProviderState {
+    if initialized {
+        ProviderState::Initialized
+    } else if executable {
+        ProviderState::InstalledNotInitialized
+    } else {
+        ProviderState::NotInstalled
+    }
+}
+
+fn command_exists(name: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions = executable_extensions();
+    std::env::split_paths(&path).any(|directory| {
+        extensions
+            .iter()
+            .any(|extension| directory.join(format!("{name}{extension}")).is_file())
+    })
+}
+
+#[cfg(windows)]
+fn executable_extensions() -> Vec<String> {
+    let raw = std::env::var_os("PATHEXT")
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".into())
+        .to_string_lossy()
+        .into_owned();
+    let mut extensions = raw
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| extension.to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    extensions.push(String::new());
+    extensions
+}
+
+#[cfg(not(windows))]
+fn executable_extensions() -> Vec<String> {
+    vec![String::new()]
 }
 
 pub fn save(home: &Path, registry: &TargetRegistry) -> Result<()> {
@@ -579,7 +656,7 @@ pub fn save(home: &Path, registry: &TargetRegistry) -> Result<()> {
         file.write_all(yaml.as_bytes())?;
         file.sync_all()?;
         fs::rename(&temporary, &path)?;
-        sync_directory(parent)
+        crate::operation::sync_directory(parent)
     })();
     if let Err(error) = result {
         let _ = fs::remove_file(&temporary);
@@ -761,10 +838,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn fixture_root() -> PathBuf {
-        std::env::temp_dir().join("maa-targets-fixture")
-    }
-
     fn custom_json_target() -> MountTarget {
         MountTarget {
             id: "custom-json".to_string(),
@@ -773,7 +846,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::JsonMcpPatch,
             scope: TargetScope::Custom,
-            path: fixture_root().join("custom-mcp.json"),
+            path: std::env::temp_dir().join("custom-mcp.json"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -899,7 +972,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::TomlMcpPatch,
             scope: TargetScope::Custom,
-            path: fixture_root().join("custom-mcp.toml"),
+            path: std::env::temp_dir().join("custom-mcp.toml"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -912,7 +985,7 @@ mod tests {
     fn registry_rejects_duplicate_ids_and_paths() {
         let first = custom_json_target();
         let mut duplicate_id = first.clone();
-        duplicate_id.path = fixture_root().join("other-mcp.json");
+        duplicate_id.path = std::env::temp_dir().join("other-mcp.json");
         assert!(TargetRegistry::new(vec![first.clone(), duplicate_id]).is_err());
 
         let mut duplicate_path = first.clone();
@@ -931,18 +1004,21 @@ mod tests {
     #[test]
     fn yaml_round_trip_and_id_only_resolution() {
         let registry = TargetRegistry::new(vec![custom_json_target()]).unwrap();
+        let custom_path = std::env::temp_dir().join("custom-mcp.json");
         let yaml = registry.to_yaml().unwrap();
         assert!(yaml.contains("schemaVersion: 1"));
         assert!(yaml.contains("custom_claude_mcp_json"));
 
         let restored = TargetRegistry::from_yaml(&yaml).unwrap();
         assert_eq!(restored, registry);
-        assert_eq!(
-            restored.resolve("custom-json").unwrap().path,
-            fixture_root().join("custom-mcp.json")
-        );
+        assert_eq!(restored.resolve("custom-json").unwrap().path, custom_path);
         assert!(restored
-            .resolve(&fixture_root().join("custom-mcp.json").to_string_lossy())
+            .resolve(
+                std::env::temp_dir()
+                    .join("custom-mcp.json")
+                    .to_string_lossy()
+                    .as_ref()
+            )
             .is_err());
         assert!(restored
             .resolve_for_apply("custom-json", AssetKind::Mcp)
@@ -954,8 +1030,9 @@ mod tests {
 
     #[test]
     fn standard_user_targets_block_uninitialized_providers() {
+        let home = std::env::temp_dir().join("maa-targets-fake-home");
         let registry = TargetRegistry::standard_user_targets(
-            &fixture_root().join("fake-home"),
+            &home,
             ProviderState::InstalledNotInitialized,
             ProviderState::Initialized,
             MountAdapter::SymlinkDirectory,
@@ -979,6 +1056,22 @@ mod tests {
     }
 
     #[test]
+    fn provider_presence_distinguishes_installed_and_initialized_states() {
+        assert_eq!(
+            provider_state_from_presence(false, false),
+            ProviderState::NotInstalled
+        );
+        assert_eq!(
+            provider_state_from_presence(false, true),
+            ProviderState::InstalledNotInitialized
+        );
+        assert_eq!(
+            provider_state_from_presence(true, false),
+            ProviderState::Initialized
+        );
+    }
+
+    #[test]
     fn project_target_must_stay_inside_registered_project() {
         let target = MountTarget {
             id: "project-skills".to_string(),
@@ -987,8 +1080,8 @@ mod tests {
             accepts: vec![AssetKind::Skill],
             adapter: MountAdapter::SymlinkDirectory,
             scope: TargetScope::Project,
-            path: fixture_root().join("other/.claude/skills"),
-            project_path: Some(fixture_root().join("project")),
+            path: PathBuf::from("/tmp/other/.claude/skills"),
+            project_path: Some(PathBuf::from("/tmp/project")),
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
         };
@@ -1006,6 +1099,8 @@ mod tests {
                 .as_nanos()
         ));
         fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::create_dir_all(home.join(".codex")).unwrap();
         let registry = TargetRegistry::standard_user_targets(
             &home,
             ProviderState::Initialized,
@@ -1015,6 +1110,45 @@ mod tests {
         .unwrap();
         save(&home, &registry).unwrap();
         assert_eq!(load(&home).unwrap(), registry);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn loading_registry_refreshes_standard_targets_after_runtime_initialization() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-target-refresh-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        let registry = TargetRegistry::standard_user_targets(
+            &home,
+            ProviderState::NotInstalled,
+            ProviderState::NotInstalled,
+            MountAdapter::SymlinkDirectory,
+        )
+        .unwrap();
+        save(&home, &registry).unwrap();
+
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        let refreshed = load(&home).unwrap();
+        assert_eq!(
+            refreshed
+                .resolve("codex-user-skills")
+                .unwrap()
+                .provider_state,
+            ProviderState::Initialized
+        );
+        assert_eq!(
+            refreshed.resolve("codex-user-skills").unwrap().status,
+            TargetStatus::Ready
+        );
+        assert_eq!(
+            refreshed.resolve("claude-user-skills").unwrap().status,
+            status_for_provider_state(detect_provider_state(&home, RuntimeProvider::ClaudeCode))
+        );
         let _ = fs::remove_dir_all(home);
     }
 }

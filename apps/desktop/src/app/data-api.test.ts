@@ -19,6 +19,7 @@ const savedSettings: DesktopSettings = {
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
+  allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
   logLevel: "info",
@@ -72,6 +73,44 @@ describe("read-only desktop data api", () => {
     invoke.mockResolvedValueOnce([]);
     await api.listProjects();
     expect(invoke).toHaveBeenLastCalledWith("list_projects");
+
+    const projectSave = {
+      name: "project-a",
+      title: "Project A",
+      path: "/tmp/project-a",
+      description: "explicit project",
+    };
+    invoke.mockResolvedValueOnce({ previewId: "project-save-1", canApply: true });
+    await api.projectSavePreview(projectSave);
+    expect(invoke).toHaveBeenLastCalledWith("project_save_preview", { input: projectSave });
+
+    const projectSaveApply = {
+      previewId: "project-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: projectSave,
+    };
+    invoke.mockResolvedValueOnce({ projectId: "project-a" });
+    await api.projectSaveApply(projectSaveApply);
+    expect(invoke).toHaveBeenLastCalledWith("project_save_apply", { input: projectSaveApply });
+
+    invoke.mockResolvedValueOnce({ previewId: "project-remove-1", canApply: true });
+    await api.projectRemovePreview({ id: "project-a" });
+    expect(invoke).toHaveBeenLastCalledWith("project_remove_preview", { input: { id: "project-a" } });
+
+    const projectRemoveApply = {
+      previewId: "project-remove-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { id: "project-a" },
+    };
+    invoke.mockResolvedValueOnce({ projectId: "project-a" });
+    await api.projectRemoveApply(projectRemoveApply);
+    expect(invoke).toHaveBeenLastCalledWith("project_remove_apply", { input: projectRemoveApply });
+
+    invoke.mockResolvedValueOnce({ refreshedProjectIds: ["project-a"], warnings: [] });
+    await api.projectRefresh({ projectIds: ["project-a"] });
+    expect(invoke).toHaveBeenLastCalledWith("project_refresh", {
+      input: { projectIds: ["project-a"] },
+    });
 
     invoke.mockResolvedValueOnce([]);
     await api.listMountBindings();
@@ -221,10 +260,34 @@ describe("read-only desktop data api", () => {
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");
 
-    invoke.mockResolvedValueOnce(savedSettings);
-    await api.settingsSave({ settings: savedSettings });
-    expect(invoke).toHaveBeenLastCalledWith("settings_save", {
+    invoke.mockResolvedValueOnce({
+      previewId: "settings-save-1",
+      settings: savedSettings,
+      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+      plannedEffects: ["replace settings"],
+      warnings: [],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 700,
+    });
+    await api.settingsPreview({ settings: savedSettings });
+    expect(invoke).toHaveBeenLastCalledWith("settings_preview", {
       input: { settings: savedSettings },
+    });
+
+    const settingsApplyInput = {
+      previewId: "settings-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { settings: savedSettings },
+    };
+    invoke.mockResolvedValueOnce({
+      previewId: "settings-save-1",
+      settings: savedSettings,
+      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+    });
+    await api.settingsApply(settingsApplyInput);
+    expect(invoke).toHaveBeenLastCalledWith("settings_apply", {
+      input: settingsApplyInput,
     });
 
   });
@@ -491,6 +554,7 @@ describe("read-only desktop data api", () => {
     const deletePreviewRequest = {
       assetId: "skill:review",
       mode: "unmount_all",
+      removeMcpTargetEntries: false,
     } as const;
     invoke.mockResolvedValueOnce({ previewId: "delete-1" });
     await api.canonicalDeletePreview(deletePreviewRequest);
@@ -547,6 +611,26 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("adopt_apply", {
       input: adoptApplyRequest,
     });
+
+    const remoteRequest = {
+      remoteName: "origin",
+      remoteUrl: "git@github.com:owner/private-assets.git",
+    };
+    invoke.mockResolvedValueOnce({ previewId: "remote-1", canApply: true });
+    await api.gitRemotePreview(remoteRequest);
+    expect(invoke).toHaveBeenLastCalledWith("git_remote_preview", {
+      input: remoteRequest,
+    });
+    const remoteApply = {
+      previewId: "remote-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: remoteRequest,
+    };
+    invoke.mockResolvedValueOnce({ previewId: "remote-1", affectedPaths: [] });
+    await api.gitRemoteApply(remoteApply);
+    expect(invoke).toHaveBeenLastCalledWith("git_remote_apply", {
+      input: remoteApply,
+    });
   });
 
   it("returns safe fallbacks outside Tauri", async () => {
@@ -560,7 +644,12 @@ describe("read-only desktop data api", () => {
       assetCenterPath: "~/.my-agent-assets",
       scanRoots: ["~/.claude", "~/workspace", "~/code"],
     });
-    await expect(api.settingsSave({ settings: savedSettings })).resolves.toEqual(savedSettings);
+    await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("requires the Tauri runtime");
+    await expect(api.settingsApply({
+      previewId: "settings-save-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: { settings: savedSettings },
+    })).rejects.toThrow("requires the Tauri runtime");
     await expect(api.gitStatus()).resolves.toMatchObject({
       isRepository: false,
       statusMessage: "Tauri runtime is unavailable.",
@@ -575,6 +664,10 @@ describe("read-only desktop data api", () => {
       previewGeneratedAtEpochSeconds: 100,
       request: { direction: "push" },
     })).rejects.toThrow("requires the Tauri runtime");
+    await expect(api.gitRemotePreview({
+      remoteName: "origin",
+      remoteUrl: "git@github.com:owner/private-assets.git",
+    })).rejects.toThrow("requires the Tauri runtime");
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -584,6 +677,6 @@ describe("read-only desktop data api", () => {
 
     await expect(api.listAssets()).rejects.toThrow("command unavailable");
     await expect(api.gitStatus()).rejects.toThrow("command unavailable");
-    await expect(api.settingsSave({ settings: savedSettings })).rejects.toThrow("command unavailable");
+    await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("command unavailable");
   });
 });

@@ -11,21 +11,27 @@ import type {
   BackupDeleteApplyResult,
   DesktopSettings,
   GitStatus,
+  GitRemotePreviewRequest,
+  GitRemotePreview,
+  GitRemoteApplyRequest,
+  GitRemoteApplyResult,
   RecoveryStatus,
   ListAssetsInput,
+  MountBinding,
   PreviewSyncInput,
   ProjectSummary,
-  ProjectAddPreviewRequest,
-  ProjectAddApplyRequest,
-  ProjectEditPreviewRequest,
-  ProjectEditApplyRequest,
-  ProjectRemovePreviewRequest,
-  ProjectRemoveApplyRequest,
   ProjectChangePreview,
   ProjectChangeResult,
-  ProjectInspectionRequest,
-  ProjectInspection,
-  SettingsSaveInput,
+  ProjectRemoveApplyRequest,
+  ProjectRemoveRequest,
+  ProjectRefreshRequest,
+  ProjectRefreshResult,
+  ProjectSaveApplyRequest,
+  ProjectSaveRequest,
+  SettingsPreviewInput,
+  SettingsPreview,
+  SettingsApplyInput,
+  SettingsApplyResult,
   SyncApplyInput,
   SyncApplyResult,
   SyncPreview,
@@ -36,7 +42,6 @@ import type {
   CanonicalImportApplyRequest,
   CanonicalImportApplyResult,
   RegisteredMountTarget,
-  MountBindingSummary,
   TargetRegistrationPreviewRequest,
   TargetRegistrationApplyRequest,
   TargetRemovalPreviewRequest,
@@ -94,6 +99,7 @@ const fallbackSettings: DesktopSettings = {
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
   gitRemote: "origin",
+  allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
   logLevel: "info",
@@ -160,37 +166,49 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return Array.isArray(projects) ? projects as ProjectSummary[] : [];
 }
 
-export async function inspectProjects(input: ProjectInspectionRequest): Promise<ProjectInspection[]> {
-  if (!isTauriRuntime()) {
-    throw new Error("inspect_projects requires the Tauri runtime.");
+export async function projectSavePreview(input: ProjectSaveRequest): Promise<ProjectChangePreview> {
+  if (!isTauriRuntime()) throw new Error("project_save_preview requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_save_preview", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || typeof result.canApply !== "boolean") {
+    throw new Error("project_save_preview returned an invalid response.");
   }
-  const result = await invoke<unknown>("inspect_projects", { input });
-  if (!Array.isArray(result)) throw new Error("inspect_projects returned an invalid response.");
-  return result as ProjectInspection[];
+  return result as ProjectChangePreview;
 }
 
-export async function projectAddPreview(input: ProjectAddPreviewRequest): Promise<ProjectChangePreview> {
-  return invokeProjectPreview("project_add_preview", input);
+export async function projectSaveApply(input: ProjectSaveApplyRequest): Promise<ProjectChangeResult> {
+  if (!isTauriRuntime()) throw new Error("project_save_apply requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_save_apply", { input });
+  if (!isRecord(result) || typeof result.projectId !== "string") {
+    throw new Error("project_save_apply returned an invalid response.");
+  }
+  return result as ProjectChangeResult;
 }
 
-export async function projectAddApply(input: ProjectAddApplyRequest): Promise<ProjectChangeResult> {
-  return invokeProjectApply("project_add_apply", input);
-}
-
-export async function projectEditPreview(input: ProjectEditPreviewRequest): Promise<ProjectChangePreview> {
-  return invokeProjectPreview("project_edit_preview", input);
-}
-
-export async function projectEditApply(input: ProjectEditApplyRequest): Promise<ProjectChangeResult> {
-  return invokeProjectApply("project_edit_apply", input);
-}
-
-export async function projectRemovePreview(input: ProjectRemovePreviewRequest): Promise<ProjectChangePreview> {
-  return invokeProjectPreview("project_remove_preview", input);
+export async function projectRemovePreview(input: ProjectRemoveRequest): Promise<ProjectChangePreview> {
+  if (!isTauriRuntime()) throw new Error("project_remove_preview requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_remove_preview", { input });
+  if (!isRecord(result) || typeof result.previewId !== "string" || typeof result.canApply !== "boolean") {
+    throw new Error("project_remove_preview returned an invalid response.");
+  }
+  return result as ProjectChangePreview;
 }
 
 export async function projectRemoveApply(input: ProjectRemoveApplyRequest): Promise<ProjectChangeResult> {
-  return invokeProjectApply("project_remove_apply", input);
+  if (!isTauriRuntime()) throw new Error("project_remove_apply requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_remove_apply", { input });
+  if (!isRecord(result) || typeof result.projectId !== "string") {
+    throw new Error("project_remove_apply returned an invalid response.");
+  }
+  return result as ProjectChangeResult;
+}
+
+export async function projectRefresh(input: ProjectRefreshRequest): Promise<ProjectRefreshResult> {
+  if (!isTauriRuntime()) throw new Error("project_refresh requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_refresh", { input });
+  if (!isRecord(result) || !Array.isArray(result.refreshedProjectIds)) {
+    throw new Error("project_refresh returned an invalid response.");
+  }
+  return result as ProjectRefreshResult;
 }
 
 export async function listBackups(): Promise<BackupSummary[]> {
@@ -387,13 +405,39 @@ export async function settingsLoad(): Promise<DesktopSettings> {
   return isRecord(settings) && typeof settings.assetCenterPath === "string" ? settings as DesktopSettings : fallbackSettings;
 }
 
-export async function settingsSave(input: SettingsSaveInput): Promise<DesktopSettings> {
-  if (!isTauriRuntime()) return input.settings;
-  const settings = await invoke<unknown>("settings_save", { input });
-  if (!isRecord(settings) || typeof settings.assetCenterPath !== "string") {
-    throw new Error("settings_save returned an invalid response.");
+export async function settingsPreview(input: SettingsPreviewInput): Promise<SettingsPreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("settings_preview requires the Tauri runtime.");
   }
-  return settings as DesktopSettings;
+  const result = await invoke<unknown>("settings_preview", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !isRecord(result.settings) ||
+    !Array.isArray(result.affectedPaths) ||
+    !Array.isArray(result.plannedEffects) ||
+    !Array.isArray(result.warnings) ||
+    typeof result.canApply !== "boolean"
+  ) {
+    throw new Error("settings_preview returned an invalid response.");
+  }
+  return result as SettingsPreview;
+}
+
+export async function settingsApply(input: SettingsApplyInput): Promise<SettingsApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("settings_apply requires the Tauri runtime.");
+  }
+  const result = await invoke<unknown>("settings_apply", { input });
+  if (
+    !isRecord(result) ||
+    typeof result.previewId !== "string" ||
+    !isRecord(result.settings) ||
+    !Array.isArray(result.affectedPaths)
+  ) {
+    throw new Error("settings_apply returned an invalid response.");
+  }
+  return result as SettingsApplyResult;
 }
 
 export async function discoverRuntimeSources(
@@ -519,9 +563,9 @@ export async function listMountTargets(): Promise<RegisteredMountTarget[]> {
   return Array.isArray(result) ? (result as RegisteredMountTarget[]) : [];
 }
 
-export async function listMountBindings(): Promise<MountBindingSummary[]> {
+export async function listMountBindings(): Promise<MountBinding[]> {
   const result = await invokeRead<unknown>("list_mount_bindings", undefined, []);
-  return Array.isArray(result) ? (result as MountBindingSummary[]) : [];
+  return Array.isArray(result) ? (result as MountBinding[]) : [];
 }
 
 export async function targetRegistrationPreview(
@@ -646,6 +690,7 @@ export async function canonicalDeletePreview(
     previewId: "canonical-delete-unavailable",
     assetId: input.assetId,
     canonicalPath: "",
+    removeMcpTargetEntries: input.removeMcpTargetEntries,
     bindings: [],
     plannedEffects: [],
     warnings: ["Tauri runtime is unavailable; canonical delete preview skipped."],
@@ -775,6 +820,7 @@ export async function previewSync(input: PreviewSyncInput): Promise<SyncPreview>
     direction: input.direction,
     status: fallbackGitStatus,
     repositoryVisibility: "unknown",
+    allowPublicRemotePush: false,
     plannedEffects: [],
     warnings: ["Tauri runtime is unavailable; sync preview skipped."],
     backupRequired: input.direction === "pull",
@@ -801,6 +847,24 @@ export async function syncApply(input: SyncApplyInput): Promise<SyncApplyResult>
     throw new Error("sync_apply returned an invalid response.");
   }
   return result as SyncApplyResult;
+}
+
+export async function gitRemotePreview(
+  input: GitRemotePreviewRequest,
+): Promise<GitRemotePreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("git_remote_preview requires the Tauri runtime.");
+  }
+  return invoke<GitRemotePreview>("git_remote_preview", { input });
+}
+
+export async function gitRemoteApply(
+  input: GitRemoteApplyRequest,
+): Promise<GitRemoteApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("git_remote_apply requires the Tauri runtime.");
+  }
+  return invoke<GitRemoteApplyResult>("git_remote_apply", { input });
 }
 
 async function invokeOrFallback<T>(
@@ -843,37 +907,6 @@ async function invokeTargetPreview(
     throw new Error(`${command} returned an invalid response.`);
   }
   return result as TargetChangePreview;
-}
-
-async function invokeProjectPreview(
-  command: "project_add_preview" | "project_edit_preview" | "project_remove_preview",
-  input: ProjectAddPreviewRequest | ProjectEditPreviewRequest | ProjectRemovePreviewRequest,
-): Promise<ProjectChangePreview> {
-  if (!isTauriRuntime()) throw new Error(`${command} requires the Tauri runtime.`);
-  const result = await invoke<unknown>(command, { input });
-  if (
-    !isRecord(result) ||
-    typeof result.previewId !== "string" ||
-    !isRecord(result.project) ||
-    !Array.isArray(result.affectedPaths) ||
-    !Array.isArray(result.blockingBindings) ||
-    !Array.isArray(result.warnings)
-  ) {
-    throw new Error(`${command} returned an invalid response.`);
-  }
-  return result as ProjectChangePreview;
-}
-
-async function invokeProjectApply(
-  command: "project_add_apply" | "project_edit_apply" | "project_remove_apply",
-  input: ProjectAddApplyRequest | ProjectEditApplyRequest | ProjectRemoveApplyRequest,
-): Promise<ProjectChangeResult> {
-  if (!isTauriRuntime()) throw new Error(`${command} requires the Tauri runtime.`);
-  const result = await invoke<unknown>(command, { input });
-  if (!isRecord(result) || typeof result.previewId !== "string" || !isRecord(result.project)) {
-    throw new Error(`${command} returned an invalid response.`);
-  }
-  return result as ProjectChangeResult;
 }
 
 async function invokeTargetApply(

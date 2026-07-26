@@ -1,6 +1,6 @@
 # V1 Full Test Plan
 
-Date: 2026-06-27
+Last updated: 2026-07-26
 
 This plan covers the current My Agent Assets V1 desktop and CLI implementation. All automated write tests must use a disposable fake HOME. Real `~/.claude`, `~/.claude.json`, and `~/.my-agent-assets` are excluded from automated testing.
 
@@ -18,7 +18,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | Temporary Rust test directories | Backend read, preview, apply, path guard, backup-history, operation recovery, and Git tests |
 | `/tmp/my-agent-assets-e2e-*` fake HOME | CLI lifecycle tests |
 | `/tmp/my-agent-assets-v1-*` fake HOME | Tauri dev and packaged app smoke |
-| Headless Chrome | 13-page Visual QA at 1440×900 and 1180×760 |
+| Headless Chrome | 13-page macOS/Windows Visual QA at 1440×900 and 1180×760 |
 | Current Apple Silicon Mac | arm64 build, ad-hoc signing, DMG, native process launch |
 | Another Apple Silicon Mac | Gatekeeper and clean-machine installation; manual |
 | Windows 10/11 | native titlebar, DPI, path, symlink, MSI/EXE; manual |
@@ -58,7 +58,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
 | C-01 | Missing asset center | Call `list_assets` with empty fake HOME | Empty list, no directory creation | PASS |
-| C-02 | Skill discovery | Add directory Skill and Markdown Skill | Both returned with correct IDs and paths | PASS |
+| C-02 | Skill discovery | Add a directory Skill and a root Markdown Skill | Only `skills/<name>/SKILL.md` directory Skills are returned; root Markdown Skills are ignored | PASS |
 | C-03 | Command discovery | Add Markdown Command | Command returned with metadata | PASS |
 | C-04 | MCP discovery | Add valid and invalid MCP JSON | Valid is ready; invalid is marked invalid | PASS |
 | C-05 | Mount derivation | Add runtime symlink and MCP config reference | Asset mountTargets and mounted status are derived | PASS |
@@ -74,8 +74,8 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| D-01 | Skill file import | Apply user Skill Markdown import | Verified copy appears in asset center | PASS |
-| D-02 | Skill directory import | Apply directory Skill import | Full directory copied and verified | PASS |
+| D-01 | Root Markdown Skill boundary | Attempt user Skill Markdown import | Root `skills/<name>.md` is ignored and cannot be imported as a V1 Skill | PASS |
+| D-02 | Skill directory import | Apply directory Skill import | Full `<name>/` directory, including `SKILL.md`, is copied and verified | PASS |
 | D-03 | Project Command import | Apply project-scope Command import | Command copied to asset center | PASS |
 | D-04 | MCP extraction | Import selected MCP server | Only selected JSON object is stored; source config unchanged | PASS |
 | D-05 | Replacement backup | Import over existing destination | Old destination stored in manifest backup | PASS |
@@ -164,7 +164,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | J-01 | Full page manifest | Run `npm run qa:visual` | 13 registered pages rendered | PASS |
 | J-02 | Default viewport | Capture every page at 1440×900 | No severe overflow/collapse/clipping | PASS |
 | J-03 | Minimum viewport | Capture every page at 1180×760 | Local scrolling works; no severe overflow/collapse/clipping | PASS |
-| J-04 | Screenshot integrity | Inspect generated PNGs | No black/unpainted tiles; toolbar and panels paint fully | MANUAL |
+| J-04 | Screenshot integrity | Inspect generated PNGs | No black/unpainted tiles; toolbar and panels paint fully | PASS |
 | J-05 | Navigation | Run App tests | All visible pages switch and PageHeader updates | PASS |
 | J-06 | Detail navigation | Open detail from list inspector | Hidden detail pages open without sidebar routes | PASS |
 | J-07 | Search/filter/selection | Run page/component tests | Local interactions update lists and inspectors | PASS |
@@ -191,7 +191,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 
 | ID | Test | Procedure | Expected | Status |
 | --- | --- | --- | --- | --- |
-| L-01 | Windows build | Build MSI/EXE on Windows | Installer artifacts generated | MANUAL |
+| L-01 | Windows build | Build MSI/EXE on Windows | Installer artifacts generated | PASS |
 | L-02 | Native titlebar | Launch installed app | Native Windows titlebar; no macOS overlay or 28px gap | MANUAL |
 | L-03 | Minimum size and DPI | Test 100%, 125%, 150%, 200% scaling | No clipping or incoherent overlap | MANUAL |
 | L-04 | Path behavior | Test drive letters, spaces, Unicode, long paths | Discovery and guards behave correctly | MANUAL |
@@ -207,15 +207,19 @@ This section must be updated with actual command output and evidence after each 
 | Automated frontend | PASS | TypeScript passed; Vitest suite passed; renderer production build passed |
 | Automated Rust | PASS | Full workspace passed, including shared-core operation recovery and desktop adapter tests |
 | Windows core compile | PASS | `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` |
-| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; disposable fake HOME only |
+| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; latest disposable fake HOME `/tmp/my-agent-assets-e2e-pOi00y` |
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
-| Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
+| Visual QA | PASS | 13 pages × macOS/Windows × 2 viewports, 52 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
-| Release build/signature/DMG | PASS | arm64 app, valid ad-hoc signature, valid DMG checksum |
-| Native window interaction | PARTIAL | Current candidate Accessibility inspection exposes native close/minimize/zoom controls, navigation, and readable empty states; continuous drag, resize, full-screen, and relaunch require current-package manual acceptance |
-| Installed application | PARTIAL | Current candidate `.app`/`.dmg` is ad-hoc signed and DMG-verified; exact-package install and fake-HOME launch remain in the manual checklist |
+| Release build/signature/DMG | PASS | `0.1.1-beta.1`: arm64 app, valid ad-hoc signature, valid DMG checksum `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949` |
+| Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the current candidate exposes native close/minimize/zoom controls, but its repeated-drag result was not reliably measurable through synthetic Computer Use input |
+| Installed application | PASS | The current `.app` is installed at `~/Applications/My Agent Assets.app`, its ad-hoc signature passes, and an isolated fake-HOME run confirmed five discovered sources, four selected items, exactly two Skill conflicts, localized reasons, unchanged MCP filtering, and disabled unresolved apply actions |
+| Installed core workflows | PASS | The exact committed candidate mounted Skills to Claude/Codex/project targets, mounted a Claude Command, rejected Command-to-Codex, patched Claude/Codex MCP configs without replacing unrelated fields, showed backup history/manual recovery guidance, completed a preview-bound local Git Push, and retained bindings and sync history after restart |
+| Installed application icon | PARTIAL | Finder icon view shows the intended non-placeholder product icon for the installed app; Dock and app-switcher appearance still require direct human confirmation because the Dock accessibility target times out |
 | Cross-machine macOS | MANUAL | Requires another Apple Silicon Mac |
-| Windows | MANUAL | Requires Windows 10/11 environment |
+| Windows package CI | PASS | Workflow run `30205386686` for commit `bf67044` passed frontend validation and the full Rust workspace, including native Windows junction lifecycle tests, then produced unsigned MSI and NSIS packages |
+| Windows artifact integrity | PASS | Artifact `8632971953`; archive SHA-256 `1282fea4f7e20484e37f79d7dc017b1fc977b73839870e60b7b30e0c136761fe`; MSI `7b87f9ffe5f36b0dfd6f8ff7883f0af96e62ab468cb5d4ef2bf63613807db954`; NSIS `e57c4e9acdf7d64b48555339db47ebec85d84ce69da4f60335f9aa17650a4eae` |
+| Windows native qualification | MANUAL | Requires Windows 10/11 installation, DPI, path, titlebar, runtime patch, upgrade, and uninstall checks |
 
 ### Native UI Evidence
 
@@ -231,7 +235,7 @@ This section must be updated with actual command output and evidence after each 
 
 ### Beta Regression
 
-- Commit `b7208e9` adds user/project/custom discovery for directory Skills at `<name>/SKILL.md` while retaining direct Markdown Skills.
+- The current branch enforces V1 directory Skills at `<name>/SKILL.md`; direct Markdown Skills are intentionally ignored.
 - Differing same-ID assets now increment `conflictCount`, render as conflicts, and block direct Scan Import apply.
 - Backend import apply independently rejects unresolved content conflicts.
 - Preview asset IDs use strict type and safe-component validation.
@@ -239,8 +243,15 @@ This section must be updated with actual command output and evidence after each 
 - Apply confirmation uses ordinary preview-bound buttons; typed `APPLY` prompts are intentionally absent.
 - Backup History is read-only and manual-restore-only; historical `preview_restore`, `restore_apply`, and `maa restore` are intentionally absent or rejected.
 - The regression suite covers directory/direct Skills, conflict detection and blocking, explicit overwrite/skip/rename, invalid preview IDs, settings write failures, and fixed asset-center behavior.
-- The latest ad-hoc-signed installed build passed direct macOS AX API validation. `System Events` did not enumerate its window, but `AXUIElement` exposed one window and all native controls without requiring a permission change.
-- Current-package AX validation covered enabled close/minimize/zoom controls, two consecutive real pointer drags, minimize/restore, full-screen enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901` window.
+- The immediately preceding ad-hoc-signed installed build passed direct macOS
+  AX API validation. `System Events` did not enumerate its window, but
+  `AXUIElement` exposed one window and all native controls without requiring a
+  permission change.
+- Native AX validation of the frozen shell covered enabled close/minimize/zoom
+  controls, two consecutive real pointer drags, minimize/restore, full-screen
+  enter/exit, 1180×760 resize, close/exit, and relaunch to one `1440×901`
+  window. The latest installed candidate retains the same shell and its
+  isolated fake-HOME workflow now confirms the exact `0 / 2` conflict count.
 
 ## Human Handoff Rule
 
@@ -250,7 +261,9 @@ Use `docs/manual-acceptance-checklist.md` as the authoritative handoff checklist
 
 ## Remaining Manual Run
 
-1. Review all 26 PNG files in `apps/desktop/artifacts/visual-qa/`, especially code, diff, inspector, and settings panels at 1180×760. The automated report found no overflow, collapse, or clipping, but semantic visual quality still needs human judgment.
-2. Open Scan Import with `/tmp/my-agent-assets-beta-regression` and visually confirm `dir-skill`, `direct-skill`, and the conflict warning are visible.
-3. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the ad-hoc signed, non-notarized build.
-4. Run L-01 through L-06 on Windows 10/11, including 100%, 125%, 150%, and 200% DPI.
+1. Visually confirm the current installed candidate's Dock and app-switcher icon.
+2. Run K-11 on another Apple Silicon Mac to record Gatekeeper behavior for the
+   ad-hoc signed, non-notarized build.
+3. Install the unsigned Windows test package from workflow run `30205386686`
+   and run L-02 through L-06 on Windows 10/11, including 100%, 125%, 150%, and
+   200% DPI. Production signing is still required before V1 Stable.

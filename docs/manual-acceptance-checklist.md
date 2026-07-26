@@ -26,7 +26,7 @@ Record the latest command output or CI link before starting manual checks.
 | TypeScript | `cd apps/desktop && npm run typecheck` | Pass |
 | Frontend tests | `cd apps/desktop && npm test` | Pass |
 | Renderer build | `cd apps/desktop && npm run build:renderer` | Pass |
-| Visual QA | `cd apps/desktop && npm run qa:visual` | 13 pages, 26 screenshots, 0 severe issues |
+| Visual QA | `cd apps/desktop && npm run qa:visual` | 13 pages × macOS/Windows × 2 viewports, 52 screenshots, 0 severe issues |
 | Rust format | `cargo fmt --all -- --check` | Pass |
 | Desktop Rust tests | `cargo test -p my-agent-assets-desktop` | Pass |
 | CLI Rust tests | `cargo test -p my-agent-assets-cli` | Pass if package is available |
