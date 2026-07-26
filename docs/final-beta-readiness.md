@@ -72,21 +72,22 @@ runtime validation reproducible on a Windows runner.
 
 Latest automated macOS package verification:
 
-- source commit: `7e97e2c` (`codex/final-product-v1-next`)
+- candidate branch: `codex/final-product-v1-next`
+- candidate version: `0.1.1-beta.1`
 - build command:
   `cd apps/desktop && npm run tauri -- build --target aarch64-apple-darwin`
 - app signature: `codesign --verify --deep --strict` passed
 - DMG integrity: `hdiutil verify` passed
 - DMG SHA-256:
-  `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`
+  `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949`
 - Tauri dev smoke: passed; the packaged executable also launched with
   `MY_AGENT_ASSETS_HOME` set to an empty disposable path and did not create or
   write any entry in that path
-- all 26 Visual QA screenshots were reviewed at `1440x900` and `1180x760`;
+- all 52 macOS/Windows Visual QA screenshots were generated at `1440x900` and
+  `1180x760`, and representative minimum-size pages were reviewed;
   no overlap, black tiles, horizontal overflow, or unreadable primary controls
   were found, long pages retained their expected local scrolling, and the
-  automated report enforced a 12px minimum for visible text with zero severe
-  issues and zero warnings
+  automated structural report returned zero severe issues and zero warnings
 - verification date: 2026-07-26
 
 Installed-app native evidence on 2026-07-26:
@@ -170,7 +171,7 @@ candidate build.
 The current macOS artifact locations used by the existing test plan are:
 
 - `target/aarch64-apple-darwin/release/bundle/macos/My Agent Assets.app`
-- `target/aarch64-apple-darwin/release/bundle/dmg/My Agent Assets_0.1.0_aarch64.dmg`
+- `target/aarch64-apple-darwin/release/bundle/dmg/My Agent Assets_0.1.1-beta.1_aarch64.dmg`
 
 Before publishing a Beta, regenerate these artifacts from the exact release
 commit and record:

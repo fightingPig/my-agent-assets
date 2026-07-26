@@ -18,7 +18,7 @@ This plan covers the current My Agent Assets V1 desktop and CLI implementation. 
 | Temporary Rust test directories | Backend read, preview, apply, path guard, backup-history, operation recovery, and Git tests |
 | `/tmp/my-agent-assets-e2e-*` fake HOME | CLI lifecycle tests |
 | `/tmp/my-agent-assets-v1-*` fake HOME | Tauri dev and packaged app smoke |
-| Headless Chrome | 13-page Visual QA at 1440×900 and 1180×760 |
+| Headless Chrome | 13-page macOS/Windows Visual QA at 1440×900 and 1180×760 |
 | Current Apple Silicon Mac | arm64 build, ad-hoc signing, DMG, native process launch |
 | Another Apple Silicon Mac | Gatekeeper and clean-machine installation; manual |
 | Windows 10/11 | native titlebar, DPI, path, symlink, MSI/EXE; manual |
@@ -207,11 +207,11 @@ This section must be updated with actual command output and evidence after each 
 | Automated frontend | PASS | TypeScript passed; Vitest suite passed; renderer production build passed |
 | Automated Rust | PASS | Full workspace passed, including shared-core operation recovery and desktop adapter tests |
 | Windows core compile | PASS | `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` |
-| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; latest disposable fake HOME `/tmp/my-agent-assets-e2e-5wXQov` |
+| CLI fake runtime | PASS | `./scripts/e2e_fake_runtime.sh`; latest disposable fake HOME `/tmp/my-agent-assets-e2e-pOi00y` |
 | CLI fake Git | PASS | Disposable local bare remote: `/tmp/my-agent-assets-local-remote-8Ydafn/remote.git` |
-| Visual QA | PASS | 13 pages, 26 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
+| Visual QA | PASS | 13 pages × macOS/Windows × 2 viewports, 52 screenshots, 0 severe, 0 warnings; `apps/desktop/artifacts/visual-qa/summary.json` |
 | Tauri dev | PASS | Started with `MY_AGENT_ASSETS_HOME` pointing to `/tmp` |
-| Release build/signature/DMG | PASS | `7e97e2c`: arm64 app, valid ad-hoc signature, valid DMG checksum `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb` |
+| Release build/signature/DMG | PASS | `0.1.1-beta.1`: arm64 app, valid ad-hoc signature, valid DMG checksum `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949` |
 | Native window interaction | PARTIAL | The immediately preceding readability candidate passed native controls, repeated drag, minimum-size, close, and relaunch checks; the current candidate exposes native close/minimize/zoom controls, but its repeated-drag result was not reliably measurable through synthetic Computer Use input |
 | Installed application | PASS | The current `.app` is installed at `~/Applications/My Agent Assets.app`, its ad-hoc signature passes, and an isolated fake-HOME run confirmed five discovered sources, four selected items, exactly two Skill conflicts, localized reasons, unchanged MCP filtering, and disabled unresolved apply actions |
 | Installed core workflows | PASS | The exact committed candidate mounted Skills to Claude/Codex/project targets, mounted a Claude Command, rejected Command-to-Codex, patched Claude/Codex MCP configs without replacing unrelated fields, showed backup history/manual recovery guidance, completed a preview-bound local Git Push, and retained bindings and sync history after restart |

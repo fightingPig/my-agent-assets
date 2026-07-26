@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AssetSummary,
@@ -31,6 +32,7 @@ const {
   projectSaveApply,
   projectRemovePreview,
   projectRemoveApply,
+  projectRefresh,
   listBackups,
   revealBackupManifest,
   backupDeletePreview,
@@ -40,9 +42,12 @@ const {
   settingsLoad,
   settingsPreview,
   settingsApply,
+  gitRemotePreview,
+  gitRemoteApply,
   previewSync,
   syncApply,
   listMountTargets,
+  listMountBindings,
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
@@ -59,6 +64,7 @@ const {
   projectSaveApply: vi.fn(),
   projectRemovePreview: vi.fn(),
   projectRemoveApply: vi.fn(),
+  projectRefresh: vi.fn(),
   listBackups: vi.fn(),
   revealBackupManifest: vi.fn(),
   backupDeletePreview: vi.fn(),
@@ -68,9 +74,12 @@ const {
   settingsLoad: vi.fn(),
   settingsPreview: vi.fn(),
   settingsApply: vi.fn(),
+  gitRemotePreview: vi.fn(),
+  gitRemoteApply: vi.fn(),
   previewSync: vi.fn(),
   syncApply: vi.fn(),
   listMountTargets: vi.fn(),
+  listMountBindings: vi.fn(),
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
   discoverRuntimeSources: vi.fn(),
@@ -89,6 +98,7 @@ vi.mock("../app/data-api", () => ({
   projectSaveApply,
   projectRemovePreview,
   projectRemoveApply,
+  projectRefresh,
   listBackups,
   revealBackupManifest,
   backupDeletePreview,
@@ -98,9 +108,12 @@ vi.mock("../app/data-api", () => ({
   settingsLoad,
   settingsPreview,
   settingsApply,
+  gitRemotePreview,
+  gitRemoteApply,
   previewSync,
   syncApply,
   listMountTargets,
+  listMountBindings,
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
@@ -116,6 +129,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.mocked(open).mockResolvedValue(null);
   listAssets.mockResolvedValue([assetFixture("skill:review", "review", "skill")]);
   canonicalAssetContent.mockImplementation(async (assetId: string) => ({
     assetId,
@@ -228,6 +242,12 @@ beforeEach(() => {
       status: "ready",
     },
   ]);
+  listMountBindings.mockResolvedValue([]);
+  projectRefresh.mockResolvedValue({
+    refreshedProjectIds: ["/tmp/project-a"],
+    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
+    warnings: [],
+  });
   canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture());
   canonicalMountApply.mockResolvedValue({
     previewId: "mount:skill-review",
@@ -334,28 +354,28 @@ describe("read-only UI integration", () => {
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
   });
 
-  it("keeps Skills and MCP in one canonical asset center across provider selection", async () => {
+  it("keeps Skills and MCP in one canonical asset center without global provider selection", async () => {
     listAssets.mockResolvedValue([assetFixture("skill:canonical-review", "canonical-review", "skill")]);
-    const { rerender } = render(<SkillsListPage provider="codex" />);
+    const { rerender } = render(<SkillsListPage />);
     expect(await screen.findByRole("option", { name: "canonical-review" })).toBeInTheDocument();
     expect(screen.getByText("real canonical content for skill:canonical-review")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
     expect(discoverRuntimeSources).not.toHaveBeenCalled();
 
     listAssets.mockResolvedValue([assetFixture("mcp:canonical-files", "canonical-files", "mcp")]);
-    rerender(<McpServersListPage provider="codex" />);
+    rerender(<McpServersListPage />);
     expect(await screen.findByRole("option", { name: "canonical-files" })).toBeInTheDocument();
     expect(listAssets).toHaveBeenLastCalledWith({ assetType: "mcp" });
     expect(screen.getByText(/统一模型是唯一真实配置/)).toBeInTheDocument();
   });
 
-  it("shows canonical empty states independent of provider selection", async () => {
+  it("shows canonical empty states without provider partitioning", async () => {
     listAssets.mockResolvedValue([]);
-    const { rerender } = render(<SkillsListPage provider="codex" />);
+    const { rerender } = render(<SkillsListPage />);
     expect(await screen.findByText("未发现 Skills")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "review" })).not.toBeInTheDocument();
 
-    rerender(<McpServersListPage provider="codex" />);
+    rerender(<McpServersListPage />);
     expect(await screen.findByText("未发现 MCP Servers")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "PostgreSQL" })).not.toBeInTheDocument();
   });
@@ -405,11 +425,12 @@ describe("read-only UI integration", () => {
   });
 
   it("previews and saves an explicit existing project without touching its directory", async () => {
+    vi.mocked(open).mockResolvedValue("/tmp/local-app");
     render(<ProjectsListPage />);
     await screen.findByRole("option", { name: "project-a" });
     fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
+    await screen.findByRole("heading", { name: "添加已有项目" });
     fireEvent.change(screen.getByLabelText("显示名称"), { target: { value: "local-app" } });
-    fireEvent.change(screen.getByLabelText("已有本地目录"), { target: { value: "/tmp/local-app" } });
     fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
     await waitFor(() => expect(projectSavePreview).toHaveBeenCalledWith(expect.objectContaining({ name: "local-app", path: "/tmp/local-app" })));
     fireEvent.click(await screen.findByRole("button", { name: "确认保存项目" }));
@@ -673,14 +694,13 @@ describe("read-only UI integration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /项目级/ }));
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith(
-      { kind: "project", projectPath: "~/workspace/project-a" },
+      { kind: "managed_projects", projectIds: ["/tmp/project-a"] },
     ));
 
     fireEvent.click(screen.getByRole("button", { name: /自定义路径/ }));
     expect(screen.getAllByText("请选择自定义来源类型并输入路径")).not.toHaveLength(0);
-    fireEvent.change(screen.getByLabelText("自定义来源路径"), {
-      target: { value: "/tmp/custom-skills" },
-    });
+    vi.mocked(open).mockResolvedValue("/tmp/custom-skills");
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
     await waitFor(() => expect(discoverRuntimeSources).toHaveBeenLastCalledWith({
       kind: "custom",
       path: "/tmp/custom-skills",
@@ -883,10 +903,12 @@ describe("read-only UI integration", () => {
       warnings: ["Preview mount warning"],
     }));
     const { rerender } = render(<MountManagerPage />);
+    await screen.findByRole("button", { name: "生成挂载计划" });
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
     expect(screen.getByText("Preview mount warning")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "刷新挂载计划" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "生成挂载计划" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
 
     rerender(<ConflictResolverPage demoMode />);
@@ -898,13 +920,16 @@ describe("read-only UI integration", () => {
   it("refreshes the targetId-only mount preview without calling apply", async () => {
     render(<MountManagerPage />);
 
+    await screen.findByRole("button", { name: "生成挂载计划" });
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /project-a-skills/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Claude Code Skills/ }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenLastCalledWith({
       assetId: "skill:review",
       targetId: "project-a-skills",
     }));
-    fireEvent.click(screen.getByRole("button", { name: "刷新挂载计划" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(3));
     expect(canonicalMountApply).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
@@ -913,11 +938,13 @@ describe("read-only UI integration", () => {
   it("executes targetId-only mount apply without typed input", async () => {
     render(<MountManagerPage />);
 
+    await screen.findByRole("button", { name: "生成挂载计划" });
+    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
 
     const mountButton = screen.getByRole("button", { name: "确认挂载" });
     expect(mountButton).toBeEnabled();
-    expect(screen.getByText("挂载计划已通过校验。")).toBeInTheDocument();
+    expect(screen.getAllByText("预览挂载计划").length).toBeGreaterThan(0);
     expect(screen.queryByText("尚未生成真实挂载预览。")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(mountButton);
@@ -931,7 +958,7 @@ describe("read-only UI integration", () => {
       },
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
-    await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(canonicalMountPreview).toHaveBeenCalledTimes(1);
   });
 
   it("resolves canonical Scan conflicts through atomic batch preview and apply", async () => {
@@ -1096,7 +1123,7 @@ describe("read-only UI integration", () => {
     expect(screen.getByText("资产中心已存在同名 Skill，内容需要人工确认")).toBeInTheDocument();
   });
 
-  it("uses selected real asset data for detail mount preview, apply, and refresh", async () => {
+  it("keeps asset details read-only and routes mounting to mount management", async () => {
     const asset = assetFixture("skill:real-review", "real-review", "skill");
     listAssets.mockResolvedValue([{ ...asset, mountTargets: ["/tmp/home/.claude/skills/real-review.md"] }]);
     canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture({
@@ -1130,22 +1157,10 @@ describe("read-only UI integration", () => {
       assetId: "skill:real-review",
       action: "reveal",
     }));
-    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
-      assetId: "skill:real-review",
-      targetId: "claude-user-skills",
-    }));
-    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "确认挂载" }));
-    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
-      previewId: "preview:mount:real-review",
-      previewGeneratedAtEpochSeconds: 100,
-      request: {
-        assetId: "skill:real-review",
-        targetId: "claude-user-skills",
-      },
-    }));
-    await waitFor(() => expect(listAssets).toHaveBeenCalledWith({ assetType: "skill" }));
-    expect(await screen.findByText("/tmp/home/.claude/skills/real-review.md")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认挂载" })).not.toBeInTheDocument();
+    expect(canonicalMountPreview).not.toHaveBeenCalled();
+    expect(canonicalMountApply).not.toHaveBeenCalled();
   });
 
   it("opens a Command through the system external application by asset ID", async () => {
@@ -1174,7 +1189,7 @@ describe("read-only UI integration", () => {
     }));
   });
 
-  it("uses selected real project data for project mount preview, apply, and refresh", async () => {
+  it("keeps project details focused on health and routes mounting to mount management", async () => {
     const project = staticProjects[0];
     const asset = assetFixture("skill:review", "review", "skill");
     listAssets.mockResolvedValue([asset]);
@@ -1206,24 +1221,12 @@ describe("read-only UI integration", () => {
 
     render(<ProjectDetailPage detail={project} />);
 
-    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalledWith({
-      assetId: "skill:review",
-      targetId: "project-a-skills",
-    }));
-    expect(screen.getByText("Claude Code · Skills")).toBeInTheDocument();
-    expect(screen.getByText("~/workspace/project-a/.claude/skills · 可用")).toBeInTheDocument();
-    expect(screen.getByText("Git 工作区")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认项目挂载" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "确认项目挂载" }));
-    await waitFor(() => expect(canonicalMountApply).toHaveBeenLastCalledWith({
-      previewId: "preview:mount:project-detail",
-      previewGeneratedAtEpochSeconds: 100,
-      request: {
-        assetId: "skill:review",
-        targetId: "project-a-skills",
-      },
-    }));
-    await waitFor(() => expect(listProjects).toHaveBeenCalled());
+    expect(screen.getByRole("heading", { name: "本地环境" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
+    expect(screen.queryByText("Git 工作区")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认项目挂载" })).not.toBeInTheDocument();
+    expect(canonicalMountPreview).not.toHaveBeenCalled();
+    expect(canonicalMountApply).not.toHaveBeenCalled();
   });
 
   it("does not call apply command wrappers from Scan Import preview", async () => {

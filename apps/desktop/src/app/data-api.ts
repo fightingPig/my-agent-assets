@@ -11,14 +11,21 @@ import type {
   BackupDeleteApplyResult,
   DesktopSettings,
   GitStatus,
+  GitRemotePreviewRequest,
+  GitRemotePreview,
+  GitRemoteApplyRequest,
+  GitRemoteApplyResult,
   RecoveryStatus,
   ListAssetsInput,
+  MountBinding,
   PreviewSyncInput,
   ProjectSummary,
   ProjectChangePreview,
   ProjectChangeResult,
   ProjectRemoveApplyRequest,
   ProjectRemoveRequest,
+  ProjectRefreshRequest,
+  ProjectRefreshResult,
   ProjectSaveApplyRequest,
   ProjectSaveRequest,
   SettingsPreviewInput,
@@ -193,6 +200,15 @@ export async function projectRemoveApply(input: ProjectRemoveApplyRequest): Prom
     throw new Error("project_remove_apply returned an invalid response.");
   }
   return result as ProjectChangeResult;
+}
+
+export async function projectRefresh(input: ProjectRefreshRequest): Promise<ProjectRefreshResult> {
+  if (!isTauriRuntime()) throw new Error("project_refresh requires the Tauri runtime.");
+  const result = await invoke<unknown>("project_refresh", { input });
+  if (!isRecord(result) || !Array.isArray(result.refreshedProjectIds)) {
+    throw new Error("project_refresh returned an invalid response.");
+  }
+  return result as ProjectRefreshResult;
 }
 
 export async function listBackups(): Promise<BackupSummary[]> {
@@ -547,6 +563,11 @@ export async function listMountTargets(): Promise<RegisteredMountTarget[]> {
   return Array.isArray(result) ? (result as RegisteredMountTarget[]) : [];
 }
 
+export async function listMountBindings(): Promise<MountBinding[]> {
+  const result = await invokeRead<unknown>("list_mount_bindings", undefined, []);
+  return Array.isArray(result) ? (result as MountBinding[]) : [];
+}
+
 export async function targetRegistrationPreview(
   input: TargetRegistrationPreviewRequest,
 ): Promise<TargetChangePreview> {
@@ -826,6 +847,24 @@ export async function syncApply(input: SyncApplyInput): Promise<SyncApplyResult>
     throw new Error("sync_apply returned an invalid response.");
   }
   return result as SyncApplyResult;
+}
+
+export async function gitRemotePreview(
+  input: GitRemotePreviewRequest,
+): Promise<GitRemotePreview> {
+  if (!isTauriRuntime()) {
+    throw new Error("git_remote_preview requires the Tauri runtime.");
+  }
+  return invoke<GitRemotePreview>("git_remote_preview", { input });
+}
+
+export async function gitRemoteApply(
+  input: GitRemoteApplyRequest,
+): Promise<GitRemoteApplyResult> {
+  if (!isTauriRuntime()) {
+    throw new Error("git_remote_apply requires the Tauri runtime.");
+  }
+  return invoke<GitRemoteApplyResult>("git_remote_apply", { input });
 }
 
 async function invokeOrFallback<T>(

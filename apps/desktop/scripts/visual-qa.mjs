@@ -15,6 +15,7 @@ const viewports = [
   { width: 1440, height: 900 },
   { width: 1180, height: 760 },
 ];
+const platforms = ["macos", "windows"];
 const defaultChromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 function delay(milliseconds) {
@@ -234,22 +235,23 @@ async function main() {
     }
 
     const results = [];
-    for (const page of manifest) {
-      for (const viewport of viewports) {
+    for (const platform of platforms) {
+      for (const page of manifest) {
+        for (const viewport of viewports) {
         await client.send("Emulation.setDeviceMetricsOverride", {
           width: viewport.width,
           height: viewport.height,
           deviceScaleFactor: 1,
           mobile: false,
         });
-        const url = `${viteUrl}/visual-qa.html?platform=macos&page=${encodeURIComponent(page.id)}`;
+        const url = `${viteUrl}/visual-qa.html?platform=${platform}&page=${encodeURIComponent(page.id)}`;
         await client.send("Page.navigate", { url: "about:blank" });
         await delay(50);
         await clearQaReport(client);
         await client.send("Page.navigate", { url });
         const report = await waitForQaReport(client, {
           pageId: page.id,
-          platform: "macos",
+          platform,
           width: viewport.width,
           height: viewport.height,
         });
@@ -271,10 +273,11 @@ async function main() {
           "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
         );
         const screenshot = await client.send("Page.captureScreenshot", screenshotOptions);
-        const screenshotPath = join(artifactDir, `${page.id}-${viewport.width}x${viewport.height}-macos.png`);
+        const screenshotPath = join(artifactDir, `${page.id}-${viewport.width}x${viewport.height}-${platform}.png`);
         await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
         results.push({ ...report, screenshotPath });
-        process.stdout.write(`captured ${page.id} ${viewport.width}x${viewport.height}\n`);
+        process.stdout.write(`captured ${platform} ${page.id} ${viewport.width}x${viewport.height}\n`);
+        }
       }
     }
 

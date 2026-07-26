@@ -1,9 +1,12 @@
-import { AlertTriangle, Blocks, BookOpen, FolderKanban, Link2, TerminalSquare } from "lucide-react";
+import { AlertTriangle, Blocks, BookOpen, FolderKanban, Link2, TerminalSquare, Unlink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalMountApply,
   canonicalMountPreview,
+  canonicalUnmountApply,
+  canonicalUnmountPreview,
   listAssets,
+  listMountBindings,
   listMountTargets,
 } from "../app/data-api";
 import type {
@@ -11,141 +14,122 @@ import type {
   AssetSummary,
   CanonicalMountPreview,
   CanonicalMountPreviewRequest,
+  CanonicalUnmountPreview,
+  MountBinding,
   RegisteredMountTarget,
 } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
-type AssetOption = {
-  id: string;
-  assetId: string;
-  type: "Skill" | "Command" | "MCP";
-  detail: string;
-  icon: typeof BookOpen;
-};
-
-type TargetOption = {
-  id: string;
-  detail: string;
-  status: "ready" | "blocked" | "invalid";
-};
-
-const demoAssets: readonly AssetOption[] = [
-  { id: "review", assetId: "skill:review", type: "Skill", detail: "代码审查工作流", icon: BookOpen },
-  { id: "deploy-prod", assetId: "command:deploy-prod", type: "Command", detail: "生产环境部署", icon: TerminalSquare },
-  { id: "PostgreSQL", assetId: "mcp:PostgreSQL", type: "MCP", detail: "数据库访问", icon: Blocks },
-];
-const demoTargets: readonly TargetOption[] = [
-  { id: "project-a", detail: "~/workspace/project-a", status: "ready" },
-  { id: "my-app", detail: "~/workspace/my-app", status: "ready" },
-  { id: "claude-user-skills", detail: "用户级 Claude Runtime", status: "ready" },
-];
+type View = "create" | "current";
 
 export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
-  const [assets, setAssets] = useState<readonly AssetOption[]>(demoMode ? demoAssets : []);
-  const [targets, setTargets] = useState<readonly TargetOption[]>(demoMode ? demoTargets : []);
-  const [selectedAsset, setSelectedAsset] = useState(demoMode ? demoAssets[0].id : "");
-  const [selectedTarget, setSelectedTarget] = useState(demoMode ? demoTargets[0].id : "");
+  const [view, setView] = useState<View>("create");
+  const [assets, setAssets] = useState<AssetSummary[]>([]);
+  const [targets, setTargets] = useState<RegisteredMountTarget[]>([]);
+  const [bindings, setBindings] = useState<MountBinding[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [selectedTargetId, setSelectedTargetId] = useState("");
   const [preview, setPreview] = useState<CanonicalMountPreview | null>(null);
-  const [applyResult, setApplyResult] = useState<ApplyResult | null>(null);
-  const [previewState, setPreviewState] = useState("预览中");
+  const [unmountPreview, setUnmountPreview] = useState<CanonicalUnmountPreview | null>(null);
+  const [selectedBinding, setSelectedBinding] = useState<MountBinding | null>(null);
+  const [result, setResult] = useState<ApplyResult | null>(null);
   const [isApplying, setIsApplying] = useState(false);
-  const [operationError, setOperationError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const asset = assets.find((item) => item.id === selectedAsset) ?? assets[0];
-  const target = targets.find((item) => item.id === selectedTarget) ?? targets[0];
-  const previewInput = useMemo(
-    () => asset && target ? toPreviewMountInput(asset, target) : null,
-    [asset, target],
+
+  useEffect(() => {
+    if (demoMode) return;
+    let cancelled = false;
+    Promise.all([listAssets({ assetType: null }), listMountTargets(), listMountBindings()])
+      .then(([loadedAssets, loadedTargets, loadedBindings]) => {
+        if (cancelled) return;
+        setAssets(loadedAssets);
+        setTargets(loadedTargets);
+        setBindings(loadedBindings);
+        setSelectedAssetId((current) => current || loadedAssets[0]?.id || "");
+      })
+      .catch(() => !cancelled && setError("挂载数据读取失败，请查看系统状态后重试。"));
+    return () => { cancelled = true; };
+  }, [demoMode, refreshKey]);
+
+  const asset = assets.find((item) => item.id === selectedAssetId) ?? assets[0];
+  const compatibleTargets = useMemo(
+    () => targets.filter((target) =>
+      asset && target.accepts.includes(asset.assetType) && target.status === "ready"
+    ),
+    [asset, targets],
   );
+  const target = compatibleTargets.find((item) => item.id === selectedTargetId) ?? compatibleTargets[0];
+  const previewInput = asset && target
+    ? { assetId: asset.id, targetId: target.id } satisfies CanonicalMountPreviewRequest
+    : null;
 
   useEffect(() => {
-    if (demoMode) {
-      setAssets(demoAssets);
-      setTargets(demoTargets);
-      setSelectedAsset(demoAssets[0].id);
-      setSelectedTarget(demoTargets[0].id);
-      return undefined;
-    }
-    let cancelled = false;
-    Promise.all([listAssets({ assetType: null }), listMountTargets()])
-      .then(([loadedAssets, loadedTargets]) => {
-        if (cancelled) return;
-        const nextAssets = loadedAssets.map(toAssetOption);
-        const nextTargets = loadedTargets.map(toTargetOption);
-        setAssets(nextAssets);
-        setTargets(nextTargets);
-        setSelectedAsset(nextAssets[0]?.id ?? "");
-        setSelectedTarget(nextTargets[0]?.id ?? "");
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setAssets([]);
-        setTargets([]);
-        setOperationError(errorMessage(error));
-        setPreviewState("读取真实数据失败");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [demoMode]);
+    setSelectedTargetId(compatibleTargets[0]?.id ?? "");
+  }, [selectedAssetId, compatibleTargets]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!previewInput) {
-      setPreview(null);
-      setPreviewState("等待真实资产和目标");
-      return undefined;
-    }
-    setPreviewState("预览中");
-    setOperationError(null);
-    canonicalMountPreview(previewInput)
-      .then((result) => {
-        if (cancelled) return;
-        if (result) {
-          setPreview(result);
-          setPreviewState("预览数据");
-        } else {
-          setPreview(null);
-          setPreviewState("未返回挂载预览");
-        }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setPreview(null);
-        setOperationError(errorMessage(error));
-        setPreviewState("挂载预览读取失败");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [previewInput, refreshKey]);
-
-  const planLines = preview?.plannedEffects ?? [];
-  const planSummary = preview
-    ? preview.warnings[0] ?? "挂载计划已通过校验。"
-    : "尚未生成真实挂载预览。";
-  const canApply = Boolean(preview?.canApply && preview?.previewId);
-
-  const handleApplyMount = async () => {
-    if (!canApply || !preview?.previewId || !previewInput) return;
-
-    setIsApplying(true);
-    setOperationError(null);
-    setPreviewState("执行挂载中");
+  const generateMountPreview = async () => {
+    if (!previewInput) return;
+    setError(null);
+    setResult(null);
     try {
-      const result = await canonicalMountApply({
+      setPreview(await canonicalMountPreview(previewInput));
+    } catch {
+      setPreview(null);
+      setError("挂载预览生成失败，请检查资产和目标状态。");
+    }
+  };
+
+  const applyMount = async () => {
+    if (!preview?.canApply || !previewInput) return;
+    setIsApplying(true);
+    try {
+      const applied = await canonicalMountApply({
         previewId: preview.previewId,
         previewGeneratedAtEpochSeconds: preview.generatedAtEpochSeconds,
         request: previewInput,
       });
-      setApplyResult(toApplyResult(result));
-      setPreviewState("挂载已执行");
-      setRefreshKey((current) => current + 1);
-    } catch (error) {
-      setApplyResult(null);
-      setOperationError(errorMessage(error));
-      setPreviewState("挂载失败");
+      setResult(toApplyResult(applied.mounted, applied.previewId, applied.affectedPaths, "挂载"));
+      setPreview(null);
+      setRefreshKey((value) => value + 1);
+    } catch {
+      setError("挂载执行失败，未完成的事务会在下次启动时自动回滚。");
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const previewUnmount = async (binding: MountBinding) => {
+    setSelectedBinding(binding);
+    setResult(null);
+    setError(null);
+    try {
+      setUnmountPreview(await canonicalUnmountPreview({
+        assetId: binding.assetId,
+        targetId: binding.targetId,
+      }));
+    } catch {
+      setUnmountPreview(null);
+      setError("解除挂载预览生成失败。");
+    }
+  };
+
+  const applyUnmount = async () => {
+    if (!selectedBinding || !unmountPreview?.canApply) return;
+    setIsApplying(true);
+    try {
+      const applied = await canonicalUnmountApply({
+        previewId: unmountPreview.previewId,
+        previewGeneratedAtEpochSeconds: unmountPreview.generatedAtEpochSeconds,
+        request: { assetId: selectedBinding.assetId, targetId: selectedBinding.targetId },
+      });
+      setResult(toApplyResult(applied.unmounted, applied.previewId, applied.affectedPaths, "解除挂载"));
+      setUnmountPreview(null);
+      setSelectedBinding(null);
+      setRefreshKey((value) => value + 1);
+    } catch {
+      setError("解除挂载失败；运行时内容未被安全移除。");
     } finally {
       setIsApplying(false);
     }
@@ -153,57 +137,87 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
 
   return (
     <div className="operation-workspace">
-      <section className="panel mount-workflow">
-        <div className="mount-flow-column"><div className="mount-flow-heading"><span>1</span><div><strong>选择资产</strong><small>{demoMode ? "Visual QA 示例数据" : "Claude 资产中心真实数据"}</small></div></div><div className="selectable-stack">{assets.map(({ id, type, detail, icon: Icon }) => <button aria-pressed={selectedAsset === id} className={selectedAsset === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => { setSelectedAsset(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><Icon size={16} /><span><strong>{id}</strong><small>{type} · {detail}</small></span></button>)}{assets.length === 0 && <div className="asset-empty-state"><BookOpen size={20} /><strong>暂无可挂载资产</strong><span>请先扫描并导入 Claude 资产。</span></div>}</div></div>
-        <div className="mount-flow-column"><div className="mount-flow-heading"><span>2</span><div><strong>选择目标</strong><small>本地运行目标</small></div></div><div className="selectable-stack">{targets.map(({ id, detail, status }) => <button aria-pressed={selectedTarget === id} className={selectedTarget === id ? "selected" : ""} data-no-drag="true" key={id} onClick={() => { setSelectedTarget(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={16} /><span><strong>{id}</strong><small>{detail} · {status === "ready" ? "可用" : "阻止"}</small></span></button>)}</div></div>
-        <div className="mount-flow-column plan"><div className="mount-flow-heading"><span>3</span><div><strong>预览挂载计划</strong><small>{previewState} · 不会执行文件变更</small></div></div>{asset && target ? <><div className="mount-plan-summary"><div><Link2 size={17} /><span><strong>{asset.id}</strong><small>{asset.type}</small></span></div><i>→</i><div><FolderKanban size={17} /><span><strong>{target.id}</strong><small>{preview?.affectedTargetPath ?? target.detail}</small></span></div></div><div className="plan-lines">{planLines.map((line) => <span key={line}>{line}</span>)}</div></> : <div className="asset-empty-state"><Link2 size={20} /><strong>无法生成挂载计划</strong><span>选择真实资产和运行目标后再预览。</span></div>}</div>
-      </section>
-      <section className="panel mount-review-bar"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ?? true ? "执行前将创建本地备份" : "无需备份"}</strong><span>{preview?.unsupportedReason ?? planSummary}</span></div></div><div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" disabled={!previewInput} onClick={() => setRefreshKey((current) => current + 1)} style={NO_DRAG_REGION_STYLE} type="button">刷新挂载计划</button></div><ApplyConfirmationPanel actionLabel="确认挂载" canApply={canApply} description="会创建软链接、目录 junction 或精确编译 MCP runtime 配置；后端只接受已授权 targetId。" isApplying={isApplying} onApply={handleApplyMount} operationError={operationError} result={applyResult} title="执行挂载" /></section>
+      <div className="segmented-view-switch" role="tablist" aria-label="挂载工作视图">
+        <button aria-selected={view === "create"} data-no-drag="true" onClick={() => setView("create")} role="tab" style={NO_DRAG_REGION_STYLE} type="button">新建挂载</button>
+        <button aria-selected={view === "current"} data-no-drag="true" onClick={() => setView("current")} role="tab" style={NO_DRAG_REGION_STYLE} type="button">当前挂载 <span>{bindings.length}</span></button>
+      </div>
+
+      {view === "create" ? (
+        <>
+          <section className="panel mount-workflow">
+            <div className="mount-flow-column">
+              <FlowHeading number="1" title="选择资产" subtitle="Canonical Asset Center" />
+              <div className="selectable-stack">{assets.map((item) => <button aria-pressed={asset?.id === item.id} className={asset?.id === item.id ? "selected" : ""} data-no-drag="true" key={item.id} onClick={() => { setSelectedAssetId(item.id); setPreview(null); }} style={NO_DRAG_REGION_STYLE} type="button">{assetIcon(item)}<span><strong>{item.name}</strong><small>{assetTypeLabel(item)} · {item.description}</small></span></button>)}{assets.length === 0 ? <Empty title="暂无可挂载资产" detail="请先在扫描导入页添加资产。" /> : null}</div>
+            </div>
+            <div className="mount-flow-column">
+              <FlowHeading number="2" title="选择位置与 Provider" subtitle="用户级 / 已维护项目 / 高级自定义" />
+              <div className="selectable-stack">{compatibleTargets.map((item) => <button aria-pressed={target?.id === item.id} className={target?.id === item.id ? "selected" : ""} data-no-drag="true" key={item.id} onClick={() => { setSelectedTargetId(item.id); setPreview(null); }} style={NO_DRAG_REGION_STYLE} type="button"><FolderKanban size={17} /><span><strong>{targetLabel(item)}</strong><small>{scopeLabel(item)} · {item.path}</small></span></button>)}{asset && compatibleTargets.length === 0 ? <Empty title="没有兼容目标" detail={asset.assetType === "command" ? "Command 仅支持 Claude-compatible 目标。" : "请先维护项目或注册高级自定义目标。"} /> : null}</div>
+            </div>
+            <div className="mount-flow-column plan">
+              <FlowHeading number="3" title="预览挂载计划" subtitle="执行前不修改任何文件" />
+              {asset && target ? <><div className="mount-plan-summary"><div>{assetIcon(asset)}<span><strong>{asset.name}</strong><small>{assetTypeLabel(asset)}</small></span></div><i>→</i><div><FolderKanban size={17} /><span><strong>{targetLabel(target)}</strong><small>{preview?.affectedTargetPath ?? target.path}</small></span></div></div><div className="plan-lines">{preview?.plannedEffects.map((line) => <span key={line}>{line}</span>)}</div></> : <Empty title="等待资产和目标" detail="完成前两步后生成挂载预览。" />}
+            </div>
+          </section>
+          <section className="panel mount-review-bar">
+            <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.backupRequired ? "执行前将创建本地备份" : "挂载尚未执行"}</strong><span>{preview?.unsupportedReason ?? preview?.warnings[0] ?? "先生成计划，再明确确认写入。"}</span></div></div>
+            <button className="asset-secondary-action" data-no-drag="true" disabled={!previewInput} onClick={() => void generateMountPreview()} style={NO_DRAG_REGION_STYLE} type="button">生成挂载计划</button>
+            <ApplyConfirmationPanel actionLabel="确认挂载" canApply={Boolean(preview?.canApply)} description="后端根据资产、位置、Provider 和范围推导目标；执行前校验预览并创建所需备份。" isApplying={isApplying} onApply={() => void applyMount()} operationError={error} result={result} title="执行挂载" />
+          </section>
+        </>
+      ) : (
+        <section className="panel current-mounts-panel">
+          <div className="section-heading"><div><h3>当前挂载</h3><p>逐条查看 canonical 资产与运行时位置，并在预览后解除。</p></div><span>{bindings.length} 条</span></div>
+          <div className="current-mount-list">{bindings.map((binding) => {
+            const boundAsset = assets.find((item) => item.id === binding.assetId);
+            const boundTarget = targets.find((item) => item.id === binding.targetId);
+            return <div className="current-mount-row" key={binding.id}><div>{boundAsset ? assetIcon(boundAsset) : <Link2 size={17} />}<span><strong>{boundAsset?.name ?? binding.assetId}</strong><small>{boundTarget ? `${targetLabel(boundTarget)} · ${boundTarget.path}` : "目标已不存在"}</small></span></div><span className={`asset-status ${binding.status === "mounted" ? "success" : "warning"}`}>{binding.status === "mounted" ? "已挂载" : binding.status === "out_of_sync" ? "待同步" : "孤立"}</span><button className="asset-secondary-action" data-no-drag="true" onClick={() => void previewUnmount(binding)} style={NO_DRAG_REGION_STYLE} type="button"><Unlink size={14} />预览解除</button></div>;
+          })}{bindings.length === 0 ? <Empty title="暂无挂载关系" detail="新建挂载后会在这里显示。" /> : null}</div>
+          {unmountPreview ? <div className="unmount-preview-panel"><div className="operation-warning"><AlertTriangle size={17} /><div><strong>解除挂载影响</strong><span>{unmountPreview.plannedEffects.join("；") || unmountPreview.affectedTargetPath}</span></div></div><ApplyConfirmationPanel actionLabel="确认解除挂载" canApply={unmountPreview.canApply} description="只移除所选运行目标的链接或 MCP entry，canonical 资产继续保留。" isApplying={isApplying} onApply={() => void applyUnmount()} operationError={error} result={result} title="执行解除挂载" /></div> : null}
+        </section>
+      )}
     </div>
   );
 }
 
-function errorMessage(_error: unknown) {
-  return "挂载操作未完成。请查看系统状态或导出诊断包后重试。";
+function FlowHeading({ number, title, subtitle }: { number: string; title: string; subtitle: string }) {
+  return <div className="mount-flow-heading"><span>{number}</span><div><strong>{title}</strong><small>{subtitle}</small></div></div>;
 }
 
-function toPreviewMountInput(asset: AssetOption, target: TargetOption): CanonicalMountPreviewRequest {
-  return {
-    assetId: asset.assetId,
-    targetId: target.id,
-  };
+function Empty({ title, detail }: { title: string; detail: string }) {
+  return <div className="asset-empty-state"><Link2 size={20} /><strong>{title}</strong><span>{detail}</span></div>;
 }
 
-function toAssetOption(asset: AssetSummary): AssetOption {
-  const type = asset.assetType === "command" ? "Command" : asset.assetType === "mcp" ? "MCP" : "Skill";
-  return {
-    id: asset.name,
-    assetId: asset.id,
-    type,
-    detail: asset.description || asset.sourcePath,
-    icon: asset.assetType === "command" ? TerminalSquare : asset.assetType === "mcp" ? Blocks : BookOpen,
-  };
+function assetIcon(asset: Pick<AssetSummary, "assetType">) {
+  if (asset.assetType === "command") return <TerminalSquare size={17} />;
+  if (asset.assetType === "mcp") return <Blocks size={17} />;
+  return <BookOpen size={17} />;
 }
 
-function toTargetOption(target: RegisteredMountTarget): TargetOption {
-  return { id: target.id, detail: target.path, status: target.status };
+function assetTypeLabel(asset: Pick<AssetSummary, "assetType">) {
+  return asset.assetType === "command" ? "Command" : asset.assetType === "mcp" ? "MCP" : "Skill";
 }
 
-function toApplyResult(result: Awaited<ReturnType<typeof canonicalMountApply>>): ApplyResult {
+function targetLabel(target: RegisteredMountTarget) {
+  const provider = target.provider === "claude_code" ? "Claude Code" : target.provider === "codex" ? "Codex" : "自定义";
+  const kind = target.accepts[0] === "mcp" ? "MCP" : target.accepts[0] === "command" ? "Commands" : "Skills";
+  return `${provider} ${kind}`;
+}
+
+function scopeLabel(target: RegisteredMountTarget) {
+  if (target.scope === "user") return "用户级";
+  if (target.scope === "project") return "已维护项目";
+  if (target.scope === "local") return "Claude Local";
+  return "高级自定义";
+}
+
+function toApplyResult(ok: boolean, previewId: string, affectedPaths: string[], label: string): ApplyResult {
   return {
     mode: "apply",
-    ok: result.mounted,
-    previewId: result.previewId,
+    ok,
+    previewId,
     backup: null,
-    steps: [{
-      stepId: "canonical-mount",
-      kind: "mount",
-      label: "挂载资产",
-      status: result.mounted ? "success" : "failed",
-      message: result.mounted ? "目标已更新并登记本机挂载关系。" : "挂载未完成。",
-      affectedPaths: result.affectedPaths,
-    }],
-    warnings: result.warnings,
-    errors: result.mounted ? [] : ["挂载未完成。"],
+    steps: [{ stepId: label, kind: "mount", label, status: ok ? "success" : "failed", message: ok ? `${label}完成。` : `${label}未完成。`, affectedPaths }],
+    warnings: [],
+    errors: ok ? [] : [`${label}未完成。`],
   };
 }

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TargetRegistryPanel } from "./TargetRegistryPanel";
 
@@ -57,22 +58,22 @@ describe("TargetRegistryPanel", () => {
       registryPath: "/tmp/targets.yaml",
       backupPath: "/tmp/backups/targets.yaml",
     });
+    vi.mocked(open).mockResolvedValue("/tmp/custom-skills");
   });
 
-  it("previews and confirms registration without deriving runtime paths in React", async () => {
+  it("previews and confirms an advanced custom target selected natively", async () => {
     render(<TargetRegistryPanel />);
     fireEvent.change(screen.getByLabelText("目标 ID"), {
       target: { value: "project-a-skills" },
     });
-    fireEvent.change(screen.getByLabelText("项目根目录"), {
-      target: { value: "/tmp/project-a" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "选择" }));
+    await waitFor(() => expect(open).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "预览注册" }));
 
     await waitFor(() => expect(targetRegistrationPreview).toHaveBeenCalledWith({
       id: "project-a-skills",
-      kind: "claude_project_skills",
-      location: "/tmp/project-a",
+      kind: "custom_skill_directory",
+      location: "/tmp/custom-skills",
     }));
     expect(targetRegistrationPreview.mock.calls[0][0]).not.toHaveProperty("runtimePath");
 
@@ -82,8 +83,8 @@ describe("TargetRegistryPanel", () => {
       previewGeneratedAtEpochSeconds: 100,
       request: {
         id: "project-a-skills",
-        kind: "claude_project_skills",
-        location: "/tmp/project-a",
+        kind: "custom_skill_directory",
+        location: "/tmp/custom-skills",
       },
     }));
   });

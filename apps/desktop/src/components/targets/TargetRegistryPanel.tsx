@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { FolderCog, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -18,16 +19,11 @@ import type {
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
 import { ApplyConfirmationPanel } from "../ui/ApplyConfirmationPanel";
 
-const TARGET_KINDS: readonly { value: MountTargetKind; label: string; project: boolean }[] = [
-  { value: "claude_project_skills", label: "Claude 项目 Skills", project: true },
-  { value: "codex_project_skills", label: "Codex 项目 Skills", project: true },
-  { value: "claude_project_commands", label: "Claude 项目 Commands", project: true },
-  { value: "claude_project_mcp_json", label: "Claude 项目 MCP", project: true },
-  { value: "codex_project_mcp_toml", label: "Codex 项目 MCP", project: true },
-  { value: "custom_skill_directory", label: "自定义 Skill 目录", project: false },
-  { value: "custom_command_directory", label: "Claude-compatible Command 目录", project: false },
-  { value: "custom_claude_mcp_json", label: "自定义 Claude MCP JSON", project: false },
-  { value: "custom_codex_mcp_toml", label: "自定义 Codex MCP TOML", project: false },
+const TARGET_KINDS: readonly { value: MountTargetKind; label: string; directory: boolean }[] = [
+  { value: "custom_skill_directory", label: "自定义 Skill 目录", directory: true },
+  { value: "custom_command_directory", label: "Claude-compatible Command 目录", directory: true },
+  { value: "custom_claude_mcp_json", label: "自定义 Claude MCP JSON", directory: false },
+  { value: "custom_codex_mcp_toml", label: "自定义 Codex MCP TOML", directory: false },
 ];
 
 type PendingChange =
@@ -37,8 +33,8 @@ type PendingChange =
 export function TargetRegistryPanel() {
   const [targets, setTargets] = useState<RegisteredMountTarget[]>([]);
   const [targetId, setTargetId] = useState("");
-  const [targetKind, setTargetKind] = useState<MountTargetKind>("claude_project_skills");
-  const [location, setLocation] = useState("~/workspace/project-a");
+  const [targetKind, setTargetKind] = useState<MountTargetKind>("custom_skill_directory");
+  const [location, setLocation] = useState("");
   const [pending, setPending] = useState<PendingChange | null>(null);
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,12 +111,24 @@ export function TargetRegistryPanel() {
 
   const selectedKind = TARGET_KINDS.find((item) => item.value === targetKind) ?? TARGET_KINDS[0];
 
+  const chooseLocation = async () => {
+    const selected = await open({
+      directory: selectedKind.directory,
+      multiple: false,
+      title: selectedKind.directory ? "选择高级自定义目标目录" : "选择高级自定义 MCP 配置文件",
+      filters: selectedKind.directory
+        ? undefined
+        : [{ name: "MCP 配置", extensions: targetKind.includes("toml") ? ["toml"] : ["json"] }],
+    });
+    if (typeof selected === "string") setLocation(selected);
+  };
+
   return (
     <div className="target-registry-settings">
       <div className="section-heading">
         <div>
           <h4>运行目标注册</h4>
-          <p>授权项目或自定义路径后，挂载操作只使用 targetId。</p>
+          <p>仅注册非标准目录或 MCP 文件。已维护项目的标准 Target 由后端自动推导。</p>
         </div>
         <FolderCog size={16} />
       </div>
@@ -143,7 +151,7 @@ export function TargetRegistryPanel() {
               const kind = event.target.value as MountTargetKind;
               setTargetKind(kind);
               const option = TARGET_KINDS.find((item) => item.value === kind);
-              setLocation(option?.project ? "~/workspace/project-a" : "~/custom/assets");
+              setLocation("");
               setPending(null);
             }}
             style={NO_DRAG_REGION_STYLE}
@@ -153,13 +161,8 @@ export function TargetRegistryPanel() {
           </select>
         </label>
         <label>
-          <span>{selectedKind.project ? "项目根目录" : "目标路径"}</span>
-          <input
-            data-no-drag="true"
-            onChange={(event) => setLocation(event.target.value)}
-            style={NO_DRAG_REGION_STYLE}
-            value={location}
-          />
+          <span>{selectedKind.directory ? "目标目录" : "配置文件"}</span>
+          <div className="path-picker-control"><input data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={location} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseLocation()} style={NO_DRAG_REGION_STYLE} type="button">选择</button></div>
         </label>
       </div>
       <div className="settings-actions">

@@ -55,13 +55,15 @@ use my_agent_assets_core::mount::{
     MountApplyResult, MountPreview, MountPreviewRequest, UnmountApplyRequest, UnmountApplyResult,
     UnmountPreview, UnmountPreviewRequest,
 };
+use my_agent_assets_core::mount_registry::{load as load_mount_bindings, MountBinding};
 use my_agent_assets_core::operation::{
     recover_incomplete, recovery_status, RecoveryReport, RecoveryStatus,
 };
 use my_agent_assets_core::project_registry::{
     apply_remove_project, apply_save_project, preview_remove_project, preview_save_project,
-    ProjectChangePreview, ProjectChangeResult, ProjectRemoveApplyRequest, ProjectRemoveRequest,
-    ProjectSaveApplyRequest, ProjectSaveRequest,
+    refresh_projects, ProjectChangePreview, ProjectChangeResult, ProjectRefreshRequest,
+    ProjectRefreshResult, ProjectRemoveApplyRequest, ProjectRemoveRequest, ProjectSaveApplyRequest,
+    ProjectSaveRequest,
 };
 use my_agent_assets_core::query::{
     list_assets, list_projects, AssetQueryRequest, AssetSummary, ProjectSummary,
@@ -182,6 +184,12 @@ pub fn list_projects_for_home(home: &Path) -> Result<Vec<ProjectSummary>, String
     list_projects(home).map_err(|error| error.to_string())
 }
 
+pub fn list_mount_bindings_command() -> Result<Vec<MountBinding>, String> {
+    let home = home_dir().ok_or_else(|| "HOME is unavailable; mount list skipped.".to_string())?;
+    let registry = load_mount_bindings(&home).map_err(|error| error.to_string())?;
+    Ok(registry.bindings.into_values().collect())
+}
+
 pub fn project_save_preview_command(
     input: ProjectSaveRequest,
 ) -> Result<ProjectChangePreview, String> {
@@ -212,6 +220,14 @@ pub fn project_remove_apply_command(
     let home = home_dir()
         .ok_or_else(|| "HOME is unavailable; project remove apply blocked.".to_string())?;
     apply_remove_project(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn project_refresh_command(
+    input: ProjectRefreshRequest,
+) -> Result<ProjectRefreshResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; project refresh blocked.".to_string())?;
+    refresh_projects(&home, &input).map_err(|error| error.to_string())
 }
 
 pub fn canonical_import_preview_command(
@@ -476,6 +492,24 @@ pub fn preview_adopt_command(input: AdoptPreviewRequest) -> Result<AdoptPreview,
 pub fn adopt_apply_command(input: AdoptApplyRequest) -> Result<AdoptApplyResult, String> {
     let home = home_dir().ok_or_else(|| "HOME is unavailable; adopt apply blocked.".to_string())?;
     apply_adopt(&home, &input).map_err(|error| error.to_string())
+}
+
+pub fn git_remote_preview_command(
+    input: my_agent_assets_core::git_remote::GitRemotePreviewRequest,
+) -> Result<my_agent_assets_core::git_remote::GitRemotePreview, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git remote preview skipped.".to_string())?;
+    my_agent_assets_core::git_remote::preview_git_remote(&home, &input)
+        .map_err(|error| error.to_string())
+}
+
+pub fn git_remote_apply_command(
+    input: my_agent_assets_core::git_remote::GitRemoteApplyRequest,
+) -> Result<my_agent_assets_core::git_remote::GitRemoteApplyResult, String> {
+    let home =
+        home_dir().ok_or_else(|| "HOME is unavailable; Git remote apply blocked.".to_string())?;
+    my_agent_assets_core::git_remote::apply_git_remote(&home, &input)
+        .map_err(|error| error.to_string())
 }
 
 pub fn canonical_batch_import_preview_command(

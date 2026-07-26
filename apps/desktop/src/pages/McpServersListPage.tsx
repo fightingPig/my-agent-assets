@@ -23,7 +23,6 @@ import type {
   CanonicalMountPreview,
 } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
-import type { AssetProvider } from "../app/provider";
 import {
   AssetCenterLayout,
   InspectorCode,
@@ -124,7 +123,6 @@ const staticServers: readonly McpItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
-  provider?: AssetProvider;
 };
 
 type McpEditorState = {
@@ -161,7 +159,6 @@ type McpEditorProps = {
 export function McpServersListPage({
   demoMode = false,
   onOpenAssetDetail,
-  provider = "claude",
 }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly McpItem[]>(demoMode ? staticServers : []);
   const [stateLabel, setStateLabel] = useState("读取中");
@@ -212,7 +209,7 @@ export function McpServersListPage({
     return () => {
       cancelled = true;
     };
-  }, [demoMode, provider, refreshKey]);
+  }, [demoMode, refreshKey]);
 
   const openCreate = () => {
     setEditor(emptyEditor());

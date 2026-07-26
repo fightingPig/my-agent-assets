@@ -36,12 +36,13 @@ describe("remaining V1 static pages", () => {
 
   it("renders project and asset detail workspaces", () => {
     const { rerender } = render(<ProjectDetailPage demoMode />);
-    for (const heading of ["项目概览", "本地环境", "已挂载资产", "最近活动", "挂载计划预览"]) {
+    for (const heading of ["项目概览", "本地环境", "已挂载资产", "相关活动"]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
+    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
     rerender(<AssetDetailPage demoMode />);
     expect(screen.getByRole("heading", { name: "资产信息" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "挂载目标" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "挂载引用" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
   });
 
@@ -59,15 +60,10 @@ describe("remaining V1 static pages", () => {
 
   it("updates the Mount asset and target preview", () => {
     render(<MountManagerPage demoMode />);
-    const deploy = screen.getByRole("button", { name: /deploy-prod/ });
-    const myApp = screen.getByRole("button", { name: /my-app/ });
-    fireEvent.click(deploy);
-    fireEvent.click(myApp);
-    expect(deploy).toHaveAttribute("aria-pressed", "true");
-    expect(myApp).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getAllByText("deploy-prod").length).toBeGreaterThan(1);
-    expect(screen.getAllByText("my-app").length).toBeGreaterThan(1);
-    expect(screen.getByText("执行前将创建本地备份")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /新建挂载/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("暂无可挂载资产")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /当前挂载/ }));
+    expect(screen.getByText("暂无挂载关系")).toBeInTheDocument();
   });
 
   it("switches Conflict and Backup master-detail selections", () => {

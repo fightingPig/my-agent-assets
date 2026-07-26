@@ -106,6 +106,16 @@ describe("read-only desktop data api", () => {
     await api.projectRemoveApply(projectRemoveApply);
     expect(invoke).toHaveBeenLastCalledWith("project_remove_apply", { input: projectRemoveApply });
 
+    invoke.mockResolvedValueOnce({ refreshedProjectIds: ["project-a"], warnings: [] });
+    await api.projectRefresh({ projectIds: ["project-a"] });
+    expect(invoke).toHaveBeenLastCalledWith("project_refresh", {
+      input: { projectIds: ["project-a"] },
+    });
+
+    invoke.mockResolvedValueOnce([]);
+    await api.listMountBindings();
+    expect(invoke).toHaveBeenLastCalledWith("list_mount_bindings");
+
     invoke.mockResolvedValueOnce([]);
     await api.listBackups();
     expect(invoke).toHaveBeenLastCalledWith("list_backups");
@@ -601,6 +611,26 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("adopt_apply", {
       input: adoptApplyRequest,
     });
+
+    const remoteRequest = {
+      remoteName: "origin",
+      remoteUrl: "git@github.com:owner/private-assets.git",
+    };
+    invoke.mockResolvedValueOnce({ previewId: "remote-1", canApply: true });
+    await api.gitRemotePreview(remoteRequest);
+    expect(invoke).toHaveBeenLastCalledWith("git_remote_preview", {
+      input: remoteRequest,
+    });
+    const remoteApply = {
+      previewId: "remote-1",
+      previewGeneratedAtEpochSeconds: 100,
+      request: remoteRequest,
+    };
+    invoke.mockResolvedValueOnce({ previewId: "remote-1", affectedPaths: [] });
+    await api.gitRemoteApply(remoteApply);
+    expect(invoke).toHaveBeenLastCalledWith("git_remote_apply", {
+      input: remoteApply,
+    });
   });
 
   it("returns safe fallbacks outside Tauri", async () => {
@@ -633,6 +663,10 @@ describe("read-only desktop data api", () => {
       previewId: "preview-sync-1",
       previewGeneratedAtEpochSeconds: 100,
       request: { direction: "push" },
+    })).rejects.toThrow("requires the Tauri runtime");
+    await expect(api.gitRemotePreview({
+      remoteName: "origin",
+      remoteUrl: "git@github.com:owner/private-assets.git",
     })).rejects.toThrow("requires the Tauri runtime");
     expect(invoke).not.toHaveBeenCalled();
   });

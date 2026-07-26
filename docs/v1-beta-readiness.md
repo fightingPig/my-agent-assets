@@ -42,15 +42,15 @@ The following validation passed on Apple Silicon macOS:
 | Check | Result |
 | --- | --- |
 | `npm run typecheck` | Passed |
-| `npm test` | 12 files, 94 tests passed |
+| `npm test` | 12 files, 100 tests passed |
 | `npm run build:renderer` | Passed |
 | `cargo fmt --all -- --check` | Passed |
-| `cargo test -p my-agent-assets-core --lib` | 135 tests passed |
-| `cargo test -p my-agent-assets-desktop` | 21 tests passed |
+| `cargo test -p my-agent-assets-core --lib` | 143 tests passed |
+| `cargo test -p my-agent-assets-desktop` | 22 tests passed |
 | `cargo test -p my-agent-assets-cli` | 10 tests passed |
 | `cargo clippy --workspace --all-targets -- -D warnings` | Passed |
 | `cargo check -p my-agent-assets-core --target x86_64-pc-windows-msvc` | Passed |
-| `npm run qa:visual` | 13 pages, 26 screenshots, 0 severe issues, 0 warnings |
+| `npm run qa:visual` | 13 pages, macOS/Windows, 52 screenshots, 0 severe issues, 0 warnings |
 | Tauri dev smoke | Started successfully with `MY_AGENT_ASSETS_HOME` set to an empty `/tmp` directory |
 | Tauri release build | `.app` and arm64 `.dmg` generated |
 | Packaged app smoke | Built `.app` executable launched with an empty fake HOME |
@@ -64,13 +64,15 @@ Visual QA artifacts:
 
 Build artifacts:
 
-- `target/release/bundle/macos/My Agent Assets.app`
-- `target/release/bundle/dmg/My Agent Assets_0.1.0_aarch64.dmg`
+- `target/aarch64-apple-darwin/release/bundle/macos/My Agent Assets.app`
+- `target/aarch64-apple-darwin/release/bundle/dmg/My Agent Assets_0.1.1-beta.1_aarch64.dmg`
 
 ## Known Limitations
 
 - The macOS build is ad-hoc signed and not notarized. Gatekeeper behavior on another Mac still requires manual validation.
-- Windows packaging, native titlebar behavior, DPI scaling, path handling, and symlink permissions were not validated in this macOS run.
+- A native Windows workflow produces unsigned MSI/NSIS test packages. Windows
+  installation, native titlebar, DPI scaling, path handling, symlink
+  permissions, upgrade, and uninstall still require manual qualification.
 - Automated Visual QA runs in headless Chrome. It does not validate native traffic lights, overlay dragging, Dock behavior, or OS window shadows.
 - Project List only shows explicitly managed existing local directories; the
   project registry is the single maintenance entry point. Project scans inspect

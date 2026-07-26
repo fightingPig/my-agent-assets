@@ -106,6 +106,9 @@ export type ProjectSummary = {
   updatedAt: string | null;
   assetCounts: AssetCounts;
   mounts: string[];
+  lastCheckedAtEpochSeconds?: number | null;
+  pathHealthy?: boolean;
+  warnings?: string[];
 };
 
 export type ProjectSaveRequest = {
@@ -126,6 +129,14 @@ export type ManagedProject = {
   title: string;
   path: string;
   description: string;
+  lastInspection?: {
+    checkedAtEpochSeconds: number;
+    skills: number;
+    commands: number;
+    mcps: number;
+    pathHealthy: boolean;
+    warnings: string[];
+  };
 };
 
 export type ProjectChangePreview = {
@@ -159,6 +170,16 @@ export type ProjectChangeResult = {
   projectId: string;
   registryPath: string;
   affectedPaths: string[];
+};
+
+export type ProjectRefreshRequest = {
+  projectIds: string[];
+};
+
+export type ProjectRefreshResult = {
+  refreshedProjectIds: string[];
+  registryPath: string;
+  warnings: string[];
 };
 
 export type ApplyStepResult = {
@@ -497,6 +518,7 @@ export type RuntimeSourceScope = (typeof RUNTIME_SOURCE_SCOPES)[number];
 export type RuntimeDiscoveryScope =
   | { kind: "user" }
   | { kind: "project"; projectPath: string }
+  | { kind: "managed_projects"; projectIds: string[] }
   | {
       kind: "custom";
       path: string;
@@ -626,6 +648,14 @@ export type RegisteredMountTarget = {
     | "installed_not_initialized"
     | "initialized";
   status: "ready" | "blocked" | "invalid";
+};
+
+export type MountBinding = {
+  id: string;
+  assetId: string;
+  targetId: string;
+  status: "mounted" | "out_of_sync" | "orphaned";
+  lastSyncedAt?: string;
 };
 
 export type TargetRegistrationPreviewRequest = {
@@ -950,4 +980,35 @@ export type BatchImportApplyResult = {
   items: CanonicalImportApplyResult[];
   affectedPaths: string[];
   journalPath: string;
+};
+
+export type GitRemotePreviewRequest = {
+  remoteName: string;
+  remoteUrl: string;
+};
+
+export type GitRemotePreview = {
+  previewId: string;
+  remoteName: string;
+  previousUrl?: string;
+  remoteUrl: string;
+  affectedPaths: string[];
+  warnings: string[];
+  canApply: boolean;
+  generatedAtEpochSeconds: number;
+  expiresAtEpochSeconds: number;
+};
+
+export type GitRemoteApplyRequest = {
+  previewId: string;
+  previewGeneratedAtEpochSeconds: number;
+  request: GitRemotePreviewRequest;
+};
+
+export type GitRemoteApplyResult = {
+  previewId: string;
+  remoteName: string;
+  remoteUrl: string;
+  backupPath: string;
+  affectedPaths: string[];
 };

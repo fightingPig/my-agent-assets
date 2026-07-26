@@ -11,6 +11,7 @@ pub mod diagnostic_export;
 pub mod diagnostics;
 pub mod discovery;
 pub mod fingerprint;
+pub mod git_remote;
 pub mod git_sync;
 pub mod import;
 pub mod initialization;

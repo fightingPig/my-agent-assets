@@ -42,6 +42,10 @@ pub enum DiscoveryScope {
         #[serde(rename = "projectPath")]
         project_path: PathBuf,
     },
+    ManagedProjects {
+        #[serde(default, rename = "projectIds")]
+        project_ids: Vec<String>,
+    },
     Custom {
         path: PathBuf,
         #[serde(rename = "assetKind")]
@@ -143,6 +147,29 @@ pub fn discover(home: &Path, scope: DiscoveryScope) -> DiscoveryResult {
                 }
             };
             scan_project_tree(home, &project, 0, max_depth, &mut result);
+        }
+        DiscoveryScope::ManagedProjects { project_ids } => {
+            let registry = match load_projects(home) {
+                Ok(registry) => registry,
+                Err(error) => {
+                    result
+                        .warnings
+                        .push(format!("无法读取已维护项目列表：{error}"));
+                    return result;
+                }
+            };
+            let selected = project_ids
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>();
+            let max_depth = settings::load(home)
+                .unwrap_or_else(|_| Settings::defaults_for_home(home))
+                .max_depth as usize;
+            for project in registry.projects {
+                if !selected.is_empty() && !selected.contains(&project.id) {
+                    continue;
+                }
+                scan_project_tree(home, &project.path, 0, max_depth, &mut result);
+            }
         }
         DiscoveryScope::Custom {
             path,
@@ -807,6 +834,7 @@ mod tests {
                     title: id.into(),
                     path: fs::canonicalize(path).unwrap(),
                     description: String::new(),
+                    last_inspection: None,
                 }],
             },
         )

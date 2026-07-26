@@ -1,9 +1,11 @@
-import { FolderKanban, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { FolderKanban, FolderOpen, Plus, RefreshCw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   listProjects,
   projectRemoveApply,
   projectRemovePreview,
+  projectRefresh,
   projectSaveApply,
   projectSavePreview,
 } from "../app/data-api";
@@ -20,7 +22,7 @@ import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel"
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import { staticProjects, type StaticProject } from "./project-data";
 
-const projectTone = { "正常": "success", "有变更": "warning", "待同步": "neutral", "无效": "warning" } as const;
+const projectTone = { "正常": "success", "需检查": "warning", "未检查": "neutral", "无效": "warning" } as const;
 
 type ProjectsListPageProps = {
   demoMode?: boolean;
@@ -77,11 +79,40 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: Proj
   }), [projects, query, status]);
   const selected = visibleProjects.find((project) => project.id === selectedId) ?? visibleProjects[0];
 
-  const openCreate = () => {
-    setEditor({ name: "", title: "", path: "", description: "" });
+  const chooseProjectDirectory = async () => {
+    const selected = await open({ directory: true, multiple: false, title: "选择要维护的项目目录" });
+    return typeof selected === "string" ? selected : null;
+  };
+
+  const openCreate = async () => {
+    const path = await chooseProjectDirectory();
+    if (!path) return;
+    const name = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+    setEditor({ name, title: name, path, description: "" });
     setSavePreview(null);
     setRemovePreview(null);
     setOperationMessage(null);
+  };
+
+  const changeEditorDirectory = async () => {
+    if (!editor) return;
+    const path = await chooseProjectDirectory();
+    if (path) setEditor({ ...editor, path });
+  };
+
+  const refreshProjects = async (projectIds: string[]) => {
+    setOperationMessage("正在检查项目运行时资产…");
+    try {
+      const result = await projectRefresh({ projectIds });
+      setOperationMessage(
+        result.warnings.length > 0
+          ? `检查完成，发现 ${result.warnings.length} 项维护提示。`
+          : `已检查 ${result.refreshedProjectIds.length} 个项目。`,
+      );
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setOperationMessage(errorMessage(error));
+    }
   };
 
   const openEdit = (project: StaticProject) => {
@@ -159,8 +190,9 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: Proj
       <section className="panel project-browser" aria-label="项目列表">
         <div className="asset-toolbar">
           <label className="asset-search-field"><Search size={15} /><input aria-label="搜索项目" data-no-drag="true" onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目名称、标题或路径" style={NO_DRAG_REGION_STYLE} type="search" value={query} /></label>
-          <label className="asset-filter-field"><SlidersHorizontal size={14} /><select aria-label="项目状态筛选" data-no-drag="true" onChange={(event) => setStatus(event.target.value)} style={NO_DRAG_REGION_STYLE} value={status}><option value="all">全部状态</option><option value="正常">正常</option><option value="有变更">有变更</option><option value="待同步">待同步</option><option value="无效">无效</option></select></label>
-          {!demoMode ? <button className="asset-business-action" data-no-drag="true" onClick={openCreate} style={NO_DRAG_REGION_STYLE} type="button"><Plus size={14} />添加项目</button> : null}
+          <label className="asset-filter-field"><SlidersHorizontal size={14} /><select aria-label="项目状态筛选" data-no-drag="true" onChange={(event) => setStatus(event.target.value)} style={NO_DRAG_REGION_STYLE} value={status}><option value="all">全部状态</option><option value="正常">正常</option><option value="需检查">需检查</option><option value="未检查">未检查</option><option value="无效">无效</option></select></label>
+          <button className="asset-secondary-action" data-no-drag="true" disabled={demoMode || projects.length === 0} onClick={() => void refreshProjects([])} style={NO_DRAG_REGION_STYLE} type="button"><RefreshCw size={14} />刷新全部</button>
+          <button className="asset-business-action" data-no-drag="true" disabled={demoMode} onClick={() => void openCreate()} style={NO_DRAG_REGION_STYLE} type="button"><Plus size={14} />添加项目</button>
         </div>
         <div className="asset-list-heading"><span>本机项目</span><small>{visibleProjects.length} / {projects.length} · {stateLabel}</small></div>
         <div className="project-list-dense" role="listbox" aria-label="项目选择">
@@ -187,12 +219,13 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: Proj
           </div>
           <div className="asset-inspector-actions">
             {onOpenProjectDetail ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => onOpenProjectDetail(selected)} style={NO_DRAG_REGION_STYLE} type="button">查看详情</button> : null}
-            {!demoMode ? <button className="asset-secondary-action" data-no-drag="true" onClick={() => openEdit(selected)} style={NO_DRAG_REGION_STYLE} type="button">编辑管理信息</button> : null}
-            {!demoMode ? <button className="asset-danger-action" data-no-drag="true" onClick={() => void previewRemove(selected)} style={NO_DRAG_REGION_STYLE} type="button"><Trash2 size={14} />移除管理</button> : null}
+            <button className="asset-secondary-action" data-no-drag="true" disabled={demoMode} onClick={() => void refreshProjects([selected.id])} style={NO_DRAG_REGION_STYLE} type="button"><RefreshCw size={14} />刷新当前</button>
+            <button className="asset-secondary-action" data-no-drag="true" disabled={demoMode} onClick={() => openEdit(selected)} style={NO_DRAG_REGION_STYLE} type="button">编辑管理信息</button>
+            <button className="asset-danger-action" data-no-drag="true" disabled={demoMode} onClick={() => void previewRemove(selected)} style={NO_DRAG_REGION_STYLE} type="button"><Trash2 size={14} />移除管理</button>
           </div>
         </> : <div className="asset-inspector-empty"><strong>暂无可检查项目</strong><span>调整筛选后选择一个项目。</span></div>}
       </aside>
-      {editor ? <section className="panel project-management-panel" aria-label="项目管理"><div className="section-heading"><div><h3>{editor.id ? "编辑项目管理信息" : "添加已有项目"}</h3><p>仅保存本机管理记录；不会创建、移动或删除项目目录。</p></div></div><div className="settings-controls two"><label><span>显示名称</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, name: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.name} /></label><label><span>标题</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, title: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.title} /></label><label className="settings-control-wide"><span>已有本地目录</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, path: event.target.value })} placeholder="/Users/name/workspace/project" style={NO_DRAG_REGION_STYLE} value={editor.path} /></label><label className="settings-control-wide"><span>说明</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, description: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.description} /></label></div><div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" onClick={() => setEditor(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button><button className="asset-secondary-action" data-no-drag="true" onClick={() => void previewSave()} style={NO_DRAG_REGION_STYLE} type="button">生成保存预览</button></div>{savePreview ? <div className="plan-lines">{savePreview.migratedTargetIds.map((id) => <span key={id}>将迁移未绑定 Target：{id}</span>)}{savePreview.blockingBindings.map((id) => <span className="warning-text" key={id}>阻断绑定：{id}</span>)}{savePreview.warnings.map((warning) => <span className="warning-text" key={warning}>{warning}</span>)}</div> : null}<ApplyConfirmationPanel actionLabel="确认保存项目" canApply={Boolean(savePreview?.canApply)} description="后端会重新校验目录、项目 registry 和 Target binding；不会修改项目目录本身。" isApplying={isApplying} onApply={() => void applySave()} operationError={savePreview?.canApply ? null : operationMessage} result={null} title="保存项目管理记录" /></section> : null}
+      {editor ? <section className="panel project-management-panel" aria-label="项目管理"><div className="section-heading"><div><h3>{editor.id ? "编辑项目管理信息" : "添加已有项目"}</h3><p>仅保存本机管理记录；不会创建、移动或删除项目目录。</p></div></div><div className="settings-controls two"><label><span>显示名称</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, name: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.name} /></label><label><span>标题</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, title: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.title} /></label><label className="settings-control-wide"><span>已有本地目录</span><div className="path-picker-control"><input data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={editor.path} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void changeEditorDirectory()} style={NO_DRAG_REGION_STYLE} type="button"><FolderOpen size={14} />选择目录</button></div></label><label className="settings-control-wide"><span>说明</span><input data-no-drag="true" onChange={(event) => setEditor({ ...editor, description: event.target.value })} style={NO_DRAG_REGION_STYLE} value={editor.description} /></label></div><div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" onClick={() => setEditor(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button><button className="asset-secondary-action" data-no-drag="true" onClick={() => void previewSave()} style={NO_DRAG_REGION_STYLE} type="button">生成保存预览</button></div>{savePreview ? <div className="plan-lines">{savePreview.migratedTargetIds.map((id) => <span key={id}>将迁移未绑定 Target：{id}</span>)}{savePreview.blockingBindings.map((id) => <span className="warning-text" key={id}>阻断绑定：{id}</span>)}{savePreview.warnings.map((warning) => <span className="warning-text" key={warning}>{warning}</span>)}</div> : null}<ApplyConfirmationPanel actionLabel="确认保存项目" canApply={Boolean(savePreview?.canApply)} description="后端会重新校验目录、项目 registry 和 Target binding；不会修改项目目录本身。" isApplying={isApplying} onApply={() => void applySave()} operationError={savePreview?.canApply ? null : operationMessage} result={null} title="保存项目管理记录" /></section> : null}
       {removePreview ? <section className="panel project-management-panel" aria-label="移除项目管理"><div className="section-heading"><div><h3>移除管理：{removePreview.project?.name}</h3><p>只删除本机项目管理记录和无绑定 Target，不删除项目目录或其中任何文件。</p></div></div><div className="plan-lines">{removePreview.migratedTargetIds.map((id) => <span key={id}>将移除无绑定 Target：{id}</span>)}{removePreview.blockingBindings.map((id) => <span className="warning-text" key={id}>必须先解除绑定：{id}</span>)}{removePreview.warnings.map((warning) => <span className="warning-text" key={warning}>{warning}</span>)}</div><div className="operation-actions"><button className="asset-secondary-action" data-no-drag="true" onClick={() => setRemovePreview(null)} style={NO_DRAG_REGION_STYLE} type="button">取消</button></div><ApplyConfirmationPanel actionLabel="确认移除管理" canApply={removePreview.canApply} description="项目目录和未管理的 runtime 配置会保留在本机。" isApplying={isApplying} onApply={() => void applyRemove()} operationError={removePreview.canApply ? null : operationMessage} result={null} title="移除项目管理记录" /></section> : null}
     </div>
   );
@@ -208,7 +241,7 @@ function toStaticProject(project: ProjectSummary): StaticProject {
     name: project.name,
     title: project.title,
     path: project.path,
-    status: project.status === "changed" ? "有变更" : project.status === "needsSync" ? "待同步" : project.status === "invalid" ? "无效" : "正常",
+    status: project.status === "invalid" ? "无效" : project.lastCheckedAtEpochSeconds == null ? "未检查" : project.status === "changed" ? "需检查" : "正常",
     assets: project.assetCounts.total,
     skills: project.assetCounts.skills,
     commands: project.assetCounts.commands,

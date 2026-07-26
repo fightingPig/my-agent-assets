@@ -1,4 +1,5 @@
-import { AlertTriangle, Check, FolderSearch, House, ScanSearch } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { AlertTriangle, Check, FolderOpen, FolderSearch, House, ScanSearch } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   canonicalBatchImportApply,
@@ -80,8 +81,8 @@ export function ScanImportPage({
   );
 
   const input = useMemo(
-    () => toScanScope(selectedScope, selectedProjectPath, customPath, customSource),
-    [customPath, customSource, selectedProjectPath, selectedScope],
+    () => toScanScope(selectedScope, selectedProjectPath, customPath, customSource, managedProjects),
+    [customPath, customSource, managedProjects, selectedProjectPath, selectedScope],
   );
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export function ScanImportPage({
       .then((projects) => {
         if (cancelled) return;
         setManagedProjects(projects);
-        setSelectedProjectPath((current) => current || projects[0]?.path || "");
+        setSelectedProjectPath((current) => current || (projects.length > 0 ? "__all__" : ""));
       })
       .catch(() => {
         if (!cancelled) setManagedProjects([]);
@@ -100,6 +101,19 @@ export function ScanImportPage({
       cancelled = true;
     };
   }, [demoMode]);
+
+  const chooseCustomPath = async () => {
+    const isDirectory = customSource.assetKind !== "mcp";
+    const selected = await open({
+      directory: isDirectory,
+      multiple: false,
+      title: isDirectory ? "选择自定义资产目录" : "选择 MCP 配置文件",
+      filters: isDirectory
+        ? undefined
+        : [{ name: "MCP 配置", extensions: customSource.sourceFormat === "codex_mcp_toml" ? ["toml"] : ["json"] }],
+    });
+    if (typeof selected === "string") setCustomPath(selected);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -310,8 +324,8 @@ export function ScanImportPage({
         <div className="scope-card-grid">
           {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
         </div>
-        {selectedScope === "project" && !demoMode ? <label className="scan-project-picker"><span>已维护项目</span><select aria-label="选择已维护项目" data-no-drag="true" disabled={managedProjects.length === 0} onChange={(event) => setSelectedProjectPath(event.target.value)} style={NO_DRAG_REGION_STYLE} value={selectedProjectPath}><option value="">{managedProjects.length === 0 ? "请先在项目列表添加项目" : "选择项目"}</option>{managedProjects.map((project) => <option key={project.id} value={project.path}>{project.name} · {project.path}</option>)}</select></label> : null}
-        {selectedScope === "custom" && !demoMode ? <div className="scan-custom-source"><label><span>来源类型</span><select aria-label="自定义来源类型" data-no-drag="true" onChange={(event) => setCustomSource(customSourceOptions.find((option) => option.value === event.target.value) ?? customSourceOptions[0])} style={NO_DRAG_REGION_STYLE} value={customSource.value}>{customSourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>已授权路径</span><input aria-label="自定义来源路径" data-no-drag="true" onChange={(event) => setCustomPath(event.target.value)} placeholder={customSource.value.includes("mcp") ? "/path/to/config.json" : "/path/to/assets"} style={NO_DRAG_REGION_STYLE} value={customPath} /></label></div> : null}
+        {selectedScope === "project" && !demoMode ? <label className="scan-project-picker"><span>已维护项目</span><select aria-label="选择已维护项目" data-no-drag="true" disabled={managedProjects.length === 0} onChange={(event) => setSelectedProjectPath(event.target.value)} style={NO_DRAG_REGION_STYLE} value={selectedProjectPath}><option value="">{managedProjects.length === 0 ? "请先在项目列表添加项目" : "选择项目范围"}</option><option value="__all__">全部已维护项目</option>{managedProjects.map((project) => <option key={project.id} value={project.path}>{project.name} · {project.path}</option>)}</select></label> : null}
+        {selectedScope === "custom" && !demoMode ? <div className="scan-custom-source"><label><span>来源类型</span><select aria-label="自定义来源类型" data-no-drag="true" onChange={(event) => { setCustomSource(customSourceOptions.find((option) => option.value === event.target.value) ?? customSourceOptions[0]); setCustomPath(""); }} style={NO_DRAG_REGION_STYLE} value={customSource.value}>{customSourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label><span>已授权路径</span><div className="path-picker-control"><input aria-label="自定义来源路径" data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={customPath} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseCustomPath()} style={NO_DRAG_REGION_STYLE} type="button"><FolderOpen size={14} />选择</button></div></label></div> : null}
       </section>
 
       <div className="scan-summary-grid">
@@ -319,7 +333,7 @@ export function ScanImportPage({
       </div>
 
       <section className="panel operation-section">
-        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath}` : ""}</p></div><span>{sourceIds.length} / {eligibleSourceIds.length} 项已选择</span></div>
+        <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath === "__all__" ? "全部已维护项目" : selectedProjectPath}` : ""}</p></div><span>{sourceIds.length} / {eligibleSourceIds.length} 项已选择</span></div>
         <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={result.sourceId ?? `${result.type}:${result.name}`}><label className="scan-source-select"><input aria-label={`选择 ${result.name}`} checked={result.sourceId ? sourceIds.includes(result.sourceId) : true} data-no-drag="true" disabled={!result.sourceId || !result.eligibleImport} onChange={(event) => result.sourceId && handleSourceSelection(result.sourceId, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><strong>{result.name}</strong></label><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
         <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? adoptWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary || adoptPlanSummary || (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
         <div className="operation-actions">{hasConflicts ? <button className="asset-secondary-action" data-no-drag="true" onClick={handleOpenConflicts} style={NO_DRAG_REGION_STYLE} type="button">处理冲突</button> : null}<button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanAdopt} style={NO_DRAG_REGION_STYLE} type="button">生成接管计划</button></div>
@@ -333,6 +347,13 @@ export function ScanImportPage({
           result={applyResult}
           title="执行导入"
         />
+        <div className="operation-warning high-risk-mode">
+          <AlertTriangle size={17} />
+          <div>
+            <strong>高风险接管模式</strong>
+            <span>接管会在导入后替换当前生效位置。仅在明确需要让资产中心成为该位置的唯一真实来源时使用。</span>
+          </div>
+        </div>
         <ApplyConfirmationPanel
           actionLabel="导入并接管"
           canApply={canAdopt}
@@ -357,8 +378,12 @@ function toScanScope(
   selectedProjectPath: string,
   customPath: string,
   customSource: CustomSourceOption,
+  managedProjects: ProjectSummary[],
 ): RuntimeDiscoveryScope | null {
   if (selectedScope === "project") {
+    if (selectedProjectPath === "__all__") {
+      return { kind: "managed_projects", projectIds: managedProjects.map((project) => project.id) };
+    }
     return selectedProjectPath ? { kind: "project", projectPath: selectedProjectPath } : null;
   }
   if (selectedScope === "custom") {

@@ -1,5 +1,4 @@
 use crate::asset_registry::{inspect_content, load as load_assets, ContentState};
-use crate::discovery::{discover, DiscoveryScope};
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, BindingStatus, MountRegistry,
 };
@@ -12,7 +11,6 @@ use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AssetQueryStatus {
@@ -86,6 +84,11 @@ pub struct ProjectSummary {
     pub updated_at: Option<String>,
     pub asset_counts: AssetCounts,
     pub mounts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_checked_at_epoch_seconds: Option<u64>,
+    pub path_healthy: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 pub fn list_assets(home: &Path, request: &AssetQueryRequest) -> Result<Vec<AssetSummary>> {
@@ -174,17 +177,15 @@ pub fn list_projects(home: &Path) -> Result<Vec<ProjectSummary>> {
     for project in load_projects(home)?.projects {
         let path = project.path.clone();
         let project_exists = path.is_dir();
-        let discovery = project_exists.then(|| {
-            discover(
-                home,
-                DiscoveryScope::Project {
-                    project_path: path.clone(),
-                },
-            )
-        });
-        let counts = discovery
+        let inspection = project.last_inspection.clone();
+        let counts = inspection
             .as_ref()
-            .map(|result| count_sources(&result.sources))
+            .map(|summary| AssetCounts {
+                total: summary.skills + summary.commands + summary.mcps,
+                skills: summary.skills,
+                commands: summary.commands,
+                mcps: summary.mcps,
+            })
             .unwrap_or_default();
         let project_target_ids = targets
             .targets
@@ -205,15 +206,40 @@ pub fn list_projects(home: &Path) -> Result<Vec<ProjectSummary>> {
             name: project.name,
             title: project.title,
             path: path.clone(),
-            status: if project_exists {
-                project_status(&path)
-            } else {
+            status: if !project_exists
+                || inspection
+                    .as_ref()
+                    .is_some_and(|summary| !summary.path_healthy)
+            {
                 ProjectQueryStatus::Invalid
+            } else if inspection
+                .as_ref()
+                .is_some_and(|summary| !summary.warnings.is_empty())
+            {
+                ProjectQueryStatus::Changed
+            } else {
+                ProjectQueryStatus::Ready
             },
             description: project.description,
-            updated_at: modified_time(&path),
+            updated_at: inspection.as_ref().map(|summary| {
+                humantime::format_rfc3339_seconds(
+                    std::time::UNIX_EPOCH
+                        + std::time::Duration::from_secs(summary.checked_at_epoch_seconds),
+                )
+                .to_string()
+            }),
             asset_counts: counts,
             mounts: mounted_assets,
+            last_checked_at_epoch_seconds: inspection
+                .as_ref()
+                .map(|summary| summary.checked_at_epoch_seconds),
+            path_healthy: inspection
+                .as_ref()
+                .map(|summary| summary.path_healthy)
+                .unwrap_or(project_exists),
+            warnings: inspection
+                .map(|summary| summary.warnings)
+                .unwrap_or_default(),
         });
     }
     projects.sort_by(|left, right| left.path.cmp(&right.path));
@@ -232,33 +258,6 @@ fn load_mounts_or_empty(home: &Path) -> Result<MountRegistry> {
         return Ok(MountRegistry::default());
     }
     load_mounts(home).map_err(|error| MaaError::new(error.to_string()))
-}
-
-fn project_status(path: &Path) -> ProjectQueryStatus {
-    let output = Command::new("git")
-        .current_dir(path)
-        .args(["status", "--porcelain=v1"])
-        .output();
-    match output {
-        Ok(output) if output.status.success() && !output.stdout.is_empty() => {
-            ProjectQueryStatus::Changed
-        }
-        Ok(output) if output.status.success() => ProjectQueryStatus::Ready,
-        _ => ProjectQueryStatus::Ready,
-    }
-}
-
-fn count_sources(sources: &[crate::discovery::DiscoveredSource]) -> AssetCounts {
-    let mut counts = AssetCounts::default();
-    for source in sources {
-        match source.asset_kind {
-            AssetKind::Skill => counts.skills += 1,
-            AssetKind::Command => counts.commands += 1,
-            AssetKind::Mcp => counts.mcps += 1,
-        }
-    }
-    counts.total = counts.skills + counts.commands + counts.mcps;
-    counts
 }
 
 fn modified_time(path: &Path) -> Option<String> {
@@ -357,6 +356,11 @@ mod tests {
                 preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
                 request,
             },
+        )
+        .unwrap();
+        crate::project_registry::refresh_projects(
+            &home,
+            &crate::project_registry::ProjectRefreshRequest::default(),
         )
         .unwrap();
 

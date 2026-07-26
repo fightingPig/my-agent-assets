@@ -1,4 +1,4 @@
-export type ProjectStatus = "正常" | "有变更" | "待同步" | "无效";
+export type ProjectStatus = "正常" | "需检查" | "未检查" | "无效";
 
 export type StaticProject = {
   id: string;
@@ -35,7 +35,7 @@ export const staticProjects: readonly StaticProject[] = [
     name: "my-app",
     title: "产品主应用",
     path: "~/workspace/my-app",
-    status: "有变更",
+    status: "需检查",
     assets: 7,
     skills: 3,
     commands: 2,
@@ -49,7 +49,7 @@ export const staticProjects: readonly StaticProject[] = [
     name: "design-system",
     title: "UI 组件库",
     path: "~/code/design-system",
-    status: "待同步",
+    status: "未检查",
     assets: 3,
     skills: 1,
     commands: 2,

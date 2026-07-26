@@ -63,7 +63,7 @@ Validation:
 - canonical MCP import/rendering: 10 tests passed
 - shared CLI: 3 unit tests and 2 fake HOME integration tests passed
 - `scripts/e2e_fake_runtime.sh`: passed with Claude/Codex import and targetId mount flow
-- Visual QA: 26 screenshots, 0 severe issues, 0 warnings
+- Visual QA: 52 macOS/Windows screenshots, 0 severe issues, 0 warnings
 - real GitHub Private fake-device sync E2E: passed with temporary branch creation, device-B clone verification, and cleanup
 
 Implemented:
@@ -323,10 +323,11 @@ Implemented:
   previously issued preview IDs
 - enabled the Windows unsigned test-package workflow for pushes to
   `codex/final-product-v1-next`
-- current validation on 2026-07-26 passed 100 frontend tests, 139 shared-core
+- current validation on 2026-07-26 passed 100 frontend tests, 143 shared-core
   tests, 22 Desktop Rust tests, 10 CLI tests, renderer build, Fake HOME E2E,
   Clippy with warnings denied, Windows shared-core compile, Tauri dev smoke,
-  Visual QA for 13 pages/26 screenshots with zero issues, ad-hoc macOS signing,
+  Visual QA for 13 pages across macOS and Windows/52 screenshots with zero
+  issues, ad-hoc macOS signing,
   and DMG checksum verification
 - Windows workflow run `30201644197` passed frontend contract validation and
   all 22 Desktop shared-core adapter tests on a native Windows runner, then
@@ -341,6 +342,26 @@ Implemented:
 - rebuilt and installed the current Apple Silicon candidate from `7e97e2c`;
   ad-hoc signature and DMG verification passed, with DMG SHA-256
   `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`
+- completed the readability-first page pass without changing the frozen
+  AppShell: page titles are 32px, section headings are approximately 18px,
+  body copy is 15-16px, and secondary/table/code text is 12-14px
+- replaced automatic project discovery with explicit project maintenance,
+  native directory selection, overlap rejection, current/all refresh, persisted
+  asset-health summaries, and backend-derived Claude/Codex project targets
+- separated Mount Manager into new/current mount workspaces and added
+  preview-bound unmount, while Project Detail and Asset Detail remain
+  read-oriented and route mount changes to Mount Manager
+- moved diagnostic export to Settings, removed the global provider switch,
+  added managed-project/all/custom Scan sources, and added preview-bound Git
+  remote URL configuration without running fetch, pull, or push
+- bumped the desktop, CLI, and shared-core candidate version to
+  `0.1.1-beta.1`
+- regenerated Visual QA for all 13 pages on macOS and Windows at 1440x900 and
+  1180x760: 52 screenshots, 0 severe issues, and 0 warnings
+- generated `My Agent Assets_0.1.1-beta.1_aarch64.dmg`; the application binary
+  is arm64, the ad-hoc signature passes strict verification, `hdiutil verify`
+  passes, and the DMG SHA-256 is
+  `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949`
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
@@ -348,6 +369,8 @@ Not implemented:
 - Windows production signing and real Windows manual qualification remain
   external acceptance work before V1 Stable can be claimed; the generated
   unsigned MSI/NSIS files are test packages only
+- Apple Developer ID signing and notarization remain external release work;
+  the macOS Beta candidate is ad-hoc signed
 
 Latest installed-app acceptance:
 - launched `~/Applications/My Agent Assets.app` with isolated fake HOME
@@ -373,9 +396,9 @@ Latest installed-app acceptance:
   environment after the test
 
 Next:
-- continue the requirement-by-requirement final-goal audit and close the next
-  implementation, packaging, or evidence gap that is still weaker than the
-  final acceptance criteria
+- publish the exact `0.1.1-beta.1` source commit, let the native Windows
+  workflow produce matching unsigned MSI/NSIS installers, and complete the
+  remaining clean-machine macOS and Windows manual qualification
 
 ## Progress Update Template
 

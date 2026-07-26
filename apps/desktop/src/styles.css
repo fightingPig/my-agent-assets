@@ -497,6 +497,243 @@ h1 {
   .check-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* V1 readability-first page scale. Frozen AppShell geometry is unchanged. */
+.page-heading h1 { font-size: 32px; line-height: 1.15; }
+.page-subtitle { font-size: 15px; line-height: 1.55; }
+
+.panel-header h2,
+.section-heading h3,
+.settings-section-title h3,
+.asset-inspector-section h3,
+.affected-paths h4,
+.mounted-groups h4 {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.panel-header p,
+.section-heading p,
+.settings-section-title p,
+.asset-inspector-summary,
+.entity-hero-title p,
+.preview-box > p,
+.workflow-step p,
+.scope-card small,
+.operation-warning span,
+.settings-toggle-list small,
+.settings-controls small,
+.asset-empty-state span,
+.asset-inspector-empty span {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.asset-list-copy strong,
+.project-row-copy strong,
+.activity-copy strong,
+.project-copy strong,
+.check-item strong,
+.skeleton-copy strong,
+.workflow-step strong,
+.mount-flow-heading strong,
+.selectable-stack button strong,
+.master-select-list button strong,
+.sync-status-grid strong,
+.sync-graph-line strong,
+.reference-list span,
+.environment-list strong,
+.entity-field-list dd,
+.asset-inspector-fields dd,
+.restore-summary strong,
+.resolution-options strong,
+.settings-toggle-list strong {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.asset-list-copy small,
+.project-row-copy small,
+.activity-copy span,
+.project-copy span,
+.check-item span,
+.skeleton-copy span,
+.asset-inspector-fields dt,
+.asset-list-copy > span,
+.project-row-copy span,
+.project-asset-count,
+.asset-usage-count,
+.reference-list small,
+.environment-list span,
+.entity-field-list dt,
+.plan-lines span,
+.preview-table-head,
+.preview-table-row,
+.preview-table-row strong,
+.selectable-stack button small,
+.mount-plan-summary strong,
+.mount-plan-summary small,
+.master-select-list button small,
+.side-by-side-diff strong,
+.resolution-options span,
+.affected-paths code,
+.sync-status-grid small,
+.sync-graph-line small,
+.settings-controls label,
+.settings-controls select,
+.settings-controls input {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.entity-hero-title h2,
+.asset-inspector-title h2,
+.project-inspector-header h2 { font-size: 20px; }
+.asset-code-preview pre,
+.content-preview-panel pre,
+.side-by-side-diff pre,
+.diff-placeholder code,
+.mcp-editor-preview pre { font-size: 13px; line-height: 1.7; }
+
+.app-main,
+.panel {
+  font-size: 15px;
+}
+
+button.stat-card,
+button.project-item {
+  width: 100%;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.stat-card:hover,
+button.project-item:hover {
+  border-color: #cfc9ff;
+  background: #fbfaff;
+}
+
+.high-risk-mode {
+  border-color: #f1b86b;
+  background: #fff8eb;
+}
+.asset-secondary-action,
+.asset-business-action,
+.asset-danger-action,
+.text-button,
+.primary-button { font-size: 14px; }
+
+.path-picker-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.segmented-view-switch {
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  gap: 4px;
+  background: #f3f4f7;
+}
+
+.segmented-view-switch button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--secondary);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 650;
+  -webkit-app-region: no-drag;
+}
+
+.segmented-view-switch button[aria-selected="true"] {
+  color: var(--text);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(28, 32, 40, .1);
+}
+
+.segmented-view-switch span {
+  margin-left: 5px;
+  color: var(--tertiary);
+}
+
+.current-mounts-panel,
+.unmount-preview-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.current-mount-list {
+  min-height: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.current-mount-row {
+  min-width: 0;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid var(--subtle-border);
+  border-radius: 7px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.current-mount-row > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.current-mount-row > div span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.current-mount-row strong,
+.current-mount-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostic-export-settings {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--subtle-border);
+  border-radius: 7px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.diagnostic-export-settings > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.diagnostic-export-settings strong { font-size: 15px; }
+.diagnostic-export-settings span { color: var(--secondary); font-size: 13px; }
+
+@media (max-width: 1250px) {
+  .page-heading h1 { font-size: 30px; }
+  .current-mount-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .current-mount-row > button { grid-column: 1 / -1; justify-self: end; }
+}
+
 /* Static V1 page skeletons */
 .page-stack {
   display: grid;
@@ -1864,3 +2101,73 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Final readability overrides must stay after legacy page rules. */
+.page-heading h1 { font-size: 32px; line-height: 1.15; }
+.page-subtitle { font-size: 15px; }
+.panel-header h2,
+.section-heading h3,
+.settings-section-title h3,
+.asset-inspector-section h3,
+.affected-paths h4,
+.mounted-groups h4 { font-size: 18px; }
+.asset-list-copy strong,
+.project-row-copy strong,
+.activity-copy strong,
+.project-copy strong,
+.check-item strong,
+.skeleton-copy strong,
+.workflow-step strong,
+.mount-flow-heading strong,
+.selectable-stack button strong,
+.master-select-list button strong,
+.sync-status-grid strong,
+.sync-graph-line strong,
+.reference-list span,
+.environment-list strong,
+.entity-field-list dd,
+.asset-inspector-fields dd,
+.restore-summary strong,
+.resolution-options strong,
+.settings-toggle-list strong { font-size: 15px; }
+.panel-header p,
+.section-heading p,
+.settings-section-title p,
+.asset-inspector-summary,
+.entity-hero-title p,
+.scope-card small,
+.operation-warning span,
+.settings-toggle-list small,
+.asset-empty-state span { font-size: 14px; line-height: 1.55; }
+.asset-list-copy small,
+.project-row-copy small,
+.activity-copy span,
+.project-copy span,
+.check-item span,
+.skeleton-copy span,
+.asset-list-copy > span,
+.project-row-copy span,
+.project-asset-count,
+.asset-usage-count,
+.reference-list small,
+.environment-list span,
+.entity-field-list dt,
+.plan-lines span,
+.preview-table-head,
+.preview-table-row,
+.preview-table-row strong,
+.selectable-stack button small,
+.mount-plan-summary strong,
+.mount-plan-summary small,
+.master-select-list button small,
+.side-by-side-diff strong,
+.resolution-options span,
+.affected-paths code,
+.sync-status-grid small,
+.sync-graph-line small,
+.settings-controls label { font-size: 13px; }
+.asset-code-preview pre,
+.content-preview-panel pre,
+.side-by-side-diff pre,
+.diff-placeholder code,
+.mcp-editor-preview pre { font-size: 13px; line-height: 1.7; }

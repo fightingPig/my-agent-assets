@@ -158,6 +158,13 @@ fn project_remove_apply(
 }
 
 #[tauri::command]
+fn project_refresh(
+    input: my_agent_assets_core::project_registry::ProjectRefreshRequest,
+) -> CommandResult<my_agent_assets_core::project_registry::ProjectRefreshResult> {
+    command_result(shared_core::project_refresh_command(input))
+}
+
+#[tauri::command]
 fn list_backups() -> CommandResult<Vec<my_agent_assets_core::backup_history::BackupHistoryEntry>> {
     command_result(shared_core::list_backup_history_command())
 }
@@ -196,6 +203,20 @@ fn sync_apply(
 }
 
 #[tauri::command]
+fn git_remote_preview(
+    input: my_agent_assets_core::git_remote::GitRemotePreviewRequest,
+) -> CommandResult<my_agent_assets_core::git_remote::GitRemotePreview> {
+    command_result(shared_core::git_remote_preview_command(input))
+}
+
+#[tauri::command]
+fn git_remote_apply(
+    input: my_agent_assets_core::git_remote::GitRemoteApplyRequest,
+) -> CommandResult<my_agent_assets_core::git_remote::GitRemoteApplyResult> {
+    command_result(shared_core::git_remote_apply_command(input))
+}
+
+#[tauri::command]
 fn discover_runtime_sources(
     input: my_agent_assets_core::discovery::DiscoveryScope,
 ) -> CommandResult<my_agent_assets_core::discovery::DiscoveryResult> {
@@ -219,6 +240,11 @@ fn canonical_import_apply(
 #[tauri::command]
 fn list_mount_targets() -> CommandResult<Vec<my_agent_assets_core::targets::MountTarget>> {
     command_result(shared_core::list_mount_targets_command())
+}
+
+#[tauri::command]
+fn list_mount_bindings() -> CommandResult<Vec<my_agent_assets_core::mount_registry::MountBinding>> {
+    command_result(shared_core::list_mount_bindings_command())
 }
 
 #[tauri::command]
@@ -346,6 +372,7 @@ pub fn run() {
         eprintln!("[startup-recovery] {error}");
     }
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             app_info,
             settings_load,
@@ -369,16 +396,20 @@ pub fn run() {
             project_save_apply,
             project_remove_preview,
             project_remove_apply,
+            project_refresh,
             list_backups,
             reveal_backup_manifest,
             backup_delete_preview,
             backup_delete_apply,
             preview_sync,
             sync_apply,
+            git_remote_preview,
+            git_remote_apply,
             discover_runtime_sources,
             canonical_import_preview,
             canonical_import_apply,
             list_mount_targets,
+            list_mount_bindings,
             target_registration_preview,
             target_registration_apply,
             target_removal_preview,

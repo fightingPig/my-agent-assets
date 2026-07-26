@@ -1,8 +1,12 @@
+use crate::discovery::{discover, DiscoveryScope};
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::is_link_or_junction;
-use crate::targets::{load as load_targets, save as save_targets, MountTarget, TargetRegistry};
+use crate::targets::{
+    load as load_targets, save as save_targets, AssetKind, MountTarget, MountTargetKind,
+    TargetRegistry,
+};
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -27,6 +31,20 @@ pub struct ManagedProject {
     pub path: PathBuf,
     #[serde(default)]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_inspection: Option<ProjectInspectionSummary>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectInspectionSummary {
+    pub checked_at_epoch_seconds: u64,
+    pub skills: u32,
+    pub commands: u32,
+    pub mcps: u32,
+    pub path_healthy: bool,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +115,21 @@ pub struct ProjectChangeResult {
     pub affected_paths: Vec<PathBuf>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRefreshRequest {
+    #[serde(default)]
+    pub project_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRefreshResult {
+    pub refreshed_project_ids: Vec<String>,
+    pub registry_path: PathBuf,
+    pub warnings: Vec<String>,
+}
+
 impl Default for ProjectRegistry {
     fn default() -> Self {
         Self {
@@ -129,6 +162,17 @@ impl ProjectRegistry {
                     "duplicate managed project path: {}",
                     project.path.display()
                 )));
+            }
+        }
+        for (index, project) in self.projects.iter().enumerate() {
+            for other in self.projects.iter().skip(index + 1) {
+                if project.path.starts_with(&other.path) || other.path.starts_with(&project.path) {
+                    return Err(MaaError::new(format!(
+                        "managed project paths must not overlap: {} and {}",
+                        project.path.display(),
+                        other.path.display()
+                    )));
+                }
             }
         }
         Ok(())
@@ -230,6 +274,7 @@ pub fn apply_save_project(
             migrate_project_targets(&mut targets, &old.path, &project.path)?;
         }
     }
+    ensure_standard_project_targets(&mut targets, &project)?;
     commit_change(
         home,
         "project_save",
@@ -272,6 +317,78 @@ pub fn apply_remove_project(
         &preview,
         project.id,
     )
+}
+
+pub fn refresh_projects(
+    home: &Path,
+    request: &ProjectRefreshRequest,
+) -> Result<ProjectRefreshResult> {
+    let _lock = OperationLock::acquire(home)?;
+    let mut registry = load(home)?;
+    let selected = if request.project_ids.is_empty() {
+        registry
+            .projects
+            .iter()
+            .map(|project| project.id.clone())
+            .collect::<BTreeSet<_>>()
+    } else {
+        request
+            .project_ids
+            .iter()
+            .map(|id| {
+                validate_id(id, "project id")?;
+                registry.find(id)?;
+                Ok(id.clone())
+            })
+            .collect::<Result<BTreeSet<_>>>()?
+    };
+    let checked_at = epoch_seconds();
+    let mut warnings = Vec::new();
+    let mut refreshed_project_ids = Vec::new();
+    for project in &mut registry.projects {
+        if !selected.contains(&project.id) {
+            continue;
+        }
+        let mut inspection = ProjectInspectionSummary {
+            checked_at_epoch_seconds: checked_at,
+            path_healthy: project.path.is_dir(),
+            ..ProjectInspectionSummary::default()
+        };
+        if inspection.path_healthy {
+            let discovered = discover(
+                home,
+                DiscoveryScope::Project {
+                    project_path: project.path.clone(),
+                },
+            );
+            for source in discovered.sources {
+                match source.asset_kind {
+                    AssetKind::Skill => inspection.skills += 1,
+                    AssetKind::Command => inspection.commands += 1,
+                    AssetKind::Mcp => inspection.mcps += 1,
+                }
+            }
+            inspection.warnings = discovered.warnings;
+        } else {
+            inspection
+                .warnings
+                .push("项目目录不存在或不可读取。".to_string());
+        }
+        warnings.extend(
+            inspection
+                .warnings
+                .iter()
+                .map(|warning| format!("{}: {warning}", project.name)),
+        );
+        project.last_inspection = Some(inspection);
+        refreshed_project_ids.push(project.id.clone());
+    }
+    save(home, &registry)?;
+    Ok(ProjectRefreshResult {
+        refreshed_project_ids,
+        registry_path: registry_path(home),
+        warnings,
+    })
 }
 
 fn preview_save_project_at(
@@ -499,6 +616,37 @@ fn migrate_project_targets(
     targets.validate()
 }
 
+fn ensure_standard_project_targets(
+    targets: &mut TargetRegistry,
+    project: &ManagedProject,
+) -> Result<()> {
+    let kinds = [
+        (MountTargetKind::ClaudeProjectSkills, "claude-skills"),
+        (MountTargetKind::CodexProjectSkills, "codex-skills"),
+        (MountTargetKind::ClaudeProjectCommands, "claude-commands"),
+        (MountTargetKind::ClaudeProjectMcpJson, "claude-mcp"),
+        (MountTargetKind::CodexProjectMcpToml, "codex-mcp"),
+    ];
+    for (kind, suffix) in kinds {
+        let id = format!("{}-{suffix}", project.id);
+        let generated = MountTarget::project(id.clone(), kind, project.path.clone())?;
+        if let Some(existing) = targets.targets.iter_mut().find(|target| target.id == id) {
+            if existing.kind != kind {
+                return Err(MaaError::new(format!(
+                    "generated project target id conflicts with an existing target: {id}"
+                )));
+            }
+            *existing = generated;
+        } else {
+            targets.targets.push(generated);
+        }
+    }
+    targets
+        .targets
+        .sort_by(|left, right| left.id.cmp(&right.id));
+    targets.validate()
+}
+
 fn project_target_ids(targets: &TargetRegistry, path: &Path) -> Vec<String> {
     targets
         .targets
@@ -542,6 +690,12 @@ fn project_from_request(home: &Path, request: &ProjectSaveRequest) -> Result<Man
         },
         path,
         description: request.description.trim().into(),
+        last_inspection: request.id.as_deref().and_then(|id| {
+            load(home)
+                .ok()
+                .and_then(|registry| registry.projects.into_iter().find(|item| item.id == id))
+                .and_then(|item| item.last_inspection)
+        }),
     };
     validate_project(&project)?;
     Ok(project)
@@ -789,11 +943,105 @@ mod tests {
         let projects = load(&home).unwrap();
         assert_eq!(projects.projects.len(), 1);
         assert_eq!(projects.projects[0].name, "project-a");
+        let targets = load_targets(&home).unwrap();
+        let generated = targets
+            .targets
+            .iter()
+            .filter(|target| {
+                target.project_path.as_deref() == Some(projects.projects[0].path.as_path())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(generated.len(), 5);
+        for kind in [
+            MountTargetKind::ClaudeProjectSkills,
+            MountTargetKind::CodexProjectSkills,
+            MountTargetKind::ClaudeProjectCommands,
+            MountTargetKind::ClaudeProjectMcpJson,
+            MountTargetKind::CodexProjectMcpToml,
+        ] {
+            assert!(generated.iter().any(|target| target.kind == kind));
+        }
         assert!(fs::read_to_string(ignore_path)
             .unwrap()
             .lines()
             .any(|line| line == "projects.yaml"));
         assert!(home.join("workspace/project-a").is_dir());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn overlapping_managed_project_paths_are_rejected() {
+        let home = home("overlap");
+        let parent_request = save_request(home.join("workspace/project-a"));
+        let parent_preview = preview_save_project(&home, &parent_request).unwrap();
+        apply_save_project(
+            &home,
+            &ProjectSaveApplyRequest {
+                preview_id: parent_preview.preview_id,
+                preview_generated_at_epoch_seconds: parent_preview.generated_at_epoch_seconds,
+                request: parent_request,
+            },
+        )
+        .unwrap();
+
+        let nested = home.join("workspace/project-a/packages/nested");
+        fs::create_dir_all(&nested).unwrap();
+        let request = ProjectSaveRequest {
+            id: None,
+            name: "nested".into(),
+            title: "Nested".into(),
+            path: nested,
+            description: String::new(),
+        };
+        let preview = preview_save_project(&home, &request).unwrap();
+        assert!(!preview.can_apply);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("must not overlap")));
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn refresh_persists_runtime_asset_health() {
+        let home = home("refresh");
+        let project_path = home.join("workspace/project-a");
+        fs::create_dir_all(project_path.join(".claude/skills/review")).unwrap();
+        fs::write(
+            project_path.join(".claude/skills/review/SKILL.md"),
+            "# Review",
+        )
+        .unwrap();
+        fs::create_dir_all(project_path.join(".claude/commands")).unwrap();
+        fs::write(project_path.join(".claude/commands/commit.md"), "# Commit").unwrap();
+        let request = save_request(project_path);
+        let preview = preview_save_project(&home, &request).unwrap();
+        let saved = apply_save_project(
+            &home,
+            &ProjectSaveApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+                request,
+            },
+        )
+        .unwrap();
+
+        let result = refresh_projects(
+            &home,
+            &ProjectRefreshRequest {
+                project_ids: vec![saved.project_id.clone()],
+            },
+        )
+        .unwrap();
+        assert_eq!(result.refreshed_project_ids, vec![saved.project_id]);
+        let inspection = load(&home).unwrap().projects[0]
+            .last_inspection
+            .clone()
+            .unwrap();
+        assert!(inspection.path_healthy);
+        assert_eq!(inspection.skills, 1);
+        assert_eq!(inspection.commands, 1);
+        assert_eq!(inspection.mcps, 0);
         let _ = fs::remove_dir_all(home);
     }
 
@@ -825,25 +1073,10 @@ mod tests {
             "# Review",
         )
         .unwrap();
-        let target_request = crate::target_management::TargetRegistrationPreviewRequest {
-            id: "project-a-skills".into(),
-            kind: crate::targets::MountTargetKind::ClaudeProjectSkills,
-            location: home.join("workspace/project-a"),
-        };
-        let target_preview =
-            crate::target_management::preview_register_target(&home, &target_request).unwrap();
-        crate::target_management::apply_register_target(
-            &home,
-            &crate::target_management::TargetRegistrationApplyRequest {
-                preview_id: target_preview.preview_id,
-                preview_generated_at_epoch_seconds: target_preview.generated_at_epoch_seconds,
-                request: target_request,
-            },
-        )
-        .unwrap();
+        let target_id = format!("{}-claude-skills", saved.project_id);
         let mount_request = MountPreviewRequest {
             asset_id: "skill:review".into(),
-            target_id: "project-a-skills".into(),
+            target_id,
         };
         let mount_preview = preview_mount(&home, &mount_request).unwrap();
         apply_mount(
