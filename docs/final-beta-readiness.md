@@ -69,11 +69,13 @@ be labeled Stable; they exist to make the required Windows installation and
 runtime validation reproducible on a Windows runner.
 
 The tag-driven `Desktop Beta Release` workflow builds the Apple Silicon DMG and
-unsigned Windows MSI/NSIS installers from the same `v*-beta.*` source tag, then
-publishes them together as a GitHub prerelease. Because this repository is
-private, the release is private to authorized repository users. The workflow
-labels the artifacts as controlled Beta/test packages and never claims Stable
-signing or notarization.
+unsigned Windows MSI/NSIS installers from the same `v*-beta.*` source tag. Its
+publish job performs a live GitHub API visibility check and refuses to create a
+release unless the repository is `private`. The artifacts are labeled as
+controlled Beta/test packages and never claim Stable signing or notarization.
+The current repository is public, so private prerelease publication remains
+blocked until the owner explicitly changes repository visibility or chooses a
+different private release repository.
 
 ## Current Package Evidence
 

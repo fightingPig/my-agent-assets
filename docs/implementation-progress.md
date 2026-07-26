@@ -364,8 +364,8 @@ Implemented:
   `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949`
 - added a tag-driven cross-platform Beta release workflow that validates and
   builds one Apple Silicon DMG plus unsigned Windows x64 MSI/NSIS installers
-  from the same `v*-beta.*` commit and publishes them to the private repository
-  as an explicitly non-Stable prerelease
+  from the same `v*-beta.*` commit; its publish job fails closed unless GitHub
+  reports that the repository is private
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
@@ -375,6 +375,9 @@ Not implemented:
   unsigned MSI/NSIS files are test packages only
 - Apple Developer ID signing and notarization remain external release work;
   the macOS Beta candidate is ad-hoc signed
+- private prerelease publication is blocked because the current GitHub
+  repository is public; the workflow refuses to publish until repository
+  visibility is explicitly changed to private
 
 Latest installed-app acceptance:
 - launched `~/Applications/My Agent Assets.app` with isolated fake HOME
