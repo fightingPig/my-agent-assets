@@ -1089,6 +1089,7 @@ fn remove_link_or_junction(path: &Path, metadata: &fs::Metadata) -> Result<()> {
     {
         if junction::exists(path)? {
             junction::delete(path)?;
+            fs::remove_dir(path)?;
         } else if metadata.is_dir() {
             fs::remove_dir(path)?;
         } else {
