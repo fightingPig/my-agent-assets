@@ -68,6 +68,13 @@ MSI and NSIS **test packages**. Its artifacts are not code-signed and must not
 be labeled Stable; they exist to make the required Windows installation and
 runtime validation reproducible on a Windows runner.
 
+The tag-driven `Desktop Beta Release` workflow builds the Apple Silicon DMG and
+unsigned Windows MSI/NSIS installers from the same `v*-beta.*` source tag, then
+publishes them together as a GitHub prerelease. Because this repository is
+private, the release is private to authorized repository users. The workflow
+labels the artifacts as controlled Beta/test packages and never claims Stable
+signing or notarization.
+
 ## Current Package Evidence
 
 Latest automated macOS package verification:

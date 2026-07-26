@@ -362,6 +362,10 @@ Implemented:
   is arm64, the ad-hoc signature passes strict verification, `hdiutil verify`
   passes, and the DMG SHA-256 is
   `48a4388a18f06b0270f34aa174c0f6beff1df2ad32c7f644c250620a7174a949`
+- added a tag-driven cross-platform Beta release workflow that validates and
+  builds one Apple Silicon DMG plus unsigned Windows x64 MSI/NSIS installers
+  from the same `v*-beta.*` commit and publishes them to the private repository
+  as an explicitly non-Stable prerelease
 
 Not implemented:
 - an exhaustive crash matrix for every individual journal step in every
