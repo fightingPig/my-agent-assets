@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, previewSync, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
-import type { ApplyResult, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
+import { gitStatus, listAuditLog, previewSync, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
+import type { ApplyResult, AuditLogEntry, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
@@ -54,6 +54,7 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
   const [pushPolicyError, setPushPolicyError] = useState<string | null>(null);
   const [isPlanningPushPolicy, setIsPlanningPushPolicy] = useState(false);
   const [isApplyingPushPolicy, setIsApplyingPushPolicy] = useState(false);
+  const [syncHistory, setSyncHistory] = useState<readonly AuditLogEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,16 +76,18 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
         logRetentionDays: 14,
         cliPath: "maa",
       });
+      setSyncHistory([]);
       setStateLabel("Visual QA 示例数据");
       return undefined;
     }
     setStatus(emptyGitStatus);
     setSettings(null);
     setStateLabel("读取中");
-    Promise.all([gitStatus(), settingsLoad()])
-      .then(([loaded, loadedSettings]) => {
+    Promise.all([gitStatus(), settingsLoad(), listAuditLog()])
+      .then(([loaded, loadedSettings, auditEntries]) => {
         if (cancelled) return;
         setSettings(loadedSettings);
+        setSyncHistory(syncAuditEntries(auditEntries));
         if (loaded && typeof loaded === "object" && "repositoryPath" in loaded) {
           setStatus(loaded);
           setPreview(null);
@@ -215,8 +218,9 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
       });
       setApplyResult(toApplyResult(result));
       setStateLabel("同步已执行");
-      const loaded = await gitStatus();
+      const [loaded, auditEntries] = await Promise.all([gitStatus(), listAuditLog()]);
       setStatus(loaded);
+      setSyncHistory(syncAuditEntries(auditEntries));
     } catch (error) {
       setApplyResult(null);
       setOperationError(errorMessage(error));
@@ -239,7 +243,7 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
       </section>
 
       <div className="detail-two-column sync-lower-grid">
-        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className="preview-label">{stateLabel}</span></div><div className="timeline-list">{status.lastSyncedAt ? <div><CheckCircle2 size={14} /><span>最近一次本地同步</span><time>{status.lastSyncedAt}</time></div> : <div className="asset-empty-state"><RefreshCw size={20} /><strong>暂无同步历史</strong><span>执行真实 Pull 或 Push 后会在本地 operation journal 留下记录。</span></div>}</div></section>
+        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className="preview-label">{stateLabel}</span></div><div className="timeline-list">{syncHistory.length > 0 ? syncHistory.map((entry) => <div key={`${entry.occurredAtEpochSeconds}:${entry.operationType}`}><CheckCircle2 size={14} /><span>本地 Git 同步 · {entry.outcome === "completed" ? "已完成" : "需要检查"}</span><time>{formatAuditTime(entry.occurredAtEpochSeconds)}</time></div>) : status.lastSyncedAt ? <div><CheckCircle2 size={14} /><span>最近一次本地同步</span><time>{status.lastSyncedAt}</time></div> : <div className="asset-empty-state"><RefreshCw size={20} /><strong>暂无同步历史</strong><span>执行真实 Pull 或 Push 后会在本地 operation journal 留下记录。</span></div>}</div></section>
         <section className="panel detail-section"><div className="section-heading"><div><h3>同步检查</h3><p>执行前风险预览</p></div></div><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.warnings[0] ?? status.statusMessage}</strong><span>{previewSummary}</span></div></div><div className="environment-list"><div><strong>仓库可用</strong><span>{status.isRepository ? "是" : "否"}</span></div><div><strong>白名单变更</strong><span>{status.syncableChanges.length} 项</span></div><div><strong>阻断变更</strong><span>{status.blockedChanges.length} 项</span></div><div><strong>潜在冲突</strong><span>{conflictLabel}</span></div><div><strong>远程可见性</strong><span>{preview?.repositoryVisibility ?? "未验证"}</span></div><div><strong>计划方向</strong><span>{preview?.direction === "pull" ? "Pull" : preview?.direction === "push" ? "Push" : "未选择"}</span></div><div><strong>计划可执行</strong><span>{preview?.canApply ? "是" : "否"}</span></div></div></section>
       </div>
     </div>
@@ -274,4 +278,15 @@ function toApplyResult(
 
 function errorMessage(_error: unknown) {
   return "同步操作未完成。请查看系统状态或导出诊断包后重试。";
+}
+
+function syncAuditEntries(entries: readonly AuditLogEntry[]) {
+  return entries
+    .filter((entry) => entry.operationType === "git-sync")
+    .sort((left, right) => right.occurredAtEpochSeconds - left.occurredAtEpochSeconds)
+    .slice(0, 5);
+}
+
+function formatAuditTime(epochSeconds: number) {
+  return new Date(epochSeconds * 1000).toLocaleString("zh-CN");
 }

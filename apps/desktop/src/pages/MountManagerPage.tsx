@@ -122,8 +122,9 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
   }, [previewInput, refreshKey]);
 
   const planLines = preview?.plannedEffects ?? [];
-  const warning = preview?.warnings[0] ?? "尚未生成真实挂载预览。";
-  const planSummary = warning;
+  const planSummary = preview
+    ? preview.warnings[0] ?? "挂载计划已通过校验。"
+    : "尚未生成真实挂载预览。";
   const canApply = Boolean(preview?.canApply && preview?.previewId);
 
   const handleApplyMount = async () => {

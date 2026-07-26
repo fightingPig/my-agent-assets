@@ -36,6 +36,7 @@ const {
   backupDeletePreview,
   backupDeleteApply,
   gitStatus,
+  listAuditLog,
   settingsLoad,
   settingsPreview,
   settingsApply,
@@ -63,6 +64,7 @@ const {
   backupDeletePreview: vi.fn(),
   backupDeleteApply: vi.fn(),
   gitStatus: vi.fn(),
+  listAuditLog: vi.fn(),
   settingsLoad: vi.fn(),
   settingsPreview: vi.fn(),
   settingsApply: vi.fn(),
@@ -92,6 +94,7 @@ vi.mock("../app/data-api", () => ({
   backupDeletePreview,
   backupDeleteApply,
   gitStatus,
+  listAuditLog,
   settingsLoad,
   settingsPreview,
   settingsApply,
@@ -268,6 +271,7 @@ beforeEach(() => {
     entryCount: 2,
   }]);
   gitStatus.mockResolvedValue(gitStatusFixture());
+  listAuditLog.mockResolvedValue([]);
   settingsLoad.mockResolvedValue(settingsFixture());
   settingsPreview.mockImplementation(async ({ settings }) => ({
     previewId: "settings-save:test",
@@ -510,6 +514,14 @@ describe("read-only UI integration", () => {
   });
 
   it("generates a Sync plan and confirms Push without typed input", async () => {
+    listAuditLog
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{
+        schemaVersion: 1,
+        occurredAtEpochSeconds: 1_785_067_530,
+        operationType: "git-sync",
+        outcome: "completed",
+      }]);
     render(<SyncPage />);
 
     await waitFor(() => expect(gitStatus).toHaveBeenCalled());
@@ -531,6 +543,9 @@ describe("read-only UI integration", () => {
     }));
     expect(await screen.findByText(/执行完成/)).toBeInTheDocument();
     await waitFor(() => expect(gitStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(listAuditLog).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("本地 Git 同步 · 已完成")).toBeInTheDocument();
+    expect(screen.queryByText("暂无同步历史")).not.toBeInTheDocument();
   });
 
   it("requires a settings preview and explicit confirmation before changing Push policy", async () => {
@@ -902,6 +917,8 @@ describe("read-only UI integration", () => {
 
     const mountButton = screen.getByRole("button", { name: "确认挂载" });
     expect(mountButton).toBeEnabled();
+    expect(screen.getByText("挂载计划已通过校验。")).toBeInTheDocument();
+    expect(screen.queryByText("尚未生成真实挂载预览。")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(mountButton);
 
