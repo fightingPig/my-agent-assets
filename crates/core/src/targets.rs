@@ -846,7 +846,7 @@ mod tests {
             accepts: vec![AssetKind::Mcp],
             adapter: MountAdapter::JsonMcpPatch,
             scope: TargetScope::Custom,
-            path: PathBuf::from("/tmp/custom-mcp.json"),
+            path: std::env::temp_dir().join("custom-mcp.json"),
             project_path: None,
             provider_state: ProviderState::Initialized,
             status: TargetStatus::Ready,
@@ -1004,17 +1004,22 @@ mod tests {
     #[test]
     fn yaml_round_trip_and_id_only_resolution() {
         let registry = TargetRegistry::new(vec![custom_json_target()]).unwrap();
+        let custom_path = std::env::temp_dir().join("custom-mcp.json");
         let yaml = registry.to_yaml().unwrap();
         assert!(yaml.contains("schemaVersion: 1"));
         assert!(yaml.contains("custom_claude_mcp_json"));
 
         let restored = TargetRegistry::from_yaml(&yaml).unwrap();
         assert_eq!(restored, registry);
-        assert_eq!(
-            restored.resolve("custom-json").unwrap().path,
-            PathBuf::from("/tmp/custom-mcp.json")
-        );
-        assert!(restored.resolve("/tmp/custom-mcp.json").is_err());
+        assert_eq!(restored.resolve("custom-json").unwrap().path, custom_path);
+        assert!(restored
+            .resolve(
+                std::env::temp_dir()
+                    .join("custom-mcp.json")
+                    .to_string_lossy()
+                    .as_ref()
+            )
+            .is_err());
         assert!(restored
             .resolve_for_apply("custom-json", AssetKind::Mcp)
             .is_ok());
@@ -1025,8 +1030,9 @@ mod tests {
 
     #[test]
     fn standard_user_targets_block_uninitialized_providers() {
+        let home = std::env::temp_dir().join("maa-targets-fake-home");
         let registry = TargetRegistry::standard_user_targets(
-            Path::new("/tmp/fake-home"),
+            &home,
             ProviderState::InstalledNotInitialized,
             ProviderState::Initialized,
             MountAdapter::SymlinkDirectory,

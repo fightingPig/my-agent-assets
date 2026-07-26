@@ -510,7 +510,8 @@ fn create_portable_backup(
             destination
                 .strip_prefix(&root)
                 .map_err(|_| MaaError::new("backup destination escaped the asset center"))?
-                .display()
+                .to_string_lossy()
+                .replace('\\', "/")
         ),
     )?;
     Ok(backup_id)

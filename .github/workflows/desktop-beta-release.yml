@@ -84,11 +84,10 @@ jobs:
         run: |
           npm run typecheck
           npm test -- --run
-          cargo test -p my-agent-assets-core
-          cargo test -p my-agent-assets-desktop
+          cargo test --workspace --no-fail-fast
 
       - name: Build unsigned Windows beta installers
-        run: npm run tauri -- build --bundles msi,nsis
+        run: npm run tauri -- build --config src-tauri/tauri.windows.conf.json
 
       - name: Upload Windows beta
         uses: actions/upload-artifact@v4

@@ -837,19 +837,18 @@ fn create_directory_link(canonical: &Path, target: &Path, _: MountAdapter) -> Re
 fn create_directory_link(canonical: &Path, target: &Path, adapter: MountAdapter) -> Result<()> {
     match adapter {
         MountAdapter::WindowsDirectoryJunction => {
-            // Keep the command text constant. Runtime paths are positional
-            // PowerShell parameters, so cmd.exe metacharacters in an approved
-            // Windows path cannot be interpreted as another command.
+            // Keep runtime paths out of the PowerShell program text so
+            // metacharacters such as '&' and '%' remain literal path content.
             let status = std::process::Command::new("powershell.exe")
                 .args([
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
                     "-Command",
-                    "& { param([string] $junctionPath, [string] $canonicalPath) New-Item -ItemType Junction -LiteralPath $junctionPath -Target $canonicalPath -ErrorAction Stop | Out-Null }",
+                    "New-Item -ItemType Junction -Path $env:MAA_JUNCTION_PATH -Target $env:MAA_CANONICAL_PATH -ErrorAction Stop | Out-Null",
                 ])
-                .arg(target)
-                .arg(canonical)
+                .env("MAA_JUNCTION_PATH", target)
+                .env("MAA_CANONICAL_PATH", canonical)
                 .status()?;
             if !status.success() {
                 return Err(MaaError::new("failed to create Windows directory junction"));
