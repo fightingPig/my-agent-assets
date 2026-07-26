@@ -350,10 +350,21 @@ fn sync_tree(path: &Path) -> Result<()> {
         if metadata.is_dir() {
             sync_tree(&path)?;
         } else if metadata.is_file() {
-            OpenOptions::new().read(true).open(&path)?.sync_all()?;
+            sync_file(&path)?;
         }
     }
     sync_directory(path)
+}
+
+#[cfg(unix)]
+fn sync_file(path: &Path) -> Result<()> {
+    OpenOptions::new().read(true).open(path)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn sync_file(_path: &Path) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(unix)]
