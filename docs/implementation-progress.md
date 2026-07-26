@@ -329,16 +329,20 @@ Implemented:
   Visual QA for 13 pages across macOS and Windows/52 screenshots with zero
   issues, ad-hoc macOS signing,
   and DMG checksum verification
-- Windows workflow run `30201644197` passed frontend contract validation and
-  all 22 Desktop shared-core adapter tests on a native Windows runner, then
-  produced unsigned MSI and NSIS test installers from commit `2e219a0`
+- Windows workflow run `30205386686` passed frontend contract validation and
+  the complete Rust workspace on a native Windows runner, including junction
+  mount/unmount and CLI lifecycle tests, then produced unsigned MSI and NSIS
+  test installers from commit `bf67044`
 - verified the Windows artifact archive and installers:
   - archive SHA-256:
-    `b9fd385c8a84058ac582b33b4c79f21c3f1a50b969c56b1d44d27c7d1490f188`
+    `1282fea4f7e20484e37f79d7dc017b1fc977b73839870e60b7b30e0c136761fe`
   - MSI SHA-256:
-    `2b552d434a6c1d0c6de277c95b153903eb07027d68bf7663822adc1eb96b528b`
+    `7b87f9ffe5f36b0dfd6f8ff7883f0af96e62ab468cb5d4ef2bf63613807db954`
   - NSIS SHA-256:
-    `d8511c2ee02ff15770582a226c8d5aa03334c78db521017d60ca07d4483961a9`
+    `e57c4e9acdf7d64b48555339db47ebec85d84ce69da4f60335f9aa17650a4eae`
+- added a Windows-only Tauri bundle override so the MSI product version uses
+  the compatible numeric prerelease `0.1.1-1` while application/runtime
+  version reporting remains `0.1.1-beta.1`
 - rebuilt and installed the current Apple Silicon candidate from `7e97e2c`;
   ad-hoc signature and DMG verification passed, with DMG SHA-256
   `2b1a41a148b05748cf2f27b9ad4a840c67950abeb4e8065cd1d0cc0f79af96eb`

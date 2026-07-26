@@ -98,8 +98,12 @@ Build artifacts:
 10. Verify Backup History lists manifests, reveals the selected manifest, and shows the manual restore guide without an automatic Restore button.
 11. Verify settings survive app restart.
 12. Verify Git Pull/Push only against a disposable local test remote.
-13. Repeat packaging and native-window checks on Windows before claiming Windows beta readiness.
+13. Install the unsigned MSI or NSIS artifact from workflow run `30205386686`
+    and complete native-window, DPI, path, upgrade, and uninstall checks before
+    claiming Windows beta readiness.
 
 ## Beta Decision
 
-The codebase satisfies the automated macOS V1 beta gate. Distribution beyond controlled local testing remains blocked on notarization and Windows-specific packaging/manual QA.
+The codebase satisfies the automated macOS V1 beta gate and the Windows
+automated packaging gate. Distribution beyond controlled local testing remains
+blocked on macOS notarization plus Windows signing and manual qualification.
