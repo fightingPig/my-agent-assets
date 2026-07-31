@@ -9,6 +9,7 @@ import { ProjectsListPage } from "./ProjectsListPage";
 import { ScanImportPage } from "./ScanImportPage";
 import { SettingsPage } from "./SettingsPage";
 import { SyncPage } from "./SyncPage";
+import { demoMountDrafts, MountDraftProvider } from "../ui-assets";
 
 afterEach(cleanup);
 
@@ -39,7 +40,7 @@ describe("remaining V1 static pages", () => {
     for (const heading of ["项目概览", "本地环境", "已挂载资产", "相关活动"]) {
       expect(screen.getByRole("heading", { name: heading })).toBeInTheDocument();
     }
-    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看挂载预览" })).toBeInTheDocument();
     rerender(<AssetDetailPage demoMode />);
     expect(screen.getByRole("heading", { name: "资产信息" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "挂载引用" })).toBeInTheDocument();
@@ -58,12 +59,12 @@ describe("remaining V1 static pages", () => {
     expect(screen.getByText("只读扫描预览")).toBeInTheDocument();
   });
 
-  it("updates the Mount asset and target preview", () => {
-    render(<MountManagerPage demoMode />);
-    expect(screen.getByRole("tab", { name: /新建挂载/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("暂无可挂载资产")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: /当前挂载/ }));
-    expect(screen.getByText("暂无挂载关系")).toBeInTheDocument();
+  it("renders staged changes and the overall mount preview", async () => {
+    render(<MountDraftProvider initialDrafts={demoMountDrafts("mounts")}><MountManagerPage demoMode /></MountDraftProvider>);
+    expect(screen.getByRole("heading", { name: "待确认变更" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "整体挂载情况" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "确认应用 2 项变更" })).toBeEnabled();
+    expect(screen.queryByRole("tab", { name: /新建挂载/ })).not.toBeInTheDocument();
   });
 
   it("switches Conflict and Backup master-detail selections", () => {

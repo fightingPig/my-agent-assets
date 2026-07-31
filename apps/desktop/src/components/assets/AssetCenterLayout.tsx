@@ -1,6 +1,8 @@
 import { ChevronRight, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import type { AssetType } from "../../app/contracts";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
+import { MountDraftBar, MountMatrix } from "../../ui-assets";
 
 export type AssetStatusTone = "success" | "warning" | "neutral";
 
@@ -29,6 +31,9 @@ type AssetCenterLayoutProps<T extends AssetCenterItem> = {
   emptyDescription?: string;
   usageLabel?: string;
   usageCountLabel?: string;
+  assetType?: AssetType;
+  demoMode?: boolean;
+  onOpenMountPreview?: () => void;
   onOpenDetail?: (item: T) => void;
   renderActions?: (item: T) => ReactNode;
   renderInspector: (item: T) => ReactNode;
@@ -65,6 +70,9 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   emptyDescription,
   usageLabel = "挂载 / 使用摘要",
   usageCountLabel = "个挂载",
+  assetType,
+  demoMode = false,
+  onOpenMountPreview,
   onOpenDetail,
   renderActions,
   renderInspector,
@@ -81,6 +89,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
   const selectedItem = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0];
 
   return (
+    <div className="asset-center-page">
     <div className="asset-center-layout">
       <section className="panel asset-browser" aria-label={`${itemLabel}列表`}>
         <div className="asset-toolbar">
@@ -160,23 +169,31 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
             <div className="asset-inspector-header">
               <div className="asset-inspector-title">
                 <span className="asset-list-icon"><selectedItem.icon size={18} /></span>
-                <div><small>{selectedItem.title}</small><h2>{selectedItem.name}</h2></div>
+                <div><h2>{selectedItem.name}</h2><small>{selectedItem.title}</small></div>
               </div>
               <span className={`asset-status ${selectedItem.statusTone}`}>{selectedItem.status}</span>
             </div>
             <div className="asset-inspector-content">
               <p className="asset-inspector-summary">{selectedItem.summary}</p>
+              {assetType ? (
+                <MountMatrix
+                  assetId={selectedItem.id}
+                  assetName={selectedItem.name}
+                  assetType={assetType}
+                  demoMode={demoMode}
+                />
+              ) : null}
               <InspectorFields fields={[
                 { label: "类型 / 分类", value: `${itemLabel} · ${selectedItem.category}` },
                 { label: "作用域", value: selectedItem.scope },
                 { label: "来源路径", value: selectedItem.path },
                 { label: "最近更新", value: selectedItem.updated },
               ]} />
-              <InspectorSection title={`${usageLabel} · ${selectedItem.mounts.length}`}>
+              {!assetType ? <InspectorSection title={`${usageLabel} · ${selectedItem.mounts.length}`}>
                 {selectedItem.mounts.length > 0
                   ? <InspectorTags tags={selectedItem.mounts} />
                   : <p className="asset-muted-copy">当前没有挂载目标。</p>}
-              </InspectorSection>
+              </InspectorSection> : null}
               {renderInspector(selectedItem)}
             </div>
             {onOpenDetail || renderActions ? (
@@ -190,6 +207,8 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
           <div className="asset-inspector-empty"><strong>暂无可检查资产</strong><span>左侧出现匹配结果后，这里将显示详情。</span></div>
         )}
       </aside>
+    </div>
+    <MountDraftBar onOpenPreview={onOpenMountPreview} />
     </div>
   );
 }

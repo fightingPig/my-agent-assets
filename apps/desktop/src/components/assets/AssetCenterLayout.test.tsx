@@ -21,7 +21,7 @@ describe("Asset Center static UI", () => {
     expect(within(inspector).getByRole("heading", { name: "db-review" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "api-design" })).toBeInTheDocument();
     expect(within(inspector).getByText("最近更新")).toBeInTheDocument();
-    expect(within(inspector).getByText(/挂载与使用/)).toBeInTheDocument();
+    expect(within(inspector).getByText("挂载位置")).toBeInTheDocument();
   });
 
   it("filters static Commands with search and status controls", () => {

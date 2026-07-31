@@ -10,6 +10,8 @@ const {
   canonicalMcpSaveApply,
   canonicalMountPreview,
   canonicalMountApply,
+  listMountTargets,
+  listMountBindings,
   canonicalDeletePreview,
   canonicalDeleteApply,
 } = vi.hoisted(() => ({
@@ -20,6 +22,8 @@ const {
   canonicalMcpSaveApply: vi.fn(),
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
+  listMountTargets: vi.fn(),
+  listMountBindings: vi.fn(),
   canonicalDeletePreview: vi.fn(),
   canonicalDeleteApply: vi.fn(),
 }));
@@ -32,6 +36,8 @@ vi.mock("../app/data-api", () => ({
   canonicalMcpSaveApply,
   canonicalMountPreview,
   canonicalMountApply,
+  listMountTargets,
+  listMountBindings,
   canonicalDeletePreview,
   canonicalDeleteApply,
   safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
@@ -63,6 +69,8 @@ describe("MCP canonical management", () => {
       content: "{\"schemaVersion\":1}",
       truncated: false,
     });
+    listMountTargets.mockResolvedValue([]);
+    listMountBindings.mockResolvedValue([]);
     canonicalMcpGet.mockResolvedValue({
       assetId: "mcp:filesystem",
       title: "Filesystem",

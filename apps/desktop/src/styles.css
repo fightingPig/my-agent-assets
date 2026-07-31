@@ -1,26 +1,27 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
-  color: #1f232a;
-  background: #f7f8fb;
+  font-family: var(--maa-font-sans);
+  color: var(--maa-color-text);
+  background: var(--maa-color-canvas);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --accent: #6253e8;
-  --accent-hover: #5144d6;
-  --accent-soft: #efedff;
-  --text: #1f232a;
-  --secondary: #68707c;
-  --tertiary: #9299a4;
-  --border: #e3e6ec;
-  --subtle-border: #edf0f4;
-  --surface: #ffffff;
-  --sidebar: #f6f7fa;
-  --green: #239b55;
-  --green-soft: #e9f8ef;
-  --blue: #3f7ee8;
-  --blue-soft: #ebf3ff;
-  --amber: #d87a0b;
-  --amber-soft: #fff4df;
-  --violet-soft: #efedff;
+  --accent: var(--maa-color-accent);
+  --accent-hover: var(--maa-color-accent-hover);
+  --accent-soft: var(--maa-color-accent-soft);
+  --text: var(--maa-color-text);
+  --secondary: var(--maa-color-text-secondary);
+  --muted: var(--maa-color-text-secondary);
+  --tertiary: var(--maa-color-text-tertiary);
+  --border: var(--maa-color-border);
+  --subtle-border: var(--maa-color-border-soft);
+  --surface: var(--maa-color-surface);
+  --sidebar: var(--maa-color-sidebar);
+  --green: var(--maa-color-success);
+  --green-soft: var(--maa-color-success-soft);
+  --blue: var(--maa-color-info);
+  --blue-soft: var(--maa-color-info-soft);
+  --amber: var(--maa-color-warning);
+  --amber-soft: var(--maa-color-warning-soft);
+  --violet-soft: var(--maa-color-accent-soft);
 }
 
 * { box-sizing: border-box; }

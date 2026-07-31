@@ -83,11 +83,13 @@ const staticSkills: readonly SkillItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  onOpenMountPreview?: () => void;
 };
 
 export function SkillsListPage({
   demoMode = false,
   onOpenAssetDetail,
+  onOpenMountPreview,
 }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly SkillItem[]>(demoMode ? staticSkills : []);
   const [stateLabel, setStateLabel] = useState("读取中");
@@ -130,6 +132,8 @@ export function SkillsListPage({
 
   return (
     <AssetCenterLayout
+      assetType="skill"
+      demoMode={demoMode}
       emptyDescription="请先从 Claude Code、Codex 或已授权自定义来源扫描并导入 Skill。"
       emptyTitle="未发现 Skills"
       itemLabel="Skills"
@@ -138,6 +142,7 @@ export function SkillsListPage({
       stateLabel={stateLabel}
       usageLabel="挂载与使用"
       usageCountLabel="个挂载"
+      onOpenMountPreview={onOpenMountPreview}
       onOpenDetail={onOpenAssetDetail
         ? (skill) => onOpenAssetDetail(toAssetDetail(skill, "Skill", "SKILL.md 内容预览"))
         : undefined}

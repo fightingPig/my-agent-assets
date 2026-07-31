@@ -15,6 +15,7 @@ import {
   isTauriRuntime,
   type DesktopPlatform,
 } from "./lib/platform";
+import { MountDraftProvider } from "./ui-assets";
 
 function fallbackInfo(platform: DesktopPlatform): AppInfo {
   return {
@@ -65,19 +66,21 @@ function App({ demoMode = false }: AppProps = {}) {
       onPageChange={setActivePage}
       platform={platform}
     >
-      <PageHeader page={currentPage} />
-      <CurrentPage
-        activePage={activePage}
-        appInfo={appInfo}
-        assetDetail={assetDetail}
-        conflictContext={conflictContext}
-        onOpenAssetDetail={openAssetDetail}
-        onOpenConflicts={openConflicts}
-        onOpenProjectDetail={openProjectDetail}
-        onPageChange={setActivePage}
-        projectDetail={projectDetail}
-        demoMode={demoMode}
-      />
+      <MountDraftProvider>
+        <PageHeader page={currentPage} />
+        <CurrentPage
+          activePage={activePage}
+          appInfo={appInfo}
+          assetDetail={assetDetail}
+          conflictContext={conflictContext}
+          onOpenAssetDetail={openAssetDetail}
+          onOpenConflicts={openConflicts}
+          onOpenProjectDetail={openProjectDetail}
+          onPageChange={setActivePage}
+          projectDetail={projectDetail}
+          demoMode={demoMode}
+        />
+      </MountDraftProvider>
     </AppFrame>
   );
 }
