@@ -165,7 +165,8 @@ The preview workflow pages now consume preview-only data through the wrapper lay
   existing/incoming content and explicit skip/rename/overwrite.
 - Backup History: read-only portable/local manifests and manual restore guide;
   no historical Restore command.
-- Sync: shared Git preview/apply with whitelist staging, fast-forward Pull, and
+- Sync: shared Git preview/apply with enforced repository-tree allowlist,
+  whitelist staging, fast-forward Pull, timeout-safe Push outcome handling, and
   live GitHub Private verification before every Push.
 
 Preview data controls plan text, warnings, affected paths, conflicts, and

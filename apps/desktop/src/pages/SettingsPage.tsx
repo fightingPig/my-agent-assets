@@ -103,11 +103,15 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
   const [remotePreview, setRemotePreview] = useState<GitRemotePreview | null>(null);
   const [remoteMessage, setRemoteMessage] = useState("");
   const [remoteBusy, setRemoteBusy] = useState(false);
+  const [persistedGitRemote, setPersistedGitRemote] = useState<string | null>(
+    demoMode ? fallbackSettings.gitRemote : null,
+  );
 
   useEffect(() => {
     let cancelled = false;
     if (demoMode) {
       setSettings(fallbackSettings);
+      setPersistedGitRemote(fallbackSettings.gitRemote);
       setInitialization(visualQaUninitialized ? uninitializedVisualQaPreview : demoInitialization);
       setInitializationChecked(true);
       setInitializationMessage(
@@ -118,6 +122,7 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
     }
 
     setSettings(null);
+    setPersistedGitRemote(null);
     setInitialization(null);
     setInitializationChecked(false);
     setInitializationMessage("");
@@ -133,8 +138,10 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
           "assetCenterPath" in loadedSettings.value
         ) {
           setSettings(loadedSettings.value);
+          setPersistedGitRemote(loadedSettings.value.gitRemote);
         } else {
           setSettings(null);
+          setPersistedGitRemote(null);
         }
 
         if (loadedInitialization.status === "fulfilled") {
@@ -185,6 +192,10 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
     setPreview(null);
     setApplyResult(null);
     setSaveMessage(null);
+    if (key === "gitRemote") {
+      setRemotePreview(null);
+      setRemoteMessage("");
+    }
   };
 
   const handlePreviewSave = async () => {
@@ -219,6 +230,7 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
       });
       const refreshed = await settingsLoad();
       setSettings(refreshed);
+      setPersistedGitRemote(refreshed.gitRemote);
       setStateLabel("已保存并重新读取");
       setSaveMessage("设置已写入本地配置，并已从后端重新读取确认。");
       setApplyResult({
@@ -281,6 +293,11 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
 
   const handleRemotePreview = async () => {
     if (!settings || writesDisabled || !remoteUrl.trim()) return;
+    if (settings.gitRemote !== persistedGitRemote) {
+      setRemotePreview(null);
+      setRemoteMessage("远程名称尚未保存。请先生成并确认设置保存预览，再配置远程仓库。");
+      return;
+    }
     setRemoteBusy(true);
     setRemoteMessage("");
     try {
@@ -306,7 +323,7 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
         previewId: remotePreview.previewId,
         previewGeneratedAtEpochSeconds: remotePreview.generatedAtEpochSeconds,
         request: {
-          remoteName: settings.gitRemote,
+          remoteName: remotePreview.remoteName,
           remoteUrl: remotePreview.remoteUrl,
         },
       });
@@ -334,6 +351,8 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
       </section>
     );
   }
+
+  const remoteNameDirty = settings.gitRemote !== persistedGitRemote;
 
   return (
     <div className="settings-workspace">
@@ -419,9 +438,9 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
             <span>远程仓库 URL</span>
             <div className="path-picker-control">
               <input data-no-drag="true" disabled={writesDisabled} onChange={(event) => { setRemoteUrl(event.target.value); setRemotePreview(null); setRemoteMessage(""); }} placeholder="git@github.com:owner/private-assets.git" style={noDragControl} value={remoteUrl} />
-              <button className="asset-secondary-action" data-no-drag="true" disabled={writesDisabled || remoteBusy || !remoteUrl.trim()} onClick={() => void handleRemotePreview()} style={noDragControl} type="button">预览配置</button>
+              <button className="asset-secondary-action" data-no-drag="true" disabled={writesDisabled || remoteBusy || remoteNameDirty || !remoteUrl.trim()} onClick={() => void handleRemotePreview()} style={noDragControl} type="button">预览配置</button>
             </div>
-            <small>仅在确认后修改资产中心的 Git remote；不会执行 fetch、pull 或 push。</small>
+            <small>{remoteNameDirty ? "远程名称有未保存改动；请先保存设置。" : "仅在确认后修改资产中心的 Git remote；不会执行 fetch、pull 或 push。"}</small>
           </label>
         </div>
         {remotePreview ? (

@@ -32,10 +32,62 @@ jobs:
             tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
             test "${tag_commit}" = "${GITHUB_SHA}"
           fi
+          test -f "docs/release-notes-${RELEASE_TAG}.md"
+
+  quality:
+    name: Full release quality gate
+    needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Validate renderer and static GUI
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm test -- --run
+          npm run build:renderer
+          chrome_bin="$(command -v google-chrome || command -v chromium-browser || command -v chromium || true)"
+          test -n "${chrome_bin}"
+          CHROME_BIN="${chrome_bin}" npm run qa:visual
+
+      - name: Validate Rust workspace
+        working-directory: ${{ github.workspace }}
+        run: |
+          cargo fmt --all -- --check
+          cargo test --workspace --no-fail-fast
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Upload Visual QA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-visual-qa
+          if-no-files-found: error
+          path: apps/desktop/artifacts/visual-qa/
 
   build-macos:
     name: Build macOS arm64 beta
-    needs: validate-release
+    needs:
+      - validate-release
+      - quality
     runs-on: macos-14
     permissions:
       contents: read
@@ -81,7 +133,9 @@ jobs:
 
   build-windows:
     name: Build Windows x64 beta
-    needs: validate-release
+    needs:
+      - validate-release
+      - quality
     runs-on: windows-latest
     permissions:
       contents: read
@@ -150,6 +204,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download installers
         uses: actions/download-artifact@v4
         with:
@@ -187,11 +243,5 @@ jobs:
           name: My Agent Assets ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           prerelease: true
           generate_release_notes: true
-          body: |
-            Cross-platform V1 beta candidate.
-
-            - macOS: Apple Silicon, ad-hoc signed, not notarized.
-            - Windows: unsigned MSI and NSIS test installers.
-            - Beta.1 may have left an empty ~/.my-agent-assets/locks directory; after confirming it is empty and no operation is running, remove it manually if needed.
-            - This prerelease is for controlled validation and is not V1 Stable.
+          body_path: docs/release-notes-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}.md
           files: release-upload/*

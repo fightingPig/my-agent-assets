@@ -69,8 +69,22 @@ pub fn preview_initialization(home: &Path) -> Result<InitializationPreview> {
 /// locks, journals, registries, or other write-side state.
 pub fn ensure_initialized(home: &Path) -> Result<()> {
     let root = home.join(ROOT_NAME);
-    validate_existing(home, &root)
-        .map_err(|_| MaaError::new("asset center is not initialized; run initialization first"))
+    match fs::symlink_metadata(&root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(MaaError::new(
+                "asset center is not initialized; run initialization first",
+            ));
+        }
+        Err(_) => {
+            return Err(MaaError::new(
+                "asset center validation is blocked; run diagnostics before retrying",
+            ));
+        }
+        Ok(_) => {}
+    }
+    validate_existing(home, &root).map_err(|_| {
+        MaaError::new("asset center validation is blocked; run diagnostics before retrying")
+    })
 }
 
 fn preview_initialization_at(
@@ -508,7 +522,7 @@ mod tests {
 
         let error = ensure_initialized(&home).unwrap_err();
 
-        assert!(error.to_string().contains("not initialized"));
+        assert!(error.to_string().contains("validation is blocked"));
         let after = fs::read_dir(&root)
             .unwrap()
             .map(|entry| entry.unwrap().file_name())

@@ -107,6 +107,7 @@ pub struct SyncApplyResult {
     pub committed: bool,
     pub pushed: bool,
     pub pulled: bool,
+    pub outcome_unknown: bool,
     pub warnings: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content_diagnostics: Vec<ContentDiagnostic>,
@@ -433,6 +434,7 @@ fn apply_sync_with(
     let mut committed = false;
     let mut pushed = false;
     let mut pulled = false;
+    let mut outcome_unknown = false;
     let mut warnings = Vec::new();
 
     match request.request.direction {
@@ -485,7 +487,7 @@ fn apply_sync_with(
                 journal.record_step("sync_commit_created")?;
                 commit
             };
-            let push = run_git_with_timeout(
+            let push = git_output_with_timeout(
                 &repository,
                 &[
                     "push",
@@ -499,7 +501,35 @@ fn apply_sync_with(
                 ],
                 REMOTE_COMMAND_TIMEOUT,
             );
-            if !push.status.success() {
+            let push_succeeded = match push {
+                Ok(output) if output.status.success() => true,
+                Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+                    let remote_confirmed = remote_head_with_timeout(
+                        &repository,
+                        &settings.git_remote,
+                        &preview.status.branch,
+                        LOCAL_COMMAND_TIMEOUT,
+                    )
+                    .as_deref()
+                        == Some(new_head.as_str());
+                    if remote_confirmed {
+                        warnings.push(
+                            "Git Push exceeded the local timeout, but the remote ref confirms the new commit."
+                                .into(),
+                        );
+                        true
+                    } else {
+                        outcome_unknown = true;
+                        warnings.push(
+                            "Git Push outcome could not be confirmed after timeout. The local sync commit was preserved; refresh sync status before retrying."
+                                .into(),
+                        );
+                        false
+                    }
+                }
+                Ok(_) | Err(_) => false,
+            };
+            if !push_succeeded && !outcome_unknown {
                 let rollback_result = if committed {
                     if old_head.is_empty() {
                         run_git_checked(
@@ -536,8 +566,12 @@ fn apply_sync_with(
                 )?;
             }
             let _ = fs::remove_file(&temporary_index);
-            journal.record_step("push_completed")?;
-            pushed = true;
+            if outcome_unknown {
+                journal.record_step("push_outcome_unknown")?;
+            } else {
+                journal.record_step("push_completed")?;
+                pushed = true;
+            }
             affected_paths.extend(sync_paths(&repository));
         }
     }
@@ -576,6 +610,7 @@ fn apply_sync_with(
         committed,
         pushed,
         pulled,
+        outcome_unknown,
         warnings: std::mem::take(&mut warnings),
         content_diagnostics,
         journal_path: journal.path().to_path_buf(),
@@ -631,19 +666,15 @@ fn status_for_repository(repository: &Path, remote_name: &str) -> GitStatus {
                 .unwrap_or(0);
         }
     }
-    let porcelain =
-        git_stdout(repository, &["status", "--porcelain=v1", "-uall"]).unwrap_or_default();
-    for line in porcelain.lines().filter(|line| line.len() >= 3) {
-        let code = &line[..2];
-        let path = normalize_status_path(line.get(2..).unwrap_or_default().trim_start());
+    for (code, path) in git_status_entries(repository) {
         // Local operation state is never part of the portable asset-center
-        // worktree. Older centers might predate the current .gitignore; do not
-        // let an audit log or recovery file incorrectly block sync.
+        // worktree. Tracked local paths are added to blocked_changes below;
+        // untracked local state remains ignored.
         if is_local_state_path(&path) {
             continue;
         }
         status.changed_files.push(path.clone());
-        if code.contains('U') || matches!(code, "AA" | "DD") {
+        if code.contains('U') || matches!(code.as_str(), "AA" | "DD") {
             status.conflicts.push(path.clone());
         }
         if is_sync_path(&path) {
@@ -652,6 +683,9 @@ fn status_for_repository(repository: &Path, remote_name: &str) -> GitStatus {
             status.blocked_changes.push(path);
         }
     }
+    status
+        .blocked_changes
+        .extend(tracked_non_sync_paths(repository));
     for values in [
         &mut status.changed_files,
         &mut status.conflicts,
@@ -661,11 +695,13 @@ fn status_for_repository(repository: &Path, remote_name: &str) -> GitStatus {
         values.sort();
         values.dedup();
     }
-    status.clean = status.changed_files.is_empty() && status.conflicts.is_empty();
-    status.status_message = if status.clean {
+    status.clean = status.changed_files.is_empty()
+        && status.conflicts.is_empty()
+        && status.blocked_changes.is_empty();
+    status.status_message = if !status.blocked_changes.is_empty() {
+        "Git repository contains paths outside the canonical sync allowlist".into()
+    } else if status.clean {
         "Git worktree is clean".into()
-    } else if !status.blocked_changes.is_empty() {
-        "Git worktree contains non-syncable changes".into()
     } else {
         "Canonical changes are ready for preview".into()
     };
@@ -689,6 +725,7 @@ fn is_sync_path(path: &str) -> bool {
 fn is_local_state_path(path: &str) -> bool {
     [
         "config.yaml",
+        "projects.yaml",
         "targets.yaml",
         "mounts.yaml",
         "backups/local/",
@@ -702,12 +739,79 @@ fn is_local_state_path(path: &str) -> bool {
     .any(|prefix| path == prefix.trim_end_matches('/') || path.starts_with(prefix))
 }
 
-fn normalize_status_path(value: &str) -> String {
-    let value = value.rsplit(" -> ").next().unwrap_or(value);
-    value.trim_matches('"').replace('\\', "/")
+fn git_status_entries(repository: &Path) -> Vec<(String, String)> {
+    let Ok(output) = git_output_with_timeout(
+        repository,
+        &["status", "--porcelain=v1", "-z", "-uall"],
+        LOCAL_COMMAND_TIMEOUT,
+    ) else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    parse_porcelain_v1_z(&output.stdout)
+}
+
+fn parse_porcelain_v1_z(bytes: &[u8]) -> Vec<(String, String)> {
+    let records = bytes
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .collect::<Vec<_>>();
+    let mut entries = Vec::new();
+    let mut index = 0;
+    while index < records.len() {
+        let record = records[index];
+        index += 1;
+        if record.len() < 4 || record[2] != b' ' {
+            continue;
+        }
+        let code = String::from_utf8_lossy(&record[..2]).into_owned();
+        let path = normalize_git_path_bytes(&record[3..]);
+        if path.is_empty() {
+            continue;
+        }
+        let has_rename_source = code.contains('R') || code.contains('C');
+        entries.push((code, path));
+        if has_rename_source && index < records.len() {
+            index += 1;
+        }
+    }
+    entries
+}
+
+fn tracked_non_sync_paths(repository: &Path) -> Vec<String> {
+    let Ok(output) =
+        git_output_with_timeout(repository, &["ls-files", "-z"], LOCAL_COMMAND_TIMEOUT)
+    else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(normalize_git_path_bytes)
+        .filter(|path| !is_sync_path(path))
+        .collect()
+}
+
+fn normalize_git_path_bytes(value: &[u8]) -> String {
+    String::from_utf8_lossy(value).replace('\\', "/")
 }
 
 fn remote_head(repository: &Path, remote: &str, branch: &str) -> Option<String> {
+    remote_head_with_timeout(repository, remote, branch, REMOTE_COMMAND_TIMEOUT)
+}
+
+fn remote_head_with_timeout(
+    repository: &Path,
+    remote: &str,
+    branch: &str,
+    timeout: std::time::Duration,
+) -> Option<String> {
     if branch.is_empty() {
         return None;
     }
@@ -719,7 +823,7 @@ fn remote_head(repository: &Path, remote: &str, branch: &str) -> Option<String> 
             remote,
             &format!("refs/heads/{branch}"),
         ],
-        REMOTE_COMMAND_TIMEOUT,
+        timeout,
     )
     .ok()
     .and_then(|output| output.split_whitespace().next().map(ToOwned::to_owned))
@@ -907,9 +1011,17 @@ fn validate_preview_time(generated_at: u64) -> Result<()> {
 }
 
 fn run_git_with_timeout(repository: &Path, args: &[&str], timeout: std::time::Duration) -> Output {
+    git_output_with_timeout(repository, args, timeout).unwrap_or_else(|_| failed_output())
+}
+
+fn git_output_with_timeout(
+    repository: &Path,
+    args: &[&str],
+    timeout: std::time::Duration,
+) -> std::io::Result<Output> {
     let mut command = git_command();
     command.current_dir(repository).args(args);
-    output_with_timeout(&mut command, timeout).unwrap_or_else(|_| failed_output())
+    output_with_timeout(&mut command, timeout)
 }
 
 fn run_git_checked(repository: &Path, args: &[&str], message: &str) -> Result<()> {
@@ -1177,6 +1289,59 @@ mod tests {
         assert!(is_local_state_path("logs/operations-1.jsonl"));
         assert!(is_local_state_path("operations/recovery.yaml"));
         assert!(!is_local_state_path("assets/skills/review/SKILL.md"));
+    }
+
+    #[test]
+    fn porcelain_parser_preserves_non_ascii_paths_and_skips_rename_sources() {
+        let non_ascii = "assets/skills/\u{6d4b}\u{8bd5}/SKILL.md";
+        let porcelain =
+            format!("?? {non_ascii}\0R  assets/skills/new/SKILL.md\0assets/skills/old/SKILL.md\0");
+
+        assert_eq!(
+            parse_porcelain_v1_z(porcelain.as_bytes()),
+            vec![
+                ("??".to_string(), non_ascii.to_string()),
+                ("R ".to_string(), "assets/skills/new/SKILL.md".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn tracked_machine_local_paths_block_sync_even_when_unchanged() {
+        let (home, _remote) = setup("tracked-local-state");
+        let repository = home.join(".my-agent-assets");
+        fs::write(
+            repository.join("targets.yaml"),
+            "schemaVersion: 1\ntargets: []\n",
+        )
+        .unwrap();
+        run(&repository, &["add", "-f", "targets.yaml"]);
+        run(&repository, &["commit", "-m", "legacy tracked local state"]);
+        run(&repository, &["push"]);
+        fs::write(
+            repository.join("assets/skills/review/SKILL.md"),
+            "# Updated",
+        )
+        .unwrap();
+
+        let status = status_for_repository(&repository, "origin");
+        assert_eq!(status.blocked_changes, vec!["targets.yaml"]);
+        assert!(!status.clean);
+
+        let preview = preview_sync_with(
+            &home,
+            &SyncPreviewRequest {
+                direction: SyncDirection::Push,
+            },
+            &PrivateVerifier,
+        )
+        .unwrap();
+        assert!(!preview.can_apply);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Non-syncable")));
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]

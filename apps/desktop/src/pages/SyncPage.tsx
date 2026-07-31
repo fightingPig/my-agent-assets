@@ -83,32 +83,43 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
     setStatus(emptyGitStatus);
     setSettings(null);
     setStateLabel("读取中");
-    Promise.all([gitStatus(), settingsLoad(), listAuditLog()])
-      .then(([loaded, loadedSettings, auditEntries]) => {
+    Promise.allSettled([gitStatus(), settingsLoad(), listAuditLog()])
+      .then(([loadedStatus, loadedSettings, loadedAuditEntries]) => {
         if (cancelled) return;
-        setSettings(loadedSettings);
-        setSyncHistory(syncAuditEntries(auditEntries));
-        if (loaded && typeof loaded === "object" && "repositoryPath" in loaded) {
-          setStatus(loaded);
+        setSettings(loadedSettings.status === "fulfilled" ? loadedSettings.value : null);
+        setSyncHistory(
+          loadedAuditEntries.status === "fulfilled"
+            ? syncAuditEntries(loadedAuditEntries.value)
+            : [],
+        );
+        if (
+          loadedStatus.status === "fulfilled" &&
+          loadedStatus.value &&
+          typeof loadedStatus.value === "object" &&
+          "repositoryPath" in loadedStatus.value
+        ) {
+          setStatus(loadedStatus.value);
           setPreview(null);
           setApplyResult(null);
           setOperationError(null);
-          setStateLabel("只读真实数据");
+          setStateLabel(
+            loadedAuditEntries.status === "rejected"
+              ? "只读真实数据 · 同步历史暂不可用"
+              : loadedSettings.status === "rejected"
+                ? "只读真实数据 · 同步设置暂不可用"
+                : "只读真实数据",
+          );
         } else {
-        setStatus(emptyGitStatus);
-        setPreview(null);
-        setApplyResult(null);
-        setOperationError(null);
-        setStateLabel("未返回 Git 状态");
+          setStatus(emptyGitStatus);
+          setPreview(null);
+          setApplyResult(null);
+          setOperationError(null);
+          setStateLabel(
+            loadedStatus.status === "rejected"
+              ? `读取失败：${errorMessage(loadedStatus.reason)}`
+              : "未返回 Git 状态",
+          );
         }
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setStatus(emptyGitStatus);
-        setPreview(null);
-        setApplyResult(null);
-        setOperationError(null);
-        setStateLabel(`读取失败：${errorMessage(error)}`);
       });
     return () => {
       cancelled = true;
@@ -217,10 +228,21 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
         request: { direction: preview.direction },
       });
       setApplyResult(toApplyResult(result));
-      setStateLabel("同步已执行");
-      const [loaded, auditEntries] = await Promise.all([gitStatus(), listAuditLog()]);
-      setStatus(loaded);
-      setSyncHistory(syncAuditEntries(auditEntries));
+      setStateLabel(result.outcomeUnknown ? "同步结果待确认" : "同步已执行");
+      const [loadedStatus, loadedAuditEntries] = await Promise.allSettled([
+        gitStatus(),
+        listAuditLog(),
+      ]);
+      if (loadedStatus.status === "fulfilled") setStatus(loadedStatus.value);
+      if (loadedAuditEntries.status === "fulfilled") {
+        setSyncHistory(syncAuditEntries(loadedAuditEntries.value));
+      } else {
+        setStateLabel(
+          result.outcomeUnknown
+            ? "同步结果待确认 · 同步历史暂不可用"
+            : "同步已执行 · 同步历史暂不可用",
+        );
+      }
     } catch (error) {
       setApplyResult(null);
       setOperationError(errorMessage(error));
@@ -256,23 +278,27 @@ function toApplyResult(
   const action = result.direction === "pull" ? "Pull" : "Push";
   return {
     mode: "apply",
-    ok: true,
+    ok: !result.outcomeUnknown,
     previewId: result.previewId,
     backup: null,
     steps: [{
       stepId: `git-${result.direction}`,
       kind: "git",
       label: `执行 ${action}`,
-      status: "success",
+      status: result.outcomeUnknown ? "failed" : "success",
       message: result.pulled
         ? "已完成 fast-forward Pull。"
         : result.pushed
           ? "已完成 Push。"
-          : "同步完成。",
+          : result.outcomeUnknown
+            ? "远程结果暂时无法确认；本地提交已保留。"
+            : "同步完成。",
       affectedPaths: result.affectedPaths,
     }],
     warnings: result.warnings,
-    errors: [],
+    errors: result.outcomeUnknown
+      ? ["远程结果暂时无法确认；本地提交已保留。请先刷新同步状态，确认远程分支后再决定是否重试。"]
+      : [],
   };
 }
 

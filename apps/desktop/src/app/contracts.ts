@@ -478,6 +478,7 @@ export type SyncApplyResult = {
   committed: boolean;
   pushed: boolean;
   pulled: boolean;
+  outcomeUnknown: boolean;
   warnings: string[];
   contentDiagnostics?: ContentDiagnostic[];
   journalPath: string;

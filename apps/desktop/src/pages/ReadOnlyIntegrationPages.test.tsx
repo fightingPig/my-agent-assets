@@ -342,6 +342,7 @@ beforeEach(() => {
     committed: true,
     pushed: true,
     pulled: false,
+    outcomeUnknown: false,
     warnings: [],
     journalPath: "/tmp/sync-journal",
   });
@@ -570,6 +571,21 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "执行 Push" })).toBeDisabled();
   });
 
+  it("keeps Git status visible when sync history loading fails", async () => {
+    listAuditLog.mockRejectedValue(new Error("history unavailable"));
+    gitStatus.mockResolvedValue(gitStatusFixture({
+      repositoryPath: "/tmp/visible-assets",
+      isRepository: true,
+      branch: "main",
+    }));
+
+    render(<SyncPage />);
+
+    expect(await screen.findByText("/tmp/visible-assets")).toBeInTheDocument();
+    expect(screen.getByText("只读真实数据 · 同步历史暂不可用")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "预览 Push" })).toBeEnabled();
+  });
+
   it("generates a Sync plan and confirms Push without typed input", async () => {
     listAuditLog
       .mockResolvedValueOnce([])
@@ -603,6 +619,30 @@ describe("read-only UI integration", () => {
     await waitFor(() => expect(listAuditLog).toHaveBeenCalledTimes(2));
     expect(screen.getByText("本地 Git 同步 · 已完成")).toBeInTheDocument();
     expect(screen.queryByText("暂无同步历史")).not.toBeInTheDocument();
+  });
+
+  it("keeps a timed-out Push commit and presents the outcome as unconfirmed", async () => {
+    syncApply.mockResolvedValue({
+      previewId: "preview:sync:push",
+      direction: "push",
+      affectedPaths: ["/tmp/home/.my-agent-assets/assets.yaml"],
+      backupId: null,
+      committed: true,
+      pushed: false,
+      pulled: false,
+      outcomeUnknown: true,
+      warnings: ["Git Push outcome could not be confirmed after timeout."],
+      journalPath: "/tmp/sync-journal",
+    });
+    render(<SyncPage />);
+
+    await waitFor(() => expect(gitStatus).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: "预览 Push" }));
+    fireEvent.click(await screen.findByRole("button", { name: "执行 Push" }));
+
+    expect(await screen.findByText(/远程结果暂时无法确认；本地提交已保留/)).toBeInTheDocument();
+    expect(screen.getByText("同步结果待确认")).toBeInTheDocument();
+    expect(screen.queryByText("同步已执行")).not.toBeInTheDocument();
   });
 
   it("requires a settings preview and explicit confirmation before changing Push policy", async () => {
@@ -671,6 +711,42 @@ describe("read-only UI integration", () => {
     }));
     await waitFor(() => expect(settingsLoad).toHaveBeenCalledTimes(2));
     expect(screen.getByText("设置已写入本地配置，并已从后端重新读取确认。")).toBeInTheDocument();
+  });
+
+  it("requires the Git remote name to be saved before configuring its URL", async () => {
+    settingsLoad
+      .mockResolvedValueOnce(settingsFixture({ gitRemote: "origin" }))
+      .mockResolvedValue(settingsFixture({ gitRemote: "upstream" }));
+    gitRemotePreview.mockResolvedValue({
+      previewId: "git-remote:test",
+      remoteName: "upstream",
+      remoteUrl: "git@github.com:owner/private-assets.git",
+      affectedPaths: ["/tmp/home/.my-agent-assets/.git/config"],
+      warnings: [],
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+
+    render(<SettingsPage />);
+
+    const remoteName = await screen.findByDisplayValue("origin");
+    fireEvent.change(remoteName, { target: { value: "upstream" } });
+    fireEvent.change(screen.getByPlaceholderText("git@github.com:owner/private-assets.git"), {
+      target: { value: "git@github.com:owner/private-assets.git" },
+    });
+    expect(screen.getByText("远程名称有未保存改动；请先保存设置。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "预览配置" })).toBeDisabled();
+    expect(gitRemotePreview).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认保存设置" }));
+    await waitFor(() => expect(settingsLoad).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "预览配置" }));
+    await waitFor(() => expect(gitRemotePreview).toHaveBeenCalledWith({
+      remoteName: "upstream",
+      remoteUrl: "git@github.com:owner/private-assets.git",
+    }));
   });
 
   it("shows settings save failures and never reports a successful save", async () => {

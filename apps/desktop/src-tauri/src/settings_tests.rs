@@ -197,7 +197,7 @@ fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
     );
 
     let error = result.expect_err("unsafe asset center must be rejected");
-    assert!(error.contains("not initialized"));
+    assert!(error.contains("validation is blocked"));
     assert!(!outside.config_path().exists());
 }
 

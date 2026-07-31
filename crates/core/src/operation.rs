@@ -20,6 +20,19 @@ pub struct OperationLock {
 
 impl OperationLock {
     pub fn acquire(home: &Path) -> Result<Self> {
+        let root = home.join(".my-agent-assets");
+        let metadata = fs::symlink_metadata(&root).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                MaaError::new("asset center is not initialized; run initialization first")
+            } else {
+                MaaError::new("asset center write readiness could not be verified")
+            }
+        })?;
+        if is_link_or_junction(&metadata) || !metadata.is_dir() {
+            return Err(MaaError::new(
+                "asset center write readiness is blocked; run diagnostics before retrying",
+            ));
+        }
         Self::acquire_internal(home, false)
     }
 
@@ -1036,6 +1049,24 @@ mod tests {
 
         drop(lock);
         assert!(OperationLock::acquire(&home).is_ok());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn regular_lock_rejects_uninitialized_home_without_creating_asset_center() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-operation-uninitialized-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&home).unwrap();
+
+        let error = OperationLock::acquire(&home).unwrap_err();
+
+        assert!(error.to_string().contains("not initialized"));
+        assert!(!home.join(".my-agent-assets").exists());
         let _ = fs::remove_dir_all(home);
     }
 

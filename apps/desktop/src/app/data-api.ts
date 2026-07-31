@@ -843,7 +843,8 @@ export async function syncApply(input: SyncApplyInput): Promise<SyncApplyResult>
   if (
     !isRecord(result) ||
     typeof result.previewId !== "string" ||
-    !Array.isArray(result.affectedPaths)
+    !Array.isArray(result.affectedPaths) ||
+    typeof result.outcomeUnknown !== "boolean"
   ) {
     throw new Error("sync_apply returned an invalid response.");
   }

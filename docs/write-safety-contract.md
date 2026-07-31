@@ -249,9 +249,15 @@ MCP runtime config compilation:
 - Rejects a symlinked asset-center repository before running Git
 - Recomputes `previewId` from current Git status before running a command
 - Rejects dirty worktrees, conflicts, missing upstreams, and non-repositories
+- Rejects any path already tracked outside `.gitignore`, `assets/`,
+  `assets.yaml`, and `backups/portable/`; legacy tracked machine-local files
+  must be removed from repository history/index before Pull or Push
 - `planOnly` mode runs no Git commands
 - Pull executes `git pull --ff-only`
 - Push executes `git push`
+- A timed-out Push never rolls back a potentially accepted commit. The backend
+  confirms the remote ref when possible and otherwise returns
+  `outcomeUnknown: true` while preserving the local sync commit
 - Git commands are executed through `std::process::Command` argument arrays, not shell strings
 
 Conflict decisions are executed through the canonical batch import apply path:

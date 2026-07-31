@@ -319,6 +319,7 @@ describe("read-only desktop data api", () => {
       committed: true,
       pushed: true,
       pulled: false,
+      outcomeUnknown: false,
       warnings: [],
       journalPath: "/tmp/journal",
     });
@@ -682,5 +683,21 @@ describe("read-only desktop data api", () => {
       scope: { kind: "user" },
       selections: [],
     })).rejects.toThrow("command unavailable");
+  });
+
+  it("exposes only recognized structured desktop error messages", async () => {
+    const api = await import("./data-api");
+    const fallback = "安全回退提示";
+
+    expect(api.safeCommandErrorMessage({
+      code: "operationBlocked",
+      message: "当前操作已阻止。",
+      parameters: {},
+    }, fallback)).toBe("当前操作已阻止。");
+    expect(api.safeCommandErrorMessage({
+      code: "unknownCode",
+      message: "/Users/private token=secret",
+    }, fallback)).toBe(fallback);
+    expect(api.safeCommandErrorMessage(new Error("/Users/private"), fallback)).toBe(fallback);
   });
 });

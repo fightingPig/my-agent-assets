@@ -356,12 +356,15 @@ and Git credentials. A log or registry change invalidates the Preview.
 `previewId` is a SHA-256 digest bound to direction, current Git state,
 canonical sync paths, remote identity, visibility result, and generation time.
 `sync_apply` re-runs visibility verification and rejects stale previews.
+If Push exceeds the local timeout, the backend preserves the local sync commit
+and checks the remote ref. `outcomeUnknown` is `true` only when remote acceptance
+cannot be confirmed; callers must refresh status instead of immediately retrying.
 
 ### `sync_apply`
 
 - **Purpose:** Execute a previously previewed local Git Pull or Push for the asset center repository.
 - **Input:** `SyncApplyInput { previewId, previewGeneratedAtEpochSeconds, request: { direction } }`.
-- **Output:** `SyncApplyResult { previewId, direction, affectedPaths, backupId, committed, pushed, pulled, warnings, journalPath }`.
+- **Output:** `SyncApplyResult { previewId, direction, affectedPaths, backupId, committed, pushed, pulled, outcomeUnknown, warnings, journalPath }`.
 - **Side effect:** Explicit write after preview and button confirmation.
 - **Consumer:** Sync.
 - **Status:** Implemented in shared core and registered.
