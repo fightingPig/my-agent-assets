@@ -1,6 +1,7 @@
 use crate::asset_registry::{
     inspect_content, load as load_assets, ContentDiagnostic, ContentState,
 };
+use crate::external_command::{git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT};
 use crate::initialization::preview_initialization;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::incomplete_journals;
@@ -10,7 +11,6 @@ use crate::targets::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DoctorCheckStatus {
@@ -123,7 +123,9 @@ pub fn doctor(home: &Path) -> DoctorReport {
 }
 
 fn git_check() -> DoctorCheck {
-    match Command::new("git").arg("--version").output() {
+    let mut command = git_command();
+    command.arg("--version");
+    match output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT) {
         Ok(output) if output.status.success() => check(
             "git",
             "Git",

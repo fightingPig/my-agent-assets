@@ -1,6 +1,6 @@
 import { TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
-import { canonicalAssetContent, listAssets } from "../app/data-api";
+import { canonicalAssetContent, listAssets, safeCommandErrorMessage } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import {
@@ -148,8 +148,8 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
   );
 }
 
-function errorMessage(_error: unknown) {
-  return "本地 Command 操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "本地 Command 操作未完成。请查看系统状态或导出诊断包后重试。");
 }
 
 function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {

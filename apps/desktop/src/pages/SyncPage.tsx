@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, GitBranch, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { gitStatus, listAuditLog, previewSync, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
+import { gitStatus, listAuditLog, previewSync, safeCommandErrorMessage, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
 import type { ApplyResult, AuditLogEntry, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
@@ -276,8 +276,8 @@ function toApplyResult(
   };
 }
 
-function errorMessage(_error: unknown) {
-  return "同步操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "同步操作未完成。请查看系统状态或导出诊断包后重试。");
 }
 
 function syncAuditEntries(entries: readonly AuditLogEntry[]) {

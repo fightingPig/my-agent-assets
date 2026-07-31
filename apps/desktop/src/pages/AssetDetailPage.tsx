@@ -4,6 +4,7 @@ import {
   canonicalAssetOpen,
   canonicalDeleteApply,
   canonicalDeletePreview,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type { ApplyResult, CanonicalDeletePreview } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
@@ -59,8 +60,8 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         action: detail.assetType === "skill" ? "reveal" : "open_external",
       });
       setMessage(`已打开：${opened.path}`);
-    } catch {
-      setMessage("无法打开资产，请检查文件是否仍存在。");
+    } catch (error) {
+      setMessage(safeCommandErrorMessage(error, "无法打开资产，请检查文件是否仍存在。"));
     }
   };
 
@@ -72,9 +73,9 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         removeMcpTargetEntries: false,
       }));
       setMessage(null);
-    } catch {
+    } catch (error) {
       setDeletePreview(null);
-      setMessage("删除影响预览生成失败。");
+      setMessage(safeCommandErrorMessage(error, "删除影响预览生成失败。"));
     }
   };
 
@@ -101,8 +102,8 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         errors: applied.deleted ? [] : ["资产未删除。"],
       });
       if (applied.deleted) setDetail(null);
-    } catch {
-      setMessage("删除未完成；事务会自动回滚。");
+    } catch (error) {
+      setMessage(safeCommandErrorMessage(error, "删除未完成；事务会自动回滚。"));
     } finally {
       setIsApplying(false);
     }

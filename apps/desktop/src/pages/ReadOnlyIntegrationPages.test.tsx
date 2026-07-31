@@ -124,6 +124,7 @@ vi.mock("../app/data-api", () => ({
   canonicalBatchImportApply,
   previewAdopt,
   adoptApply,
+  safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 afterEach(() => {
@@ -683,6 +684,38 @@ describe("read-only UI integration", () => {
     expect(screen.queryByText(/permission denied/)).not.toBeInTheDocument();
     expect(screen.queryByText("设置已写入本地配置，并已从后端重新读取确认。")).not.toBeInTheDocument();
     expect(settingsLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps settings writes disabled before asset-center initialization", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+
+    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.3", platform: "windows", arch: "x86_64", backendReady: true }} />);
+
+    expect(await screen.findByText("资产中心尚未初始化。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成保存预览" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "预览导出" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "预览注册" })).toBeDisabled();
+    expect(screen.getByDisplayValue("0.1.1-beta.3")).toHaveAttribute("readonly");
+    expect(settingsPreview).not.toHaveBeenCalled();
+  });
+
+  it("marks deferred settings as non-editable instead of implying they are active", async () => {
+    render(<SettingsPage />);
+
+    expect((await screen.findAllByText(/安全策略固定开启/))).toHaveLength(2);
+    expect(screen.getByDisplayValue("跟随系统")).toBeDisabled();
+    expect(screen.getByDisplayValue("紧凑")).toBeDisabled();
+    expect(screen.getByDisplayValue("Info")).toBeDisabled();
+    expect(screen.getByDisplayValue("maa")).toHaveAttribute("readonly");
   });
 
   it("blocks Scan Import when the backend reports unresolved conflicts", async () => {

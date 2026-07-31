@@ -59,9 +59,11 @@ const staticResults: ScanRow[] = [
 export function ScanImportPage({
   demoMode = false,
   onOpenConflicts,
+  visualQaState,
 }: {
   demoMode?: boolean;
   onOpenConflicts?: (context: ConflictResolverContext) => void;
+  visualQaState?: string;
 }) {
   const [selectedScope, setSelectedScope] = useState<(typeof scopes)[number]["id"]>("user");
   const [scanResult, setScanResult] = useState<RuntimeDiscoveryResult | null>(null);
@@ -74,7 +76,11 @@ export function ScanImportPage({
   const [isApplying, setIsApplying] = useState(false);
   const [isAdopting, setIsAdopting] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
-  const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
+  const [initialization, setInitialization] = useState<InitializationPreview | null>(
+    demoMode && visualQaState === "uninitialized"
+      ? uninitializedVisualQaPreview()
+      : null,
+  );
   const [refreshKey, setRefreshKey] = useState(0);
   const [managedProjects, setManagedProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectPath, setSelectedProjectPath] = useState("");
@@ -108,7 +114,9 @@ export function ScanImportPage({
 
   useEffect(() => {
     if (demoMode) {
-      setInitialization(null);
+      setInitialization(
+        visualQaState === "uninitialized" ? uninitializedVisualQaPreview() : null,
+      );
       return undefined;
     }
     let cancelled = false;
@@ -133,7 +141,7 @@ export function ScanImportPage({
     return () => {
       cancelled = true;
     };
-  }, [demoMode, refreshKey]);
+  }, [demoMode, refreshKey, visualQaState]);
 
   const chooseCustomPath = async () => {
     const isDirectory = customSource.assetKind !== "mcp";
@@ -215,8 +223,8 @@ export function ScanImportPage({
   const adoptPlanSummary = adoptPreview
     ? [...adoptPreview.importPlan, ...adoptPreview.mountPlan, ...adoptPreview.backupPlan].join(" / ")
     : "";
-  const assetCenterReady = demoMode || initialization?.alreadyInitialized === true;
-  const initializationNotice = !demoMode && !assetCenterReady
+  const assetCenterReady = (demoMode && visualQaState !== "uninitialized") || initialization?.alreadyInitialized === true;
+  const initializationNotice = !assetCenterReady
     ? initialization?.warnings[0] ?? "资产中心状态检查中，写入计划暂不可用。"
     : null;
   const canGeneratePlan = assetCenterReady && Boolean(input) && sourceIds.length > 0 && !isPlanning;
@@ -404,6 +412,19 @@ export function ScanImportPage({
       </section>
     </div>
   );
+}
+
+function uninitializedVisualQaPreview(): InitializationPreview {
+  return {
+    previewId: "visual-qa-uninitialized",
+    assetCenterPath: "~/.my-agent-assets",
+    plannedPaths: [],
+    warnings: ["资产中心尚未初始化。请先前往首页完成初始化。"],
+    alreadyInitialized: false,
+    canApply: false,
+    generatedAtEpochSeconds: 0,
+    expiresAtEpochSeconds: 0,
+  };
 }
 
 function errorMessage(error: unknown) {

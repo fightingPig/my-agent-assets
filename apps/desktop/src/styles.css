@@ -2225,3 +2225,7 @@ button.project-item:hover {
   .project-browser .asset-toolbar > .asset-secondary-action { grid-area: refresh; }
   .project-browser .asset-toolbar > .asset-business-action { grid-area: add; }
 }
+.settings-initialization-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+}

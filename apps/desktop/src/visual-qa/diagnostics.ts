@@ -1,5 +1,5 @@
 import type { PageId } from "../app/pages";
-import type { VisualQaPlatform } from "./config";
+import type { VisualQaPlatform, VisualQaState } from "./config";
 
 export const OVERFLOW_TOLERANCE = 1;
 export const MIN_READABLE_FONT_SIZE = 12;
@@ -16,6 +16,7 @@ export type VisualQaPageReport = {
   pageTitle: string;
   viewport: { width: number; height: number };
   platform: VisualQaPlatform;
+  scenario: VisualQaState;
   overflow: OverflowResults;
   severeIssues: string[];
   warningIssues: string[];
@@ -27,6 +28,7 @@ export type VisualQaSummary = {
   chromePath: string;
   viteUrl: string;
   totalPages: number;
+  totalCases: number;
   totalScreenshots: number;
   severeCount: number;
   warningCount: number;
@@ -34,7 +36,7 @@ export type VisualQaSummary = {
 };
 
 export function createVisualQaSummary(
-  metadata: Pick<VisualQaSummary, "generatedAt" | "chromePath" | "viteUrl" | "totalPages">,
+  metadata: Pick<VisualQaSummary, "generatedAt" | "chromePath" | "viteUrl" | "totalPages" | "totalCases">,
   results: VisualQaPageReport[],
 ): VisualQaSummary {
   return {
@@ -159,6 +161,7 @@ export function collectVisualQaReport(input: {
   pageId: PageId;
   pageTitle: string;
   platform: VisualQaPlatform;
+  scenario?: VisualQaState;
   initialWarnings?: readonly string[];
 }): VisualQaPageReport {
   const root = document.getElementById("root");
@@ -189,6 +192,7 @@ export function collectVisualQaReport(input: {
     pageTitle: input.pageTitle,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     platform: input.platform,
+    scenario: input.scenario ?? "default",
     overflow,
     severeIssues: [...new Set(severeIssues)],
     warningIssues: [...new Set(warningIssues)],

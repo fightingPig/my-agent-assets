@@ -34,6 +34,7 @@ vi.mock("../app/data-api", () => ({
   canonicalMountApply,
   canonicalDeletePreview,
   canonicalDeleteApply,
+  safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 describe("MCP canonical management", () => {

@@ -5,6 +5,7 @@ import {
   backupDeletePreview,
   listBackups,
   revealBackupManifest,
+  safeCommandErrorMessage,
   settingsLoad,
 } from "../app/data-api";
 import type { BackupDeletePreview, BackupSummary } from "../app/contracts";
@@ -376,8 +377,8 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
   );
 }
 
-function errorMessage(_error: unknown) {
-  return "备份历史操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "备份历史操作未完成。请查看系统状态或导出诊断包后重试。");
 }
 
 function toBackupItem(backup: BackupSummary): BackupItem {

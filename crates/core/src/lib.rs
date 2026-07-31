@@ -10,6 +10,7 @@ pub mod delete;
 pub mod diagnostic_export;
 pub mod diagnostics;
 pub mod discovery;
+mod external_command;
 pub mod fingerprint;
 pub mod git_remote;
 pub mod git_sync;

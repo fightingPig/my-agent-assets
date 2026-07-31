@@ -23,6 +23,7 @@ vi.mock("../../app/data-api", () => ({
   targetRegistrationApply,
   targetRemovalPreview,
   targetRemovalApply,
+  safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 describe("TargetRegistryPanel", () => {

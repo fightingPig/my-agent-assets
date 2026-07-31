@@ -1,4 +1,5 @@
 use crate::asset_registry::{self, AssetRegistry};
+use crate::external_command::{git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT};
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::{self, MountRegistry};
 use crate::path_safety::is_link_or_junction;
@@ -10,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PREVIEW_TTL_SECONDS: u64 = 600;
@@ -284,11 +284,11 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
     mount_registry::load(home).map_err(|error| MaaError::new(error.to_string()))?;
     crate::project_registry::load(home)?;
     targets::load(home)?;
-    let output = Command::new("git")
+    let mut command = git_command();
+    command
         .args(["rev-parse", "--is-inside-work-tree"])
-        .current_dir(root)
-        .output()
-        .map_err(git_error)?;
+        .current_dir(root);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT).map_err(git_error)?;
     if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
         return Err(MaaError::new("asset center is not a valid Git repository"));
     }
@@ -296,11 +296,9 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
 }
 
 fn initialize_git(staging: &Path) -> Result<()> {
-    let output = Command::new("git")
-        .args(["init", "-b", "main"])
-        .current_dir(staging)
-        .output()
-        .map_err(git_error)?;
+    let mut command = git_command();
+    command.args(["init", "-b", "main"]).current_dir(staging);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT).map_err(git_error)?;
     if output.status.success() {
         Ok(())
     } else {
@@ -311,9 +309,9 @@ fn initialize_git(staging: &Path) -> Result<()> {
 }
 
 fn git_available() -> bool {
-    Command::new("git")
-        .arg("--version")
-        .output()
+    let mut command = git_command();
+    command.arg("--version");
+    output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .is_ok_and(|output| output.status.success())
 }
 

@@ -1,4 +1,5 @@
 use crate::audit_log::{append_operation, AuditOutcome};
+use crate::external_command::{git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT};
 use crate::mount::{copy_any, remove_path_if_present};
 use crate::path_safety::{guard_existing_path, guard_write_path, is_link_or_junction};
 use crate::targets::load as load_targets;
@@ -8,7 +9,6 @@ use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const JOURNAL_SCHEMA_VERSION: u32 = 2;
@@ -717,10 +717,9 @@ fn restore_git_ref(recovery: &GitRefRecovery) -> Result<()> {
 }
 
 fn git_output(repository: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .current_dir(repository)
-        .args(args)
-        .output()
+    let mut command = git_command();
+    command.current_dir(repository).args(args);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map_err(|error| MaaError::new(format!("cannot run Git recovery command: {error}")))?;
     if !output.status.success() {
         return Err(MaaError::new("Git recovery command failed"));

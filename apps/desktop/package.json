@@ -1,13 +1,14 @@
 {
   "name": "my-agent-assets-desktop",
   "private": true,
-  "version": "0.1.1-beta.2",
+  "version": "0.1.1-beta.3",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
     "dev:renderer": "vite",
     "build:renderer": "tsc -b && vite build",
+    "check:release-version": "node scripts/check-release-version.mjs",
     "qa:visual": "node scripts/visual-qa.mjs",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",

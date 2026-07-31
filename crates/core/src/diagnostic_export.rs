@@ -1,6 +1,7 @@
 use crate::audit_log::{list_log_files, read_audit_entries, AuditLogEntry};
 use crate::diagnostics::{doctor, DoctorCheckStatus, DoctorReport};
 use crate::fingerprint::PreviewFingerprint;
+use crate::initialization::ensure_initialized;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result};
@@ -94,6 +95,7 @@ struct SanitizedContentDiagnostic {
 }
 
 pub fn preview_diagnostic_export(home: &Path) -> Result<DiagnosticExportPreview> {
+    ensure_initialized(home)?;
     preview_diagnostic_export_at(home, epoch_seconds())
 }
 
@@ -138,6 +140,7 @@ pub fn apply_diagnostic_export(
     home: &Path,
     request: &DiagnosticExportApplyRequest,
 ) -> Result<DiagnosticExportApplyResult> {
+    ensure_initialized(home)?;
     let _lock = OperationLock::acquire(home)?;
     if epoch_seconds()
         > request
@@ -287,10 +290,23 @@ mod tests {
         ))
     }
 
+    fn initialize(home: &Path) {
+        fs::create_dir_all(home).unwrap();
+        let preview = crate::initialization::preview_initialization(home).unwrap();
+        crate::initialization::apply_initialization(
+            home,
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn export_is_preview_bound_and_contains_no_user_content_or_absolute_paths() {
         let home = home("safe");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        initialize(&home);
         crate::audit_log::append_operation(
             &home,
             "mcp_save",
@@ -318,7 +334,7 @@ mod tests {
     #[test]
     fn changed_logs_invalidate_preview_without_writing_package() {
         let home = home("stale");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        initialize(&home);
         let preview = preview_diagnostic_export(&home).unwrap();
         crate::audit_log::append_operation(
             &home,
@@ -348,5 +364,27 @@ mod tests {
         assert_ne!(first.preview_id, second.preview_id);
         assert_ne!(first.package_path, second.package_path);
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn public_preview_and_apply_reject_uninitialized_home_without_writing() {
+        let home = home("uninitialized");
+        fs::create_dir_all(&home).unwrap();
+
+        let preview_error = preview_diagnostic_export(&home).unwrap_err();
+        assert!(preview_error.to_string().contains("not initialized"));
+        assert!(!home.join(".my-agent-assets").exists());
+
+        let apply_error = apply_diagnostic_export(
+            &home,
+            &DiagnosticExportApplyRequest {
+                preview_id: "diagnostic-export-invalid".into(),
+                preview_generated_at_epoch_seconds: epoch_seconds(),
+            },
+        )
+        .unwrap_err();
+        assert!(apply_error.to_string().contains("not initialized"));
+        assert!(!home.join(".my-agent-assets").exists());
+        fs::remove_dir_all(home).unwrap();
     }
 }

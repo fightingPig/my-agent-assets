@@ -8,6 +8,7 @@ import {
   listAssets,
   listMountBindings,
   listMountTargets,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type {
   ApplyResult,
@@ -49,7 +50,7 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
         setBindings(loadedBindings);
         setSelectedAssetId((current) => current || loadedAssets[0]?.id || "");
       })
-      .catch(() => !cancelled && setError("挂载数据读取失败，请查看系统状态后重试。"));
+      .catch((error) => !cancelled && setError(safeCommandErrorMessage(error, "挂载数据读取失败，请查看系统状态后重试。")));
     return () => { cancelled = true; };
   }, [demoMode, refreshKey]);
 
@@ -75,9 +76,9 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
     setResult(null);
     try {
       setPreview(await canonicalMountPreview(previewInput));
-    } catch {
+    } catch (error) {
       setPreview(null);
-      setError("挂载预览生成失败，请检查资产和目标状态。");
+      setError(safeCommandErrorMessage(error, "挂载预览生成失败，请检查资产和目标状态。"));
     }
   };
 
@@ -93,8 +94,8 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
       setResult(toApplyResult(applied.mounted, applied.previewId, applied.affectedPaths, "挂载"));
       setPreview(null);
       setRefreshKey((value) => value + 1);
-    } catch {
-      setError("挂载执行失败，未完成的事务会在下次启动时自动回滚。");
+    } catch (error) {
+      setError(safeCommandErrorMessage(error, "挂载执行失败，未完成的事务会在下次启动时自动回滚。"));
     } finally {
       setIsApplying(false);
     }
@@ -109,9 +110,9 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
         assetId: binding.assetId,
         targetId: binding.targetId,
       }));
-    } catch {
+    } catch (error) {
       setUnmountPreview(null);
-      setError("解除挂载预览生成失败。");
+      setError(safeCommandErrorMessage(error, "解除挂载预览生成失败。"));
     }
   };
 
@@ -128,8 +129,8 @@ export function MountManagerPage({ demoMode = false }: { demoMode?: boolean }) {
       setUnmountPreview(null);
       setSelectedBinding(null);
       setRefreshKey((value) => value + 1);
-    } catch {
-      setError("解除挂载失败；运行时内容未被安全移除。");
+    } catch (error) {
+      setError(safeCommandErrorMessage(error, "解除挂载失败；运行时内容未被安全移除。"));
     } finally {
       setIsApplying(false);
     }

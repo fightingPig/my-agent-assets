@@ -46,6 +46,7 @@ vi.mock("../app/data-api", () => ({
   diagnosticExportApply,
   initializationPreview,
   initializationApply,
+  safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 describe("Dashboard recovery status", () => {
@@ -224,6 +225,22 @@ describe("Dashboard recovery status", () => {
     expect(screen.getAllByText("Repository ready.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("尚未维护项目").length).toBeGreaterThan(0);
     expect(screen.queryByText(/secret-value|\/tmp\/private/)).not.toBeInTheDocument();
+  });
+
+  it("blocks writes in the status model when recovery state cannot be read", async () => {
+    recoveryStatus.mockRejectedValue(new Error("private recovery path"));
+
+    render(<DashboardPage appInfo={{
+      name: "My Agent Assets",
+      version: "0.1.0",
+      platform: "macos",
+      arch: "aarch64",
+      backendReady: true,
+    }} />);
+
+    expect(await screen.findByText("写入已阻止")).toBeInTheDocument();
+    expect(screen.getByText(/无法确认事务恢复状态/)).toBeInTheDocument();
+    expect(screen.queryByText(/private recovery path/)).not.toBeInTheDocument();
   });
 
   it("requires preview and explicit confirmation before initialization apply", async () => {

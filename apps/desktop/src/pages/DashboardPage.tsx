@@ -22,6 +22,7 @@ import {
   listBackups,
   listProjects,
   recoveryStatus,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type {
   AppInfo,
@@ -48,6 +49,7 @@ type DashboardPageProps = {
   appInfo: AppInfo;
   demoMode?: boolean;
   onPageChange?: (page: PageId) => void;
+  visualQaState?: string;
 };
 
 type DashboardStat = {
@@ -81,12 +83,23 @@ const healthyRecoveryStatus: RecoveryStatus = {
   message: "没有未完成事务。",
 };
 
-export function DashboardPage({ appInfo, demoMode = false, onPageChange }: DashboardPageProps) {
+const unknownRecoveryStatus: RecoveryStatus = {
+  writesBlocked: true,
+  journals: [],
+  recentRecoveries: [],
+  message: "无法确认事务恢复状态；为安全起见请暂停写入并查看诊断。",
+};
+
+export function DashboardPage({ appInfo, demoMode = false, onPageChange, visualQaState }: DashboardPageProps) {
   const [assets, setAssets] = useState<readonly AssetSummary[]>([]);
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
   const [backupCount, setBackupCount] = useState(0);
   const [repository, setRepository] = useState<GitStatus>(emptyGitStatus);
-  const [recovery, setRecovery] = useState<RecoveryStatus>(healthyRecoveryStatus);
+  const [recovery, setRecovery] = useState<RecoveryStatus>(
+    demoMode && visualQaState !== "recovery-error"
+      ? healthyRecoveryStatus
+      : unknownRecoveryStatus,
+  );
   const [auditEntries, setAuditEntries] = useState<readonly AuditLogEntry[]>([]);
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
   const [repairPreview, setRepairPreview] = useState<ConsistencyRepairPreview | null>(null);
@@ -123,7 +136,7 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange }: Dashb
         setProjects(settledValue(loadedProjects, []));
         setBackupCount(settledValue(loadedBackups, []).length);
         setRepository(settledValue(loadedRepository, emptyGitStatus));
-        setRecovery(settledValue(loadedRecovery, healthyRecoveryStatus));
+        setRecovery(settledValue(loadedRecovery, unknownRecoveryStatus));
         setAuditEntries(settledValue(loadedAuditEntries, []));
         setInitialization(settledValue(loadedInitialization, null));
         setDoctor(settledValue(loadedDoctor, null));
@@ -529,6 +542,9 @@ function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" && result.value != null ? result.value : fallback;
 }
 
-function errorMessage(_error: unknown) {
-  return "本地概览操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(
+    error,
+    "本地概览操作未完成。请查看系统状态或导出诊断包后重试。",
+  );
 }

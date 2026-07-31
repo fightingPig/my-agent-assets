@@ -30,16 +30,27 @@ const projectTone = { "正常": "success", "需检查": "warning", "未检查": 
 type ProjectsListPageProps = {
   demoMode?: boolean;
   onOpenProjectDetail?: (detail: ProjectDetailContext) => void;
+  visualQaState?: string;
 };
 
-export function ProjectsListPage({ demoMode = false, onOpenProjectDetail }: ProjectsListPageProps = {}) {
+const demoProjectEditor: ProjectSaveRequest = {
+  id: staticProjects[0].id,
+  name: staticProjects[0].name,
+  title: staticProjects[0].title,
+  path: staticProjects[0].path,
+  description: staticProjects[0].description,
+};
+
+export function ProjectsListPage({ demoMode = false, onOpenProjectDetail, visualQaState }: ProjectsListPageProps = {}) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [projects, setProjects] = useState<readonly StaticProject[]>(demoMode ? staticProjects : []);
   const [stateLabel, setStateLabel] = useState("读取中");
   const [selectedId, setSelectedId] = useState(demoMode ? staticProjects[0].id : "");
   const [refreshKey, setRefreshKey] = useState(0);
-  const [editor, setEditor] = useState<ProjectSaveRequest | null>(null);
+  const [editor, setEditor] = useState<ProjectSaveRequest | null>(
+    demoMode && visualQaState === "project-editor" ? demoProjectEditor : null,
+  );
   const [savePreview, setSavePreview] = useState<ProjectChangePreview | null>(null);
   const [removePreview, setRemovePreview] = useState<ProjectChangePreview | null>(null);
   const [isApplying, setIsApplying] = useState(false);

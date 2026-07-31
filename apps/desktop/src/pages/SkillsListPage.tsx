@@ -1,6 +1,6 @@
 import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { canonicalAssetContent, listAssets } from "../app/data-api";
+import { canonicalAssetContent, listAssets, safeCommandErrorMessage } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import {
@@ -197,6 +197,6 @@ function previewText(content: string, truncated: boolean) {
   return truncated ? `${content}\n\n[预览已截断]` : content;
 }
 
-function errorMessage(_error: unknown) {
-  return "本地 Skill 操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "本地 Skill 操作未完成。请查看系统状态或导出诊断包后重试。");
 }
