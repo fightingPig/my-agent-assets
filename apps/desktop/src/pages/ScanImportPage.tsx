@@ -5,14 +5,17 @@ import {
   canonicalBatchImportApply,
   canonicalBatchImportPreview,
   discoverRuntimeSources,
+  initializationPreview,
   listProjects,
   adoptApply,
   previewAdopt,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type {
   ApplyResult,
   AdoptPreview,
   BatchImportPreview,
+  InitializationPreview,
   DiscoveredRuntimeSource,
   RuntimeDiscoveryResult,
   RuntimeDiscoveryScope,
@@ -71,6 +74,7 @@ export function ScanImportPage({
   const [isApplying, setIsApplying] = useState(false);
   const [isAdopting, setIsAdopting] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
+  const [initialization, setInitialization] = useState<InitializationPreview | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [managedProjects, setManagedProjects] = useState<ProjectSummary[]>([]);
   const [selectedProjectPath, setSelectedProjectPath] = useState("");
@@ -101,6 +105,35 @@ export function ScanImportPage({
       cancelled = true;
     };
   }, [demoMode]);
+
+  useEffect(() => {
+    if (demoMode) {
+      setInitialization(null);
+      return undefined;
+    }
+    let cancelled = false;
+    initializationPreview()
+      .then((preview) => {
+        if (!cancelled) setInitialization(preview);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setInitialization({
+            previewId: "initialization-error",
+            assetCenterPath: "~/.my-agent-assets",
+            plannedPaths: [],
+            warnings: [safeCommandErrorMessage(error, "无法确认资产中心状态，请先在首页检查初始化。")],
+            alreadyInitialized: false,
+            canApply: false,
+            generatedAtEpochSeconds: 0,
+            expiresAtEpochSeconds: 0,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode, refreshKey]);
 
   const chooseCustomPath = async () => {
     const isDirectory = customSource.assetKind !== "mcp";
@@ -182,9 +215,13 @@ export function ScanImportPage({
   const adoptPlanSummary = adoptPreview
     ? [...adoptPreview.importPlan, ...adoptPreview.mountPlan, ...adoptPreview.backupPlan].join(" / ")
     : "";
-  const canGeneratePlan = Boolean(input) && sourceIds.length > 0 && !isPlanning;
-  const canApply = Boolean(importPreview?.canApply && importPreview.previewId && !hasConflicts);
-  const canAdopt = Boolean(adoptPreview?.canApply && adoptPreview.previewId);
+  const assetCenterReady = demoMode || initialization?.alreadyInitialized === true;
+  const initializationNotice = !demoMode && !assetCenterReady
+    ? initialization?.warnings[0] ?? "资产中心状态检查中，写入计划暂不可用。"
+    : null;
+  const canGeneratePlan = assetCenterReady && Boolean(input) && sourceIds.length > 0 && !isPlanning;
+  const canApply = assetCenterReady && Boolean(importPreview?.canApply && importPreview.previewId && !hasConflicts);
+  const canAdopt = assetCenterReady && Boolean(adoptPreview?.canApply && adoptPreview.previewId);
 
   const handleSourceSelection = (sourceId: string, selected: boolean) => {
     setSelectedSourceIds((current) => selected
@@ -335,7 +372,7 @@ export function ScanImportPage({
       <section className="panel operation-section">
         <div className="section-heading"><div><h3>导入预览</h3><p>当前范围：{scopes.find((scope) => scope.id === selectedScope)?.title}{selectedScope === "project" && selectedProjectPath ? ` · ${selectedProjectPath === "__all__" ? "全部已维护项目" : selectedProjectPath}` : ""}</p></div><span>{sourceIds.length} / {eligibleSourceIds.length} 项已选择</span></div>
         <div className="preview-table" role="table" aria-label="导入预览表"><div className="preview-table-head" role="row"><span>资产</span><span>类型</span><span>来源</span><span>结果</span></div>{rows.map((result) => <div className="preview-table-row" role="row" key={result.sourceId ?? `${result.type}:${result.name}`}><label className="scan-source-select"><input aria-label={`选择 ${result.name}`} checked={result.sourceId ? sourceIds.includes(result.sourceId) : true} data-no-drag="true" disabled={!result.sourceId || !result.eligibleImport} onChange={(event) => result.sourceId && handleSourceSelection(result.sourceId, event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><strong>{result.name}</strong></label><span>{result.type}</span><span>{result.source}</span><span className={result.result === "冲突" || result.result === "无效" ? "warning-text" : "success-text"}>{result.result}</span></div>)}{rows.length === 0 && <div className="asset-empty-state"><ScanSearch size={20} /><strong>未发现可导入资产</strong><span>调整扫描范围或检查本地 Claude 目录。</span></div>}</div>
-        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? adoptWarning ?? warning ?? "只读扫描预览"}</strong><span>{hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary || adoptPlanSummary || (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
+        <div className="operation-warning"><AlertTriangle size={17} /><div><strong>{initializationNotice ?? (hasConflicts ? `发现 ${conflictCount} 项内容冲突` : previewWarning ?? adoptWarning ?? warning ?? "只读扫描预览")}</strong><span>{initializationNotice ? "请先在首页完成资产中心初始化；当前仍可查看只读扫描结果。" : hasConflicts ? "请逐项选择跳过、重命名或覆盖；扫描导入不会直接覆盖现有资产。" : planSummary || adoptPlanSummary || (scanResult?.sources.length ? "当前仅展示发现结果，生成计划后才能确认导入。" : "当前扫描没有发现真实资产，确认导入保持禁用。")}</span></div></div>
         <div className="operation-actions">{hasConflicts ? <button className="asset-secondary-action" data-no-drag="true" onClick={handleOpenConflicts} style={NO_DRAG_REGION_STYLE} type="button">处理冲突</button> : null}<button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanImport} style={NO_DRAG_REGION_STYLE} type="button">{isPlanning ? "生成中" : "生成导入计划"}</button><button className="asset-secondary-action" data-no-drag="true" disabled={!canGeneratePlan} onClick={handlePlanAdopt} style={NO_DRAG_REGION_STYLE} type="button">生成接管计划</button></div>
         <ApplyConfirmationPanel
           actionLabel="确认导入"
@@ -369,8 +406,8 @@ export function ScanImportPage({
   );
 }
 
-function errorMessage(_error: unknown) {
-  return "导入操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "导入操作未完成。请查看首页系统状态后重试。");
 }
 
 function toScanScope(

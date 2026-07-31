@@ -5,6 +5,7 @@ use crate::import::{
     apply_import_locked, find_source, preview_import_at, ImportApplyRequest, ImportApplyStatus,
     ImportPreview, ImportPreviewRequest, ImportResolution,
 };
+use crate::initialization::ensure_initialized;
 use crate::mount::{
     apply_mount_locked, discard_runtime_snapshot, preview_mount_at, restore_runtime_snapshot,
     snapshot_runtime_path, target_asset_path, MountApplyRequest, MountApplyResult,
@@ -94,6 +95,7 @@ pub struct AdoptApplyResult {
 }
 
 pub fn preview_adopt(home: &Path, request: &AdoptPreviewRequest) -> Result<AdoptPreview> {
+    ensure_initialized(home)?;
     preview_adopt_at(home, request, epoch_seconds())
 }
 
@@ -237,6 +239,7 @@ fn preview_adopt_at(
 }
 
 pub fn apply_adopt(home: &Path, request: &AdoptApplyRequest) -> Result<AdoptApplyResult> {
+    ensure_initialized(home)?;
     apply_adopt_inner(home, request, None)
 }
 
@@ -506,17 +509,45 @@ mod tests {
     #[cfg(unix)]
     use super::*;
     #[cfg(unix)]
-    use crate::asset_registry::{load as load_assets, save as save_assets, AssetRegistry};
+    use crate::asset_registry::load as load_assets;
     #[cfg(unix)]
-    use crate::mount_registry::{load as load_mounts, save as save_mounts, MountRegistry};
+    use crate::mount_registry::load as load_mounts;
     #[cfg(unix)]
     use crate::operation::{crash_test, recover_incomplete};
     #[cfg(unix)]
-    use crate::targets::{save as save_targets, MountAdapter, ProviderState, TargetRegistry};
     #[cfg(unix)]
     use serde_json::Value as JsonValue;
     #[cfg(unix)]
     use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[cfg(unix)]
+    #[test]
+    fn adopt_rejects_uninitialized_home_before_creating_write_state() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-adopt-uninitialized-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let request = AdoptPreviewRequest {
+            scope: DiscoveryScope::User,
+            selections: Vec::new(),
+        };
+
+        assert!(preview_adopt(&home, &request).is_err());
+        assert!(apply_adopt(
+            &home,
+            &AdoptApplyRequest {
+                preview_id: "invalid".into(),
+                preview_generated_at_epoch_seconds: epoch_seconds(),
+                request,
+            },
+        )
+        .is_err());
+        assert!(!home.join(".my-agent-assets").exists());
+        let _ = fs::remove_dir_all(home);
+    }
 
     #[cfg(unix)]
     #[test]
@@ -688,29 +719,15 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let root = home.join(".my-agent-assets");
-        for path in [
-            root.join("assets/skills"),
-            root.join("assets/commands"),
-            root.join("assets/mcps"),
-            root.join("backups/portable"),
-            root.join("backups/local"),
-            home.join(".claude"),
-            home.join(".codex"),
-        ] {
-            fs::create_dir_all(path).unwrap();
-        }
-        save_assets(&home, &AssetRegistry::default()).unwrap();
-        save_mounts(&home, &MountRegistry::default()).unwrap();
-        save_targets(
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        let preview = crate::initialization::preview_initialization(&home).unwrap();
+        crate::initialization::apply_initialization(
             &home,
-            &TargetRegistry::standard_user_targets(
-                &home,
-                ProviderState::Initialized,
-                ProviderState::Initialized,
-                MountAdapter::SymlinkDirectory,
-            )
-            .unwrap(),
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
         )
         .unwrap();
         home

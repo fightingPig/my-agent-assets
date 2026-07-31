@@ -678,5 +678,9 @@ describe("read-only desktop data api", () => {
     await expect(api.listAssets()).rejects.toThrow("command unavailable");
     await expect(api.gitStatus()).rejects.toThrow("command unavailable");
     await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("command unavailable");
+    await expect(api.canonicalBatchImportPreview({
+      scope: { kind: "user" },
+      selections: [],
+    })).rejects.toThrow("command unavailable");
   });
 });

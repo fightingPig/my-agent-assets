@@ -292,10 +292,18 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
+        fs::create_dir_all(&home).unwrap();
+        let preview = crate::initialization::preview_initialization(&home).unwrap();
+        crate::initialization::apply_initialization(
+            &home,
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
         let root = home.join(".my-agent-assets");
         fs::create_dir_all(root.join("assets/skills/review")).unwrap();
-        fs::create_dir_all(root.join("assets/commands")).unwrap();
-        fs::create_dir_all(root.join("assets/mcps")).unwrap();
         fs::write(root.join("assets/skills/review/SKILL.md"), "# Review").unwrap();
         let mut assets = AssetRegistry::default();
         assets

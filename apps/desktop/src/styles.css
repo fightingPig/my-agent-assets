@@ -594,6 +594,22 @@ h1 {
 .diff-placeholder code,
 .mcp-editor-preview pre { font-size: 13px; line-height: 1.7; }
 
+.initialization-inline-warning {
+  margin: 0 14px 10px;
+  padding: 10px 12px;
+  border: 1px solid #f4d6a2;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #8a5a00;
+  background: var(--amber-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.initialization-inline-warning strong { color: var(--text); font-size: 14px; }
+
 .app-main,
 .panel {
   font-size: 15px;
@@ -2171,3 +2187,41 @@ button.project-item:hover {
 .side-by-side-diff pre,
 .diff-placeholder code,
 .mcp-editor-preview pre { font-size: 13px; line-height: 1.7; }
+
+/* Project management layout overrides must remain after legacy page rules so
+   the management form stays a full-width, scrollable row at runtime. */
+.project-browser .asset-toolbar {
+  grid-template-columns: minmax(0, 1fr) 132px auto auto;
+}
+
+.project-center-layout.has-management-panel {
+  height: auto;
+  min-height: 0;
+  align-content: start;
+}
+
+.project-center-layout.has-management-panel > .project-browser,
+.project-center-layout.has-management-panel > .project-inspector {
+  height: min(650px, calc(100vh - var(--overlay-height) - 156px));
+  min-height: 520px;
+}
+
+.project-management-panel {
+  scroll-margin-top: 16px;
+}
+
+@media (max-width: 1250px) {
+  .project-browser .asset-toolbar {
+    min-height: 112px;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    grid-template-areas:
+      "search filter"
+      "refresh add";
+    grid-auto-rows: 40px;
+  }
+
+  .project-browser .asset-search-field { grid-area: search; }
+  .project-browser .asset-filter-field { grid-area: filter; }
+  .project-browser .asset-toolbar > .asset-secondary-action { grid-area: refresh; }
+  .project-browser .asset-toolbar > .asset-business-action { grid-area: add; }
+}

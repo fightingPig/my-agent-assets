@@ -51,6 +51,7 @@ const {
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
+  initializationPreview,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
   previewAdopt,
@@ -83,6 +84,7 @@ const {
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
   discoverRuntimeSources: vi.fn(),
+  initializationPreview: vi.fn(),
   canonicalBatchImportPreview: vi.fn(),
   canonicalBatchImportApply: vi.fn(),
   previewAdopt: vi.fn(),
@@ -117,6 +119,7 @@ vi.mock("../app/data-api", () => ({
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
+  initializationPreview,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
   previewAdopt,
@@ -130,6 +133,16 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(open).mockResolvedValue(null);
+  initializationPreview.mockResolvedValue({
+    previewId: "initialization:test",
+    assetCenterPath: "/tmp/home/.my-agent-assets",
+    plannedPaths: [],
+    warnings: [],
+    alreadyInitialized: true,
+    canApply: false,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  });
   listAssets.mockResolvedValue([assetFixture("skill:review", "review", "skill")]);
   canonicalAssetContent.mockImplementation(async (assetId: string) => ({
     assetId,
@@ -414,6 +427,27 @@ describe("read-only UI integration", () => {
     expect(screen.queryByRole("button", { name: "管理挂载" })).not.toBeInTheDocument();
   });
 
+  it("blocks project write controls until the asset center is initialized", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+    listProjects.mockResolvedValue([projectFixture()]);
+
+    render(<ProjectsListPage />);
+
+    expect(await screen.findByText("资产中心尚未初始化")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加项目" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新当前" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑管理信息" })).toBeDisabled();
+  });
+
   it("shows an empty state instead of static projects when listProjects is empty", async () => {
     listProjects.mockResolvedValue([]);
 
@@ -426,10 +460,11 @@ describe("read-only UI integration", () => {
 
   it("previews and saves an explicit existing project without touching its directory", async () => {
     vi.mocked(open).mockResolvedValue("/tmp/local-app");
-    render(<ProjectsListPage />);
+    const { container } = render(<ProjectsListPage />);
     await screen.findByRole("option", { name: "project-a" });
     fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
     await screen.findByRole("heading", { name: "添加已有项目" });
+    expect(container.querySelector(".project-center-layout")).toHaveClass("has-management-panel");
     fireEvent.change(screen.getByLabelText("显示名称"), { target: { value: "local-app" } });
     fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
     await waitFor(() => expect(projectSavePreview).toHaveBeenCalledWith(expect.objectContaining({ name: "local-app", path: "/tmp/local-app" })));
@@ -732,6 +767,28 @@ describe("read-only UI integration", () => {
     }));
     expect(await screen.findByText(/skill:live-scan：新增/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled();
+  });
+
+  it("keeps scan discovery read-only when the asset center is not initialized", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:read-only", "read-only"));
+
+    render(<ScanImportPage />);
+
+    expect(await screen.findByText("read-only")).toBeInTheDocument();
+    expect(screen.getByText("资产中心尚未初始化。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成导入计划" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "生成接管计划" })).toBeDisabled();
+    expect(canonicalBatchImportPreview).not.toHaveBeenCalled();
   });
 
   it("sends only explicitly selected scan sources to import and adopt previews", async () => {

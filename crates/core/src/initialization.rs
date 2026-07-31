@@ -65,6 +65,14 @@ pub fn preview_initialization(home: &Path) -> Result<InitializationPreview> {
     preview_initialization_at(home, epoch_seconds())
 }
 
+/// Verifies that the asset center is complete before any operation can create
+/// locks, journals, registries, or other write-side state.
+pub fn ensure_initialized(home: &Path) -> Result<()> {
+    let root = home.join(ROOT_NAME);
+    validate_existing(home, &root)
+        .map_err(|_| MaaError::new("asset center is not initialized; run initialization first"))
+}
+
 fn preview_initialization_at(
     home: &Path,
     generated_at_epoch_seconds: u64,
@@ -487,6 +495,28 @@ mod tests {
             0,
             "first-start checks must not write into HOME"
         );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn ensure_initialized_rejects_partial_asset_center_without_writing() {
+        let home = home("partial");
+        let root = home.join(ROOT_NAME);
+        fs::create_dir_all(root.join("locks")).unwrap();
+        let before = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+
+        let error = ensure_initialized(&home).unwrap_err();
+
+        assert!(error.to_string().contains("not initialized"));
+        let after = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(before, after);
+        assert!(!root.join("assets.yaml").exists());
         let _ = fs::remove_dir_all(home);
     }
 

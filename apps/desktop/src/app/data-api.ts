@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/platform";
+import { DESKTOP_COMMAND_ERROR_CODES } from "./contracts";
 import type {
   AssetSummary,
   BackupSummary,
@@ -867,18 +868,22 @@ export async function gitRemoteApply(
   return invoke<GitRemoteApplyResult>("git_remote_apply", { input });
 }
 
+export function safeCommandErrorMessage(error: unknown, fallback: string): string {
+  if (!isRecord(error) || typeof error.code !== "string" || typeof error.message !== "string") {
+    return fallback;
+  }
+  return DESKTOP_COMMAND_ERROR_CODES.includes(error.code as typeof DESKTOP_COMMAND_ERROR_CODES[number])
+    ? error.message
+    : fallback;
+}
+
 async function invokeOrFallback<T>(
   command: string,
   args: Record<string, unknown> | undefined,
   fallback: T,
 ): Promise<T> {
   if (!isTauriRuntime()) return fallback;
-
-  try {
-    return args === undefined ? await invoke<T>(command) : await invoke<T>(command, args);
-  } catch {
-    return fallback;
-  }
+  return args === undefined ? invoke<T>(command) : invoke<T>(command, args);
 }
 
 async function invokeRead<T>(

@@ -1,5 +1,6 @@
 use crate::discovery::{discover, DiscoveryScope};
 use crate::fingerprint::PreviewFingerprint;
+use crate::initialization::ensure_initialized;
 use crate::mount_registry::load as load_mounts;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::is_link_or_junction;
@@ -227,6 +228,7 @@ pub fn preview_save_project(
     home: &Path,
     request: &ProjectSaveRequest,
 ) -> Result<ProjectChangePreview> {
+    ensure_initialized(home)?;
     preview_save_project_at(home, request, epoch_seconds())
 }
 
@@ -234,6 +236,7 @@ pub fn preview_remove_project(
     home: &Path,
     request: &ProjectRemoveRequest,
 ) -> Result<ProjectChangePreview> {
+    ensure_initialized(home)?;
     preview_remove_project_at(home, request, epoch_seconds())
 }
 
@@ -241,6 +244,7 @@ pub fn apply_save_project(
     home: &Path,
     request: &ProjectSaveApplyRequest,
 ) -> Result<ProjectChangeResult> {
+    ensure_initialized(home)?;
     validate_preview_time(request.preview_generated_at_epoch_seconds)?;
     let _lock = OperationLock::acquire(home)?;
     let preview = preview_save_project_at(
@@ -289,6 +293,7 @@ pub fn apply_remove_project(
     home: &Path,
     request: &ProjectRemoveApplyRequest,
 ) -> Result<ProjectChangeResult> {
+    ensure_initialized(home)?;
     validate_preview_time(request.preview_generated_at_epoch_seconds)?;
     let _lock = OperationLock::acquire(home)?;
     let preview = preview_remove_project_at(
@@ -323,6 +328,7 @@ pub fn refresh_projects(
     home: &Path,
     request: &ProjectRefreshRequest,
 ) -> Result<ProjectRefreshResult> {
+    ensure_initialized(home)?;
     let _lock = OperationLock::acquire(home)?;
     let mut registry = load(home)?;
     let selected = if request.project_ids.is_empty() {
@@ -915,6 +921,30 @@ mod tests {
             path,
             description: "managed locally".into(),
         }
+    }
+
+    #[test]
+    fn project_writes_reject_uninitialized_home_before_creating_lock_state() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-project-registry-uninitialized-{}",
+            epoch_nanos()
+        ));
+        fs::create_dir_all(home.join("workspace/project-a")).unwrap();
+        let request = save_request(home.join("workspace/project-a"));
+
+        assert!(preview_save_project(&home, &request).is_err());
+        assert!(apply_save_project(
+            &home,
+            &ProjectSaveApplyRequest {
+                preview_id: "invalid".into(),
+                preview_generated_at_epoch_seconds: epoch_seconds(),
+                request: request.clone(),
+            },
+        )
+        .is_err());
+        assert!(refresh_projects(&home, &ProjectRefreshRequest::default()).is_err());
+        assert!(!home.join(".my-agent-assets").exists());
+        let _ = fs::remove_dir_all(home);
     }
 
     #[test]
