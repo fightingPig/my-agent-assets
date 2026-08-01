@@ -32,7 +32,7 @@ impl TempHome {
     }
 
     fn config_path(&self) -> PathBuf {
-        self.path.join(".my-agent-assets/config.yaml")
+        self.path.join(".my-agent-assets-data/config.yaml")
     }
 
     fn initialize(&self) {
@@ -113,7 +113,7 @@ fn settings_load_missing_config_returns_defaults_without_creating_files() {
 
     assert_eq!(
         settings.asset_center_path,
-        home.path().join(".my-agent-assets").to_string_lossy()
+        home.path().join(".my-agent-assets-data").to_string_lossy()
     );
     assert_eq!(settings.max_depth, 5);
     assert!(!home.config_path().exists());
@@ -129,7 +129,7 @@ fn settings_save_writes_config_and_settings_load_reads_it_back() {
 
     let expected_asset_center = home
         .path()
-        .join(".my-agent-assets")
+        .join(".my-agent-assets-data")
         .to_string_lossy()
         .into_owned();
     assert_eq!(saved.asset_center_path, expected_asset_center);
@@ -157,7 +157,7 @@ fn settings_save_normalizes_empty_and_out_of_range_values() {
 
     assert_eq!(
         saved.asset_center_path,
-        home.path().join(".my-agent-assets").to_string_lossy()
+        home.path().join(".my-agent-assets-data").to_string_lossy()
     );
     assert_eq!(saved.scan_roots.len(), 3);
     assert_eq!(saved.max_depth, 1);
@@ -186,7 +186,7 @@ fn settings_load_invalid_config_returns_error_without_overwriting() {
 fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
     let home = TempHome::new("symlink-escape");
     let outside = TempHome::new("symlink-outside");
-    let link = home.path().join(".my-agent-assets");
+    let link = home.path().join(".my-agent-assets-data");
     create_test_directory_symlink(outside.path(), &link);
 
     let result = settings_preview_for_home(
@@ -211,7 +211,7 @@ fn settings_save_ignores_inactive_asset_center_path_setting() {
 
     assert_eq!(
         saved.asset_center_path,
-        home.path().join(".my-agent-assets").to_string_lossy()
+        home.path().join(".my-agent-assets-data").to_string_lossy()
     );
     assert!(!home.path().join("ignored").exists());
 }
@@ -267,7 +267,7 @@ fn settings_preview_rejects_uninitialized_home_without_creating_asset_center() {
     .expect_err("uninitialized settings preview must fail");
 
     assert!(error.contains("not initialized"));
-    assert!(!home.path().join(".my-agent-assets").exists());
+    assert!(!home.path().join(".my-agent-assets-data").exists());
 }
 
 #[cfg(unix)]

@@ -9,7 +9,7 @@ The canonical asset center stores one copy of each compatible asset:
 - Commands imported from Claude-compatible Markdown sources
 - MCP servers imported from Claude JSON or Codex TOML
 
-The default asset center is `~/.my-agent-assets`, but tests and examples should
+The default asset center is `~/.my-agent-assets-data`, but tests and examples should
 use `--home <fake-home>` or `MY_AGENT_ASSETS_HOME` to avoid touching real data.
 
 ## Quick Commands

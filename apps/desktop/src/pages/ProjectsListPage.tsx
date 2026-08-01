@@ -20,6 +20,7 @@ import type {
   ProjectSummary,
 } from "../app/contracts";
 import type { ProjectDetailContext } from "../app/detail-context";
+import { DEFAULT_ASSET_CENTER_PATH } from "../app/defaults";
 import { InspectorFields, InspectorSection, InspectorTags } from "../components/assets/AssetCenterLayout";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
@@ -102,7 +103,7 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail, visual
         if (!cancelled) {
           setInitialization({
             previewId: "initialization-error",
-            assetCenterPath: "~/.my-agent-assets",
+            assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
             plannedPaths: [],
             warnings: [safeCommandErrorMessage(error, "无法确认资产中心状态，请先在首页检查初始化。")],
             alreadyInitialized: false,

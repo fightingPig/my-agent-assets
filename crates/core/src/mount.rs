@@ -951,7 +951,7 @@ pub(crate) fn discard_runtime_snapshot(snapshot: RuntimeSnapshot) -> Result<()> 
 }
 
 fn create_local_backup(home: &Path, target: &Path, mounts: &[u8]) -> Result<String> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let backup_id = format!("mount-{}", operation_id());
     let backup = guard_write_path(&root, &root.join("backups/local").join(&backup_id))?;
     fs::create_dir_all(&backup)?;
@@ -1421,7 +1421,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         for path in [
             root.join("assets/skills"),
             root.join("assets/commands"),

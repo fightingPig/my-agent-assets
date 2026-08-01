@@ -189,11 +189,11 @@ impl ProjectRegistry {
 }
 
 pub fn registry_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets/projects.yaml")
+    crate::asset_center_path(&home).join("projects.yaml")
 }
 
 fn gitignore_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets/.gitignore")
+    crate::asset_center_path(&home).join(".gitignore")
 }
 
 pub fn load(home: &Path) -> Result<ProjectRegistry> {
@@ -943,7 +943,7 @@ mod tests {
         )
         .is_err());
         assert!(refresh_projects(&home, &ProjectRefreshRequest::default()).is_err());
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 
@@ -1097,9 +1097,9 @@ mod tests {
             )
             .unwrap();
         crate::asset_registry::save(&home, &assets).unwrap();
-        fs::create_dir_all(home.join(".my-agent-assets/assets/skills/review")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/skills/review")).unwrap();
         fs::write(
-            home.join(".my-agent-assets/assets/skills/review/SKILL.md"),
+            crate::asset_center_path(&home).join("assets/skills/review/SKILL.md"),
             "# Review",
         )
         .unwrap();

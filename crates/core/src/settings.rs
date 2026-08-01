@@ -523,7 +523,7 @@ fn non_empty_or_default(value: String, default: String) -> String {
 }
 
 fn asset_center_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets")
+    crate::asset_center_path(home)
 }
 
 fn expand_tilde(value: &str, home: &Path) -> PathBuf {
@@ -681,7 +681,7 @@ mod tests {
 
         assert_eq!(
             saved.asset_center_path,
-            display_path(&home.join(".my-agent-assets"))
+            display_path(&crate::asset_center_path(&home))
         );
         assert_eq!(saved.max_depth, 20);
         assert_eq!(
@@ -767,7 +767,7 @@ mod tests {
         let home = fake_home("symlink");
         let real = home.join("real-center");
         fs::create_dir_all(&real).unwrap();
-        symlink(&real, home.join(".my-agent-assets")).unwrap();
+        symlink(&real, crate::asset_center_path(&home)).unwrap();
 
         let error = save(&home, &Settings::defaults_for_home(&home)).unwrap_err();
 
@@ -779,7 +779,7 @@ mod tests {
     #[test]
     fn transactional_save_recovers_when_process_crashes_after_persisted_step() {
         let home = fake_home("crash-recovery");
-        fs::create_dir_all(home.join(".my-agent-assets/backups/local")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("backups/local")).unwrap();
         let mut original = Settings::defaults_for_home(&home);
         original.max_depth = 3;
         save(&home, &original).unwrap();
@@ -907,7 +907,7 @@ mod tests {
 
         let preview_error = preview_settings(&home, &request).unwrap_err();
         assert!(preview_error.to_string().contains("not initialized"));
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
 
         let apply_error = apply_settings(
             &home,
@@ -919,7 +919,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(apply_error.to_string().contains("not initialized"));
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         fs::remove_dir_all(home).unwrap();
     }
 }

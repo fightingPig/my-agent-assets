@@ -21,7 +21,7 @@ Claude Code and Codex are not separate asset centers. They are runtime providers
 The fixed canonical asset center is:
 
 ```text
-~/.my-agent-assets
+~/.my-agent-assets-data
 ```
 
 It is the single source of truth for managed assets.
@@ -31,9 +31,9 @@ It is the single source of truth for managed assets.
 Each managed asset has one canonical copy:
 
 ```text
-~/.my-agent-assets/assets/skills/<name>/
-~/.my-agent-assets/assets/commands/<name>.md
-~/.my-agent-assets/assets/mcps/<name>.json
+~/.my-agent-assets-data/assets/skills/<name>/
+~/.my-agent-assets-data/assets/commands/<name>.md
+~/.my-agent-assets-data/assets/mcps/<name>.json
 ```
 
 Asset identity is:
@@ -113,7 +113,7 @@ Commands are never mounted to Codex targets.
 MCP assets use a file-based canonical model:
 
 ```text
-~/.my-agent-assets/assets/mcps/<name>.json
+~/.my-agent-assets-data/assets/mcps/<name>.json
 ```
 
 There is no SQLite database, MCP table, DAO layer, or database cache.

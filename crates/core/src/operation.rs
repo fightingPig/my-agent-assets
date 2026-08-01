@@ -20,7 +20,7 @@ pub struct OperationLock {
 
 impl OperationLock {
     pub fn acquire(home: &Path) -> Result<Self> {
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         let metadata = fs::symlink_metadata(&root).map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 MaaError::new("asset center is not initialized; run initialization first")
@@ -41,7 +41,7 @@ impl OperationLock {
     }
 
     fn acquire_internal(home: &Path, allow_incomplete: bool) -> Result<Self> {
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         let lock_dir = guard_write_path(&root, &root.join("locks"))?;
         fs::create_dir_all(&lock_dir)?;
         let path = guard_write_path(&root, &lock_dir.join("global.lock"))?;
@@ -259,7 +259,7 @@ impl OperationJournal {
         recovery: Option<RecoveryPayload>,
     ) -> Result<Self> {
         validate_operation_id(operation_id)?;
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         let directory = guard_write_path(&root, &root.join("operations"))?;
         fs::create_dir_all(&directory)?;
         let path = guard_write_path(&root, &directory.join(format!("{operation_id}.yaml")))?;
@@ -524,7 +524,7 @@ fn create_recovery_payload(
     targets: Vec<RecoveryTarget>,
     git_refs: Vec<GitRefRecovery>,
 ) -> Result<RecoveryPayload> {
-    let asset_center = home.join(".my-agent-assets");
+    let asset_center = crate::asset_center_path(&home);
     let backup_root = guard_write_path(
         &asset_center,
         &asset_center
@@ -588,8 +588,8 @@ fn restore_payload(
     operation_id: &str,
     payload: &RecoveryPayload,
 ) -> Result<Vec<PathBuf>> {
-    let expected_root = home
-        .join(".my-agent-assets/backups/local")
+    let expected_root = crate::asset_center_path(&home)
+        .join("backups/local")
         .join(format!("recovery-{operation_id}"));
     if payload.backup_root != expected_root {
         return Err(MaaError::new(format!(
@@ -598,7 +598,7 @@ fn restore_payload(
             payload.backup_root.display()
         )));
     }
-    guard_existing_path(&home.join(".my-agent-assets"), &payload.backup_root)?;
+    guard_existing_path(&crate::asset_center_path(&home), &payload.backup_root)?;
     for entry in &payload.entries {
         validate_recovery_target(home, &entry.target_path, &entry.authority)?;
         if let Some(backup) = &entry.backup_path {
@@ -640,7 +640,7 @@ fn restore_payload(
 }
 
 fn validate_git_ref_recovery(home: &Path, recovery: &GitRefRecovery) -> Result<()> {
-    let expected_repository = home.join(".my-agent-assets");
+    let expected_repository = crate::asset_center_path(&home);
     if recovery.repository != expected_repository {
         return Err(MaaError::new(format!(
             "Git recovery repository is not the asset center: {}",
@@ -747,7 +747,7 @@ fn run_git(repository: &Path, args: &[&str]) -> Result<()> {
 fn validate_recovery_target(home: &Path, path: &Path, authority: &RecoveryAuthority) -> Result<()> {
     match authority {
         RecoveryAuthority::AssetCenter => {
-            guard_write_path(&home.join(".my-agent-assets"), path)?;
+            guard_write_path(&crate::asset_center_path(&home), path)?;
         }
         RecoveryAuthority::RegisteredTarget { target_id } => {
             let targets = load_targets(home)?;
@@ -766,7 +766,7 @@ fn validate_recovery_target(home: &Path, path: &Path, authority: &RecoveryAuthor
 }
 
 fn load_journals(home: &Path) -> Result<Vec<JournalFile>> {
-    let directory = home.join(".my-agent-assets/operations");
+    let directory = crate::asset_center_path(&home).join("operations");
     if !directory.exists() {
         return Ok(Vec::new());
     }
@@ -798,9 +798,9 @@ fn load_journals(home: &Path) -> Result<Vec<JournalFile>> {
 fn journal_path(home: &Path, operation_id: &str) -> Result<PathBuf> {
     validate_operation_id(operation_id)?;
     guard_write_path(
-        &home.join(".my-agent-assets"),
-        &home
-            .join(".my-agent-assets/operations")
+        &crate::asset_center_path(&home),
+        &crate::asset_center_path(&home)
+            .join("operations")
             .join(format!("{operation_id}.yaml")),
     )
     .map_err(Into::into)
@@ -997,8 +997,8 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(home.join(".my-agent-assets/backups/local")).unwrap();
-        fs::create_dir_all(home.join(".my-agent-assets/operations")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("backups/local")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("operations")).unwrap();
         let targets = TargetRegistry::standard_user_targets(
             &home,
             ProviderState::Initialized,
@@ -1066,14 +1066,14 @@ mod tests {
         let error = OperationLock::acquire(&home).unwrap_err();
 
         assert!(error.to_string().contains("not initialized"));
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 
     #[test]
     fn stale_lock_is_reclaimed_but_live_lock_is_not() {
         let home = home("stale-lock");
-        let lock_path = home.join(".my-agent-assets/locks/global.lock");
+        let lock_path = crate::asset_center_path(&home).join("locks/global.lock");
         fs::create_dir_all(lock_path.parent().unwrap()).unwrap();
         fs::write(&lock_path, "pid=4294967295\ncreatedAtEpochSeconds=1").unwrap();
         let lock = OperationLock::acquire(&home).unwrap();
@@ -1099,7 +1099,7 @@ mod tests {
     #[test]
     fn recoverable_journal_restores_file_directory_symlink_and_missing_path() {
         let home = home("recover");
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         let file = root.join("assets.yaml");
         let directory = root.join("assets/skills/review");
         let missing = root.join("assets/commands/new.md");
@@ -1157,7 +1157,7 @@ mod tests {
     #[test]
     fn recoverable_journal_restores_asset_center_git_ref_and_index() {
         let home = home("git-ref");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         test_git(&repository, &["init", "-b", "main"]);
         test_git(
             &repository,
@@ -1217,7 +1217,7 @@ mod tests {
             "tampered-1",
             "test",
             vec![RecoveryTarget::asset_center(
-                home.join(".my-agent-assets/assets.yaml"),
+                crate::asset_center_path(&home).join("assets.yaml"),
             )],
         )
         .unwrap();
@@ -1238,7 +1238,7 @@ mod tests {
     fn legacy_incomplete_journal_cannot_be_falsely_marked_recovered() {
         let home = home("legacy");
         fs::write(
-            home.join(".my-agent-assets/operations/legacy.yaml"),
+            crate::asset_center_path(&home).join("operations/legacy.yaml"),
             "schemaVersion: 1\noperationId: legacy\noperationKind: mount\nstatus: started\ncreatedAtEpochSeconds: 1\ncompletedSteps: []\n",
         )
         .unwrap();

@@ -39,10 +39,10 @@ cargo build -p my-agent-assets-cli --bin maa >/dev/null
 BIN="$ROOT_DIR/target/debug/maa"
 
 "$BIN" --home "$FAKE_HOME" init --apply >/tmp/maa-init.out
-test -d "$FAKE_HOME/.my-agent-assets/.git"
+test -d "$FAKE_HOME/.my-agent-assets-data/.git"
 
 "$BIN" --home "$FAKE_HOME" scan --scope user >"$TMP_ROOT/scan.json"
-test -z "$(find "$FAKE_HOME/.my-agent-assets/assets" -type f -print -quit)"
+test -z "$(find "$FAKE_HOME/.my-agent-assets-data/assets" -type f -print -quit)"
 
 source_id() {
   jq -r --arg provider "$1" --arg kind "$2" --arg name "$3" \
@@ -67,11 +67,11 @@ do
   "$BIN" --home "$FAKE_HOME" import "$source" --scope user --apply >/dev/null
 done
 
-test -f "$FAKE_HOME/.my-agent-assets/assets/skills/review/SKILL.md"
-test -f "$FAKE_HOME/.my-agent-assets/assets/skills/codex-review/SKILL.md"
-test -f "$FAKE_HOME/.my-agent-assets/assets/commands/commit.md"
-test -f "$FAKE_HOME/.my-agent-assets/assets/mcps/postgres.json"
-test -f "$FAKE_HOME/.my-agent-assets/assets/mcps/filesystem.json"
+test -f "$FAKE_HOME/.my-agent-assets-data/assets/skills/review/SKILL.md"
+test -f "$FAKE_HOME/.my-agent-assets-data/assets/skills/codex-review/SKILL.md"
+test -f "$FAKE_HOME/.my-agent-assets-data/assets/commands/commit.md"
+test -f "$FAKE_HOME/.my-agent-assets-data/assets/mcps/postgres.json"
+test -f "$FAKE_HOME/.my-agent-assets-data/assets/mcps/filesystem.json"
 
 "$BIN" --home "$FAKE_HOME" target add claude-project-skills project-a-claude-skills \
   --project "$PROJECT_A" --apply >/dev/null
@@ -100,7 +100,7 @@ fi
 grep -q binding /tmp/maa-bound-delete.out
 
 "$BIN" --home "$FAKE_HOME" remove skill:review --unmount-all --apply >/dev/null
-test ! -e "$FAKE_HOME/.my-agent-assets/assets/skills/review"
+test ! -e "$FAKE_HOME/.my-agent-assets-data/assets/skills/review"
 test ! -e "$PROJECT_A/.claude/skills/review"
 test ! -e "$PROJECT_A/.agents/skills/review"
 

@@ -43,7 +43,7 @@ The e2e script asserts that `maa init --apply` creates `.git` inside the fake
 asset center:
 
 ```text
-fake-home/.my-agent-assets/.git
+fake-home/.my-agent-assets-data/.git
 ```
 
 ## Safety Checks
@@ -53,7 +53,7 @@ fake-home/.my-agent-assets/.git
   home directory.
 - No test invokes `claude mcp list` or `claude mcp get`.
 - No test writes to real `~/.claude`, `~/.claude.json`, or
-  `~/.my-agent-assets`.
+  `~/.my-agent-assets-data`.
 - MCP conflict tests must verify that scan displays both JSON bodies, default
   apply fails without a decision, and rename imports without rewriting the
   original runtime JSON source.

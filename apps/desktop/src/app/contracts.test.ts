@@ -77,7 +77,7 @@ describe("Tauri command contracts", () => {
       previewId: "preview:sync:pull",
       direction: "pull",
       status: {
-        repositoryPath: "~/.my-agent-assets",
+        repositoryPath: "~/.my-agent-assets-data",
         isRepository: true,
         statusMessage: "Git worktree is clean",
         branch: "main",
@@ -111,7 +111,7 @@ describe("Tauri command contracts", () => {
 
   it("keeps GitStatus read-only repository fields explicit", () => {
     const status = {
-      repositoryPath: "~/.my-agent-assets",
+      repositoryPath: "~/.my-agent-assets-data",
       isRepository: false,
       statusMessage: "Asset center directory does not exist.",
       branch: "",
@@ -174,7 +174,7 @@ describe("Tauri command contracts", () => {
       createdAt: "2026-06-29T10:00:00Z",
       sizeBytes: 120,
       entryCount: 1,
-      manifestPath: "~/.my-agent-assets/backups/backup-1/manifest.json",
+      manifestPath: "~/.my-agent-assets-data/backups/backup-1/manifest.json",
       runtimeRoot: "~",
       affectedPaths: ["~/.claude/skills/review"],
     } satisfies BackupSummary;
@@ -190,7 +190,7 @@ describe("Tauri command contracts", () => {
       entryId: "local:one",
       backupId: "one",
       class: "local",
-      backupPath: "~/.my-agent-assets/backups/local/one",
+      backupPath: "~/.my-agent-assets-data/backups/local/one",
       sizeBytes: 120,
       entryCount: 1,
       sensitiveConfigRisk: false,

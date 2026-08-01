@@ -545,7 +545,7 @@ mod tests {
             },
         )
         .is_err());
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 
@@ -643,8 +643,12 @@ mod tests {
         assert!(error.to_string().contains("injected"));
         assert!(home.join(".claude/skills/one/SKILL.md").is_file());
         assert!(home.join(".agents/skills/two/SKILL.md").is_file());
-        assert!(!home.join(".my-agent-assets/assets/skills/one").exists());
-        assert!(!home.join(".my-agent-assets/assets/skills/two").exists());
+        assert!(!crate::asset_center_path(&home)
+            .join("assets/skills/one")
+            .exists());
+        assert!(!crate::asset_center_path(&home)
+            .join("assets/skills/two")
+            .exists());
         assert_eq!(fs::read(asset_registry_path(&home)).unwrap(), assets_before);
         assert_eq!(fs::read(mount_registry_path(&home)).unwrap(), mounts_before);
         let _ = fs::remove_dir_all(home);

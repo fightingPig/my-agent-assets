@@ -9,6 +9,7 @@ import {
   settingsLoad,
 } from "../app/data-api";
 import type { BackupDeletePreview, BackupSummary } from "../app/contracts";
+import { DEFAULT_ASSET_CENTER_PATH } from "../app/defaults";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 type BackupItem = {
@@ -37,7 +38,7 @@ const staticBackups: readonly BackupItem[] = [
     size: "24 KB",
     sizeBytes: 24 * 1024,
     entryCount: 3,
-    manifestPath: "~/.my-agent-assets/backups/local/backup-20260621-1842/manifest.json",
+    manifestPath: `${DEFAULT_ASSET_CENTER_PATH}/backups/local/backup-20260621-1842/manifest.json`,
     runtimeRoot: "~",
     paths: ["~/.claude/skills/review", "~/workspace/project-a/.mcp.json", "~/.claude/commands/deploy-prod.md"],
     class: "local",
@@ -53,7 +54,7 @@ const staticBackups: readonly BackupItem[] = [
     size: "18 KB",
     sizeBytes: 18 * 1024,
     entryCount: 2,
-    manifestPath: "~/.my-agent-assets/backups/local/backup-20260620-0915/manifest.json",
+    manifestPath: `${DEFAULT_ASSET_CENTER_PATH}/backups/local/backup-20260620-0915/manifest.json`,
     runtimeRoot: "~",
     paths: ["~/workspace/my-app/.claude/skills/react-review", "~/workspace/my-app/.mcp.json"],
     class: "local",
@@ -69,7 +70,7 @@ const staticBackups: readonly BackupItem[] = [
     size: "8 KB",
     sizeBytes: 8 * 1024,
     entryCount: 1,
-    manifestPath: "~/.my-agent-assets/backups/local/backup-20260618-1630/manifest.json",
+    manifestPath: `${DEFAULT_ASSET_CENTER_PATH}/backups/local/backup-20260618-1630/manifest.json`,
     runtimeRoot: "~",
     paths: ["~/.claude/commands/format-code.md"],
     class: "portable",
@@ -393,7 +394,7 @@ function toBackupItem(backup: BackupSummary): BackupItem {
     size: formatBytes(backup.sizeBytes),
     sizeBytes: backup.sizeBytes,
     entryCount: backup.entryCount,
-    manifestPath: backup.manifestPath ?? `~/.my-agent-assets/backups/${backup.id}/manifest.json`,
+    manifestPath: backup.manifestPath ?? `${DEFAULT_ASSET_CENTER_PATH}/backups/${backup.id}/manifest.json`,
     runtimeRoot: backup.runtimeRoot ?? "请查看 manifest",
     paths: backup.affectedPaths ?? [],
     class: backup.class ?? "legacy",

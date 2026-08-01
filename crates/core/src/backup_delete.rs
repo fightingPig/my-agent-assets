@@ -143,7 +143,7 @@ pub fn apply_backup_delete(
         ));
     }
 
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let backup_path = guard_write_path(&root, &preview.backup_path)?;
     let operation_id = operation_id();
     let mut journal = OperationJournal::start_recoverable(
@@ -213,7 +213,10 @@ fn backup_delete_fingerprint(
     );
     fingerprint.add_u64("generated-at", generated_at_epoch_seconds);
     fingerprint.add_path("backup", backup_path)?;
-    fingerprint.add_path_if_present("operations", &home.join(".my-agent-assets/operations"))?;
+    fingerprint.add_path_if_present(
+        "operations",
+        &crate::asset_center_path(&home).join("operations"),
+    )?;
     Ok(fingerprint.finish("backup-delete"))
 }
 
@@ -251,7 +254,9 @@ mod tests {
     }
 
     fn write_backup(home: &Path, id: &str) -> PathBuf {
-        let backup = home.join(".my-agent-assets/backups/local").join(id);
+        let backup = crate::asset_center_path(&home)
+            .join("backups/local")
+            .join(id);
         fs::create_dir_all(backup.join("content")).unwrap();
         fs::write(
             backup.join("manifest.yaml"),

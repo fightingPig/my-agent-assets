@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "../lib/platform";
 import { DESKTOP_COMMAND_ERROR_CODES } from "./contracts";
+import {
+  DEFAULT_ASSET_CENTER_PATH,
+  DEFAULT_GIT_REMOTE_NAME,
+} from "./defaults";
 import type {
   AssetSummary,
   BackupSummary,
@@ -92,14 +96,14 @@ import type {
 } from "./contracts";
 
 const fallbackSettings: DesktopSettings = {
-  assetCenterPath: "~/.my-agent-assets",
+  assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
   scanRoots: ["~/.claude", "~/workspace", "~/code"],
   maxDepth: 5,
   backupBeforeApply: true,
   backupWarningThresholdBytes: 1024 * 1024 * 1024,
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
-  gitRemote: "origin",
+  gitRemote: DEFAULT_GIT_REMOTE_NAME,
   allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
@@ -109,11 +113,11 @@ const fallbackSettings: DesktopSettings = {
 };
 
 const fallbackGitStatus: GitStatus = {
-  repositoryPath: "~/.my-agent-assets",
+  repositoryPath: DEFAULT_ASSET_CENTER_PATH,
   isRepository: false,
   statusMessage: "Tauri runtime is unavailable.",
   branch: "",
-  remoteName: "origin",
+  remoteName: DEFAULT_GIT_REMOTE_NAME,
   clean: true,
   ahead: 0,
   behind: 0,
@@ -362,7 +366,7 @@ export async function diagnosticExportApply(
 export async function initializationPreview(): Promise<InitializationPreview> {
   const fallback: InitializationPreview = {
     previewId: "initialization-unavailable",
-    assetCenterPath: "~/.my-agent-assets",
+    assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
     plannedPaths: [],
     warnings: ["Tauri runtime is unavailable; initialization preview skipped."],
     alreadyInitialized: false,

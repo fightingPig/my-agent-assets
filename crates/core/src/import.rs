@@ -211,7 +211,9 @@ pub fn apply_import(home: &Path, request: &ImportApplyRequest) -> Result<ImportA
         return apply_import_locked(home, request, None);
     }
     let operation_id = operation_id();
-    let staging = home.join(".my-agent-assets/operations").join(&operation_id);
+    let staging = crate::asset_center_path(&home)
+        .join("operations")
+        .join(&operation_id);
     let mut recovery_targets = vec![
         RecoveryTarget::asset_center(registry_path(home)),
         RecoveryTarget::asset_center(preview.destination_path.clone()),
@@ -289,7 +291,7 @@ pub(crate) fn apply_import_locked(
     }
 
     let source = find_source(home, &request.request.scope, &request.request.source_id)?;
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let destination = guard_write_path(&root, &preview.destination_path)?;
     let mut registry = load_registry(home).map_err(|error| MaaError::new(error.to_string()))?;
     let original_registry = fs::read(registry_path(home))?;
@@ -499,7 +501,7 @@ fn create_portable_backup(
     destination: &Path,
     registry: &[u8],
 ) -> Result<String> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let backup_id = format!("import-{operation_id}");
     let backup = guard_write_path(&root, &root.join("backups/portable").join(&backup_id))?;
     fs::create_dir_all(&backup)?;
@@ -780,7 +782,8 @@ mod tests {
             "new"
         );
         let manifest = fs::read_to_string(
-            home.join(".my-agent-assets/backups/portable")
+            crate::asset_center_path(&home)
+                .join("backups/portable")
                 .join(backup_id)
                 .join("manifest.yaml"),
         )

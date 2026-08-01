@@ -186,7 +186,7 @@ struct SchemaHeader {
 }
 
 pub fn registry_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets/mounts.yaml")
+    crate::asset_center_path(&home).join("mounts.yaml")
 }
 
 pub fn load(home: &Path) -> Result<MountRegistry, MountRegistryError> {
@@ -217,7 +217,7 @@ pub fn load(home: &Path) -> Result<MountRegistry, MountRegistryError> {
 
 pub fn save(home: &Path, registry: &MountRegistry) -> Result<(), MountRegistryError> {
     registry.validate()?;
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let path = registry_path(home);
     let guarded = guard_write_path(&root, &path).map_err(|source| MountRegistryError::Io {
         path: path.clone(),
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn round_trip_and_mark_out_of_sync_are_precise() {
         let home = test_home("round-trip");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         let mut registry = MountRegistry::default();
         registry
             .upsert(
@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn invalid_and_newer_registry_are_not_overwritten() {
         let home = test_home("invalid");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         fs::write(registry_path(&home), "schemaVersion: 99\nbindings: {}\n").unwrap();
         assert!(matches!(
             load(&home),

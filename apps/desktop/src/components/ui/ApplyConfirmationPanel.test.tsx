@@ -58,7 +58,7 @@ describe("ApplyConfirmationPanel", () => {
             entryCount: 2,
             manifestPath: "/tmp/manifest.json",
             runtimeRoot: "/tmp/home",
-            affectedPaths: ["/tmp/home/.my-agent-assets/assets/skills/review"],
+            affectedPaths: ["/tmp/home/.my-agent-assets-data/assets/skills/review"],
           },
           steps: [
             {

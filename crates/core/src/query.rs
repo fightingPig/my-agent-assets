@@ -92,7 +92,7 @@ pub struct ProjectSummary {
 }
 
 pub fn list_assets(home: &Path, request: &AssetQueryRequest) -> Result<Vec<AssetSummary>> {
-    let asset_center = home.join(".my-agent-assets");
+    let asset_center = crate::asset_center_path(&home);
     if !asset_center.exists() {
         return Ok(Vec::new());
     }
@@ -302,7 +302,7 @@ mod tests {
             },
         )
         .unwrap();
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         fs::create_dir_all(root.join("assets/skills/review")).unwrap();
         fs::write(root.join("assets/skills/review/SKILL.md"), "# Review").unwrap();
         let mut assets = AssetRegistry::default();
@@ -319,18 +319,18 @@ mod tests {
     fn lists_registered_and_unregistered_assets_without_writing() {
         let home = home("assets");
         fs::write(
-            home.join(".my-agent-assets/assets/commands/orphan.md"),
+            crate::asset_center_path(&home).join("assets/commands/orphan.md"),
             "# Orphan",
         )
         .unwrap();
-        let before = fs::read(home.join(".my-agent-assets/assets.yaml")).unwrap();
+        let before = fs::read(crate::asset_center_path(&home).join("assets.yaml")).unwrap();
         let assets = list_assets(&home, &AssetQueryRequest { asset_type: None }).unwrap();
         assert_eq!(assets.len(), 2);
         assert_eq!(assets[0].id, "command:orphan");
         assert_eq!(assets[0].status, AssetQueryStatus::Invalid);
         assert_eq!(assets[1].id, "skill:review");
         assert_eq!(
-            fs::read(home.join(".my-agent-assets/assets.yaml")).unwrap(),
+            fs::read(crate::asset_center_path(&home).join("assets.yaml")).unwrap(),
             before
         );
         let _ = fs::remove_dir_all(home);
@@ -393,7 +393,7 @@ mod tests {
 
         let projects = list_projects(&home).unwrap();
         assert!(projects.is_empty());
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 }

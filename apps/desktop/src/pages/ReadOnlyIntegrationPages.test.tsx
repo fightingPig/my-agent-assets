@@ -9,6 +9,7 @@ import type {
   GitStatus,
   ProjectSummary,
 } from "../app/contracts";
+import { DEFAULT_GITHUB_SSH_REMOTE_TEMPLATE } from "../app/defaults";
 import { BackupRestorePage } from "./BackupRestorePage";
 import { AssetDetailPage } from "./AssetDetailPage";
 import { CommandsListPage } from "./CommandsListPage";
@@ -136,7 +137,7 @@ beforeEach(() => {
   vi.mocked(open).mockResolvedValue(null);
   initializationPreview.mockResolvedValue({
     previewId: "initialization:test",
-    assetCenterPath: "/tmp/home/.my-agent-assets",
+    assetCenterPath: "/tmp/home/.my-agent-assets-data",
     plannedPaths: [],
     warnings: [],
     alreadyInitialized: true,
@@ -171,7 +172,7 @@ beforeEach(() => {
   projectSavePreview.mockResolvedValue({
     previewId: "project-save:test",
     operation: "save",
-    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/projects.yaml"],
     migratedTargetIds: [],
     blockingBindings: [],
     warnings: [],
@@ -183,14 +184,14 @@ beforeEach(() => {
     previewId: "project-save:test",
     operation: "save",
     projectId: "project-local-app-1234",
-    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
-    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    registryPath: "/tmp/home/.my-agent-assets-data/projects.yaml",
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/projects.yaml"],
   });
   projectRemovePreview.mockResolvedValue({
     previewId: "project-remove:test",
     operation: "remove",
     project: { id: "/tmp/project-a", name: "project-a", title: "Project A", path: "/tmp/project-a", description: "Local project fixture" },
-    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/projects.yaml"],
     migratedTargetIds: [],
     blockingBindings: [],
     warnings: ["project directory is preserved"],
@@ -202,8 +203,8 @@ beforeEach(() => {
     previewId: "project-remove:test",
     operation: "remove",
     projectId: "/tmp/project-a",
-    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
-    affectedPaths: ["/tmp/home/.my-agent-assets/projects.yaml"],
+    registryPath: "/tmp/home/.my-agent-assets-data/projects.yaml",
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/projects.yaml"],
   });
   revealBackupManifest.mockResolvedValue({
     manifestPath: "/tmp/backups/restore-20260627/manifest.json",
@@ -259,7 +260,7 @@ beforeEach(() => {
   listMountBindings.mockResolvedValue([]);
   projectRefresh.mockResolvedValue({
     refreshedProjectIds: ["/tmp/project-a"],
-    registryPath: "/tmp/home/.my-agent-assets/projects.yaml",
+    registryPath: "/tmp/home/.my-agent-assets-data/projects.yaml",
     warnings: [],
   });
   canonicalMountPreview.mockResolvedValue(canonicalMountPreviewFixture());
@@ -310,7 +311,7 @@ beforeEach(() => {
   settingsPreview.mockImplementation(async ({ settings }) => ({
     previewId: "settings-save:test",
     settings,
-    affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/config.yaml"],
     plannedEffects: ["保存本地设置"],
     warnings: [],
     canApply: true,
@@ -320,7 +321,7 @@ beforeEach(() => {
   settingsApply.mockImplementation(async ({ previewId, request }) => ({
     previewId,
     settings: request.settings,
-    affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+    affectedPaths: ["/tmp/home/.my-agent-assets-data/config.yaml"],
   }));
   previewSync.mockResolvedValue({
     previewId: "preview:sync:push",
@@ -338,7 +339,7 @@ beforeEach(() => {
   syncApply.mockResolvedValue({
     previewId: "preview:sync:push",
     direction: "push",
-    affectedPaths: ["~/.my-agent-assets"],
+    affectedPaths: ["~/.my-agent-assets-data"],
     committed: true,
     pushed: true,
     pulled: false,
@@ -432,7 +433,7 @@ describe("read-only UI integration", () => {
   it("blocks project write controls until the asset center is initialized", async () => {
     initializationPreview.mockResolvedValue({
       previewId: "initialization:blocked",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       plannedPaths: [],
       warnings: ["资产中心尚未初始化。"],
       alreadyInitialized: false,
@@ -625,7 +626,7 @@ describe("read-only UI integration", () => {
     syncApply.mockResolvedValue({
       previewId: "preview:sync:push",
       direction: "push",
-      affectedPaths: ["/tmp/home/.my-agent-assets/assets.yaml"],
+      affectedPaths: ["/tmp/home/.my-agent-assets-data/assets.yaml"],
       backupId: null,
       committed: true,
       pushed: false,
@@ -721,7 +722,7 @@ describe("read-only UI integration", () => {
       previewId: "git-remote:test",
       remoteName: "upstream",
       remoteUrl: "git@github.com:owner/private-assets.git",
-      affectedPaths: ["/tmp/home/.my-agent-assets/.git/config"],
+      affectedPaths: ["/tmp/home/.my-agent-assets-data/.git/config"],
       warnings: [],
       canApply: true,
       generatedAtEpochSeconds: 100,
@@ -732,7 +733,7 @@ describe("read-only UI integration", () => {
 
     const remoteName = await screen.findByDisplayValue("origin");
     fireEvent.change(remoteName, { target: { value: "upstream" } });
-    fireEvent.change(screen.getByPlaceholderText("git@github.com:owner/private-assets.git"), {
+    fireEvent.change(screen.getByPlaceholderText(DEFAULT_GITHUB_SSH_REMOTE_TEMPLATE), {
       target: { value: "git@github.com:owner/private-assets.git" },
     });
     expect(screen.getByText("远程名称有未保存改动；请先保存设置。")).toBeInTheDocument();
@@ -765,7 +766,7 @@ describe("read-only UI integration", () => {
   it("keeps settings writes disabled before asset-center initialization", async () => {
     initializationPreview.mockResolvedValue({
       previewId: "initialization:blocked",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       plannedPaths: [],
       warnings: ["资产中心尚未初始化。"],
       alreadyInitialized: false,
@@ -774,13 +775,13 @@ describe("read-only UI integration", () => {
       expiresAtEpochSeconds: 400,
     });
 
-    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.3", platform: "windows", arch: "x86_64", backendReady: true }} />);
+    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.4", platform: "windows", arch: "x86_64", backendReady: true }} />);
 
     expect(await screen.findByText("资产中心尚未初始化。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成保存预览" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "预览导出" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "预览注册" })).toBeDisabled();
-    expect(screen.getByDisplayValue("0.1.1-beta.3")).toHaveAttribute("readonly");
+    expect(screen.getByDisplayValue("0.1.1-beta.4")).toHaveAttribute("readonly");
     expect(settingsPreview).not.toHaveBeenCalled();
   });
 
@@ -881,7 +882,7 @@ describe("read-only UI integration", () => {
   it("keeps scan discovery read-only when the asset center is not initialized", async () => {
     initializationPreview.mockResolvedValue({
       previewId: "initialization:blocked",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       plannedPaths: [],
       warnings: ["资产中心尚未初始化。"],
       alreadyInitialized: false,
@@ -1436,7 +1437,7 @@ function projectFixture(overrides: Partial<ProjectSummary> = {}): ProjectSummary
 
 function gitStatusFixture(overrides: Partial<GitStatus> = {}): GitStatus {
   return {
-    repositoryPath: "~/.my-agent-assets",
+    repositoryPath: "~/.my-agent-assets-data",
     isRepository: false,
     statusMessage: "Asset center directory does not exist.",
     branch: "",
@@ -1455,7 +1456,7 @@ function gitStatusFixture(overrides: Partial<GitStatus> = {}): GitStatus {
 
 function settingsFixture(overrides: Partial<DesktopSettings> = {}): DesktopSettings {
   return {
-    assetCenterPath: "~/.my-agent-assets",
+    assetCenterPath: "~/.my-agent-assets-data",
     scanRoots: ["~/.claude", "~/workspace", "~/code"],
     maxDepth: 5,
     backupBeforeApply: true,
@@ -1533,7 +1534,7 @@ function canonicalMountPreviewFixture(
     previewId: "mount:skill-review",
     assetId: "skill:review",
     targetId: "claude-user-skills",
-    canonicalPath: "/tmp/home/.my-agent-assets/assets/skills/review",
+    canonicalPath: "/tmp/home/.my-agent-assets-data/assets/skills/review",
     affectedTargetPath: "/tmp/home/.claude/skills/review",
     compatible: true,
     adapter: "symlink_directory",

@@ -74,8 +74,8 @@ pub fn apply_git_remote(
 
     let repository = repository_path(home);
     let config_path = repository.join(".git/config");
-    let backup_path = home
-        .join(".my-agent-assets/backups/local")
+    let backup_path = crate::asset_center_path(&home)
+        .join("backups/local")
         .join(format!("git-config-{}.bak", epoch_nanos()));
     fs::create_dir_all(
         backup_path
@@ -162,7 +162,7 @@ fn preview_git_remote_at(
 }
 
 fn repository_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets")
+    crate::asset_center_path(&home)
 }
 
 fn valid_remote_name(value: &str) -> bool {
@@ -252,7 +252,7 @@ mod tests {
 
     fn repository(label: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!("maa-git-remote-{label}-{}", epoch_nanos()));
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::create_dir_all(&repository).unwrap();
         assert!(Command::new("git")
             .current_dir(&repository)
@@ -270,7 +270,7 @@ mod tests {
             remote_name: "origin".into(),
             remote_url: "git@github.com:example/private-assets.git".into(),
         };
-        let config_path = home.join(".my-agent-assets/.git/config");
+        let config_path = crate::asset_center_path(&home).join(".git/config");
         let before = fs::read(&config_path).unwrap();
         let preview = preview_git_remote(&home, &request).unwrap();
         assert!(preview.can_apply);
@@ -287,7 +287,7 @@ mod tests {
         assert!(result.backup_path.is_file());
         assert_eq!(
             git_stdout(
-                &home.join(".my-agent-assets"),
+                &crate::asset_center_path(&home),
                 &["remote", "get-url", "origin"]
             )
             .unwrap(),

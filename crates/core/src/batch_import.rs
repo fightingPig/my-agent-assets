@@ -388,7 +388,7 @@ mod tests {
             .get(crate::targets::AssetKind::Command, "one")
             .is_some());
         assert!(home
-            .join(".my-agent-assets/assets/commands/one.md")
+            .join(".my-agent-assets-data/assets/commands/one.md")
             .exists());
         let report = recover_incomplete(&home).unwrap();
         assert!(report.attempted);
@@ -396,7 +396,7 @@ mod tests {
         assert!(report.attempts[0].recovered);
         assert!(load_assets(&home).unwrap().assets.is_empty());
         assert!(!home
-            .join(".my-agent-assets/assets/commands/one.md")
+            .join(".my-agent-assets-data/assets/commands/one.md")
             .exists());
         let _ = fs::remove_dir_all(home);
     }
@@ -451,7 +451,7 @@ mod tests {
             },
         )
         .is_err());
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         let _ = fs::remove_dir_all(home);
     }
 }

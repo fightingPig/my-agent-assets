@@ -642,7 +642,7 @@ fn push_file_source(
     let (is_symlink, symlink_target) = link_metadata(&path, &mut warnings);
     let is_managed = symlink_target
         .as_deref()
-        .is_some_and(|target| target.starts_with(home.join(".my-agent-assets/assets")));
+        .is_some_and(|target| target.starts_with(crate::asset_center_path(&home).join("assets")));
     result.sources.push(DiscoveredSource {
         source_id: source_id(provider, scope, asset_kind, &name, &path),
         provider,
@@ -685,7 +685,7 @@ fn push_mcp_source(
         asset_name: name.to_string(),
         source_format,
         scope,
-        is_managed: config_path.starts_with(home.join(".my-agent-assets")),
+        is_managed: config_path.starts_with(crate::asset_center_path(&home)),
         is_symlink: false,
         symlink_target: None,
         warnings,
@@ -1167,7 +1167,7 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let home = test_dir("managed");
-        let canonical = home.join(".my-agent-assets/assets/skills/review");
+        let canonical = crate::asset_center_path(&home).join("assets/skills/review");
         fs::create_dir_all(&canonical).unwrap();
         fs::write(canonical.join("SKILL.md"), "# Review").unwrap();
         fs::create_dir_all(home.join(".claude/skills")).unwrap();

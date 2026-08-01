@@ -389,8 +389,8 @@ fn backup_registry(home: &Path) -> Result<PathBuf> {
         epoch_nanos(),
         OPERATION_COUNTER.fetch_add(1, Ordering::Relaxed)
     );
-    let backup = home
-        .join(".my-agent-assets/backups/local")
+    let backup = crate::asset_center_path(&home)
+        .join("backups/local")
         .join(id)
         .join("targets.yaml");
     let parent = backup
@@ -426,7 +426,7 @@ mod tests {
     fn home(label: &str) -> PathBuf {
         let home =
             std::env::temp_dir().join(format!("maa-target-management-{label}-{}", epoch_nanos()));
-        fs::create_dir_all(home.join(".my-agent-assets/backups/local")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("backups/local")).unwrap();
         let registry = TargetRegistry::standard_user_targets(
             &home,
             ProviderState::Initialized,
@@ -522,7 +522,8 @@ mod tests {
     #[test]
     fn project_registration_rejects_missing_directory_without_writes() {
         let home = home("register-missing");
-        let registry_before = fs::read(home.join(".my-agent-assets/targets.yaml")).unwrap();
+        let registry_before =
+            fs::read(crate::asset_center_path(&home).join("targets.yaml")).unwrap();
         let error = preview_register_target(
             &home,
             &TargetRegistrationPreviewRequest {
@@ -534,7 +535,7 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("existing directory"));
         assert_eq!(
-            fs::read(home.join(".my-agent-assets/targets.yaml")).unwrap(),
+            fs::read(crate::asset_center_path(&home).join("targets.yaml")).unwrap(),
             registry_before
         );
         let _ = fs::remove_dir_all(home);

@@ -5,7 +5,7 @@ Date: 2026-07-09
 This checklist is the human-run companion to `docs/v1-full-test-plan.md`.
 Automated tests must continue to use disposable fake HOME directories. Do not
 run destructive apply flows against real `~/.claude`, `~/.codex`, or
-`~/.my-agent-assets` unless a tester intentionally opts into a real-data trial.
+`~/.my-agent-assets-data` unless a tester intentionally opts into a real-data trial.
 
 ## Scope
 

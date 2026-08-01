@@ -1,6 +1,6 @@
 [package]
 name = "my-agent-assets-desktop"
-version = "0.1.1-beta.3"
+version = "0.1.1-beta.4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

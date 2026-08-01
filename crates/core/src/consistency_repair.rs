@@ -186,7 +186,7 @@ pub fn apply_consistency_repair(
         ));
     }
 
-    let registry_path = home.join(".my-agent-assets/assets.yaml");
+    let registry_path = crate::asset_center_path(&home).join("assets.yaml");
     let content_path = canonical_path(
         home,
         preview.diagnostic.asset_type,
@@ -256,9 +256,15 @@ fn repair_fingerprint(
         &serde_json::to_vec(request).map_err(|error| MaaError::new(error.to_string()))?,
     );
     fingerprint.add_u64("generated-at", generated_at_epoch_seconds);
-    fingerprint.add_path_if_present("registry", &home.join(".my-agent-assets/assets.yaml"))?;
+    fingerprint.add_path_if_present(
+        "registry",
+        &crate::asset_center_path(&home).join("assets.yaml"),
+    )?;
     fingerprint.add_path_if_present("canonical-content", &diagnostic.path)?;
-    fingerprint.add_path_if_present("operations", &home.join(".my-agent-assets/operations"))?;
+    fingerprint.add_path_if_present(
+        "operations",
+        &crate::asset_center_path(&home).join("operations"),
+    )?;
     Ok(fingerprint.finish("consistency-repair"))
 }
 
@@ -298,13 +304,13 @@ mod tests {
     }
 
     fn setup(home: &Path) {
-        fs::create_dir_all(home.join(".my-agent-assets/assets/skills/orphan")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/skills/orphan")).unwrap();
         fs::write(
-            home.join(".my-agent-assets/assets/skills/orphan/SKILL.md"),
+            crate::asset_center_path(&home).join("assets/skills/orphan/SKILL.md"),
             "# Orphan",
         )
         .unwrap();
-        fs::create_dir_all(home.join(".my-agent-assets/assets/commands")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/commands")).unwrap();
         let mut registry = AssetRegistry::default();
         registry
             .upsert(AssetRecord::new(AssetKind::Command, "missing").unwrap())
@@ -371,7 +377,9 @@ mod tests {
             .affected_paths
             .iter()
             .any(|path| path.ends_with("skills/orphan")));
-        assert!(!home.join(".my-agent-assets/assets/skills/orphan").exists());
+        assert!(!crate::asset_center_path(&home)
+            .join("assets/skills/orphan")
+            .exists());
         let _ = fs::remove_dir_all(home);
     }
 
@@ -395,7 +403,7 @@ mod tests {
         };
         let preview = preview_consistency_repair(&home, &request).unwrap();
         fs::write(
-            home.join(".my-agent-assets/assets/skills/orphan/SKILL.md"),
+            crate::asset_center_path(&home).join("assets/skills/orphan/SKILL.md"),
             "# Changed",
         )
         .unwrap();
@@ -427,11 +435,13 @@ mod tests {
             );
         }));
         assert!(panic.is_err());
-        assert!(!home.join(".my-agent-assets/assets/skills/orphan").exists());
+        assert!(!crate::asset_center_path(&home)
+            .join("assets/skills/orphan")
+            .exists());
         let report = recover_incomplete(&home).unwrap();
         assert!(report.attempted);
         assert!(home
-            .join(".my-agent-assets/assets/skills/orphan/SKILL.md")
+            .join(".my-agent-assets-data/assets/skills/orphan/SKILL.md")
             .is_file());
         let _ = fs::remove_dir_all(home);
     }

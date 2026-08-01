@@ -29,7 +29,7 @@ registry stores the physical file name.
 The asset center structure is:
 
 ```text
-~/.my-agent-assets/
+~/.my-agent-assets-data/
   assets/
     skills/
     commands/

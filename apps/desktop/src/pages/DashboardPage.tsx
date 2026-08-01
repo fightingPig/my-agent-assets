@@ -37,6 +37,7 @@ import type {
   RecoveryStatus,
 } from "../app/contracts";
 import type { PageId } from "../app/pages";
+import { DEFAULT_ASSET_CENTER_PATH, DEFAULT_GIT_REMOTE_NAME } from "../app/defaults";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 import {
   projects as demoProjects,
@@ -61,11 +62,11 @@ type DashboardStat = {
 };
 
 const emptyGitStatus: GitStatus = {
-  repositoryPath: "~/.my-agent-assets",
+  repositoryPath: DEFAULT_ASSET_CENTER_PATH,
   isRepository: false,
   statusMessage: "尚未读取本地 Git 仓库。",
   branch: "",
-  remoteName: "origin",
+  remoteName: DEFAULT_GIT_REMOTE_NAME,
   clean: true,
   ahead: 0,
   behind: 0,

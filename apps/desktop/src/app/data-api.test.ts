@@ -11,7 +11,7 @@ const { invoke, isTauriRuntime } = vi.hoisted(() => ({
 }));
 
 const savedSettings: DesktopSettings = {
-  assetCenterPath: "~/.my-agent-assets",
+  assetCenterPath: "~/.my-agent-assets-data",
   scanRoots: ["~/workspace"],
   maxDepth: 4,
   backupBeforeApply: true,
@@ -174,7 +174,7 @@ describe("read-only desktop data api", () => {
     expect(invoke).toHaveBeenLastCalledWith("list_audit_log");
 
     invoke.mockResolvedValueOnce({
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       initialized: true,
       checks: [],
       contentDiagnostics: [],
@@ -222,8 +222,8 @@ describe("read-only desktop data api", () => {
     };
     invoke.mockResolvedValueOnce({
       previewId: "diagnostic-export-1",
-      packagePath: "/tmp/home/.my-agent-assets/logs/diagnostics/diagnostic-1.json",
-      journalPath: "/tmp/home/.my-agent-assets/operations/export.yaml",
+      packagePath: "/tmp/home/.my-agent-assets-data/logs/diagnostics/diagnostic-1.json",
+      journalPath: "/tmp/home/.my-agent-assets-data/operations/export.yaml",
     });
     await api.diagnosticExportApply(diagnosticApply);
     expect(invoke).toHaveBeenLastCalledWith("diagnostic_export_apply", {
@@ -232,7 +232,7 @@ describe("read-only desktop data api", () => {
 
     invoke.mockResolvedValueOnce({
       previewId: "init-1",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       plannedPaths: [],
       warnings: [],
     });
@@ -241,7 +241,7 @@ describe("read-only desktop data api", () => {
 
     invoke.mockResolvedValueOnce({
       previewId: "init-1",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       created: true,
       createdPaths: [],
     });
@@ -256,14 +256,14 @@ describe("read-only desktop data api", () => {
       },
     });
 
-    invoke.mockResolvedValueOnce({ assetCenterPath: "~/.my-agent-assets" });
+    invoke.mockResolvedValueOnce({ assetCenterPath: "~/.my-agent-assets-data" });
     await api.settingsLoad();
     expect(invoke).toHaveBeenLastCalledWith("settings_load");
 
     invoke.mockResolvedValueOnce({
       previewId: "settings-save-1",
       settings: savedSettings,
-      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+      affectedPaths: ["/tmp/home/.my-agent-assets-data/config.yaml"],
       plannedEffects: ["replace settings"],
       warnings: [],
       canApply: true,
@@ -283,7 +283,7 @@ describe("read-only desktop data api", () => {
     invoke.mockResolvedValueOnce({
       previewId: "settings-save-1",
       settings: savedSettings,
-      affectedPaths: ["/tmp/home/.my-agent-assets/config.yaml"],
+      affectedPaths: ["/tmp/home/.my-agent-assets-data/config.yaml"],
     });
     await api.settingsApply(settingsApplyInput);
     expect(invoke).toHaveBeenLastCalledWith("settings_apply", {
@@ -642,7 +642,7 @@ describe("read-only desktop data api", () => {
     await expect(api.listProjects()).resolves.toEqual([]);
     await expect(api.listBackups()).resolves.toEqual([]);
     await expect(api.settingsLoad()).resolves.toMatchObject({
-      assetCenterPath: "~/.my-agent-assets",
+      assetCenterPath: "~/.my-agent-assets-data",
       scanRoots: ["~/.claude", "~/workspace", "~/code"],
     });
     await expect(api.settingsPreview({ settings: savedSettings })).rejects.toThrow("requires the Tauri runtime");

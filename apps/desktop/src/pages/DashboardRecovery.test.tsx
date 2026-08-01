@@ -60,7 +60,7 @@ describe("Dashboard recovery status", () => {
     listProjects.mockResolvedValue([]);
     listAuditLog.mockResolvedValue([]);
     gitStatus.mockResolvedValue({
-      repositoryPath: "/tmp/home/.my-agent-assets",
+      repositoryPath: "/tmp/home/.my-agent-assets-data",
       isRepository: true,
       statusMessage: "Repository ready.",
       branch: "main",
@@ -76,7 +76,7 @@ describe("Dashboard recovery status", () => {
     });
     initializationPreview.mockResolvedValue({
       previewId: "init-ready",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       plannedPaths: [],
       warnings: [],
       alreadyInitialized: true,
@@ -85,7 +85,7 @@ describe("Dashboard recovery status", () => {
       expiresAtEpochSeconds: 700,
     });
     doctorReport.mockResolvedValue({
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       initialized: true,
       checks: [
         { id: "claude_runtime", label: "Claude Code Runtime", status: "ok", message: "已检测到本机配置。" },
@@ -162,7 +162,7 @@ describe("Dashboard recovery status", () => {
       status: "conflict",
       category: "local",
       description: "",
-      sourcePath: "/tmp/home/.my-agent-assets/assets/skills/review",
+      sourcePath: "/tmp/home/.my-agent-assets-data/assets/skills/review",
       scope: "user",
       updatedAt: null,
       mountTargets: ["claude-user-skills", "codex-user-skills"],
@@ -252,8 +252,8 @@ describe("Dashboard recovery status", () => {
     });
     const preview = {
       previewId: "init-abc",
-      assetCenterPath: "/tmp/home/.my-agent-assets",
-      plannedPaths: ["/tmp/home/.my-agent-assets", "/tmp/home/.my-agent-assets/assets"],
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
+      plannedPaths: ["/tmp/home/.my-agent-assets-data", "/tmp/home/.my-agent-assets-data/assets"],
       warnings: [],
       alreadyInitialized: false,
       canApply: true,
@@ -296,14 +296,14 @@ describe("Dashboard recovery status", () => {
       message: "没有未完成事务。",
     });
     doctorReport.mockResolvedValue({
-      assetCenterPath: "/tmp/home/.my-agent-assets",
+      assetCenterPath: "/tmp/home/.my-agent-assets-data",
       initialized: true,
       checks: [],
       contentDiagnostics: [{
         assetId: "skill:orphan",
         assetType: "skill",
         name: "orphan",
-        path: "/tmp/home/.my-agent-assets/assets/skills/orphan",
+        path: "/tmp/home/.my-agent-assets-data/assets/skills/orphan",
         state: "unregistered",
         message: "canonical content exists without an assets.yaml record",
       }],
@@ -322,8 +322,8 @@ describe("Dashboard recovery status", () => {
       previewId: "repair-1",
       assetId: "skill:orphan",
       action: "register_unregistered_content",
-      affectedPaths: ["/tmp/home/.my-agent-assets/assets.yaml"],
-      journalPath: "/tmp/home/.my-agent-assets/operations/repair.yaml",
+      affectedPaths: ["/tmp/home/.my-agent-assets-data/assets.yaml"],
+      journalPath: "/tmp/home/.my-agent-assets-data/operations/repair.yaml",
     });
 
     render(<DashboardPage appInfo={{

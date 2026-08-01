@@ -50,7 +50,7 @@ describe("MCP canonical management", () => {
       status: "mounted",
       category: "资产中心",
       description: "Local files",
-      sourcePath: "/tmp/home/.my-agent-assets/assets/mcps/filesystem.json",
+      sourcePath: "/tmp/home/.my-agent-assets-data/assets/mcps/filesystem.json",
       scope: "local",
       updatedAt: "2026-07-01T10:00:00Z",
       mountTargets: ["/tmp/home/.claude.json"],
@@ -82,8 +82,8 @@ describe("MCP canonical management", () => {
       previewId: "mcp-save-1",
       operation: "edit",
       assetId: "mcp:filesystem",
-      canonicalPath: "/tmp/home/.my-agent-assets/assets/mcps/filesystem.json",
-      registryPath: "/tmp/home/.my-agent-assets/assets.yaml",
+      canonicalPath: "/tmp/home/.my-agent-assets-data/assets/mcps/filesystem.json",
+      registryPath: "/tmp/home/.my-agent-assets-data/assets.yaml",
       outOfSyncTargetIds: ["claude-user-mcp"],
       targetCompatibility: [{
         targetId: "claude-user-mcp",
@@ -100,7 +100,7 @@ describe("MCP canonical management", () => {
       previewId: "mcp-save-1",
       operation: "edit",
       assetId: "mcp:filesystem",
-      canonicalPath: "/tmp/home/.my-agent-assets/assets/mcps/filesystem.json",
+      canonicalPath: "/tmp/home/.my-agent-assets-data/assets/mcps/filesystem.json",
       outOfSyncTargetIds: ["claude-user-mcp"],
       affectedPaths: [],
     });
@@ -131,7 +131,7 @@ describe("MCP canonical management", () => {
     canonicalDeletePreview.mockImplementation(async (input: { removeMcpTargetEntries: boolean }) => ({
       previewId: "delete-mcp-1",
       assetId: "mcp:filesystem",
-      canonicalPath: "/tmp/home/.my-agent-assets/assets/mcps/filesystem.json",
+      canonicalPath: "/tmp/home/.my-agent-assets-data/assets/mcps/filesystem.json",
       removeMcpTargetEntries: input.removeMcpTargetEntries,
       bindings: [{
         targetId: "claude-user-mcp",

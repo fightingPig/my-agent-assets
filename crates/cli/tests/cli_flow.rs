@@ -107,7 +107,7 @@ fn doctor_consistency_repair_is_preview_bound_and_only_repairs_selected_mismatch
     let home = TestHome::new();
     success(&home.path, &["init", "--apply"]);
     home.write(
-        ".my-agent-assets/assets/skills/orphan/SKILL.md",
+        ".my-agent-assets-data/assets/skills/orphan/SKILL.md",
         "# Orphan\n",
     );
 
@@ -122,7 +122,7 @@ fn doctor_consistency_repair_is_preview_bound_and_only_repairs_selected_mismatch
         &["doctor", "repair", "register-unregistered", "skill:orphan"],
     );
     assert_eq!(preview["canApply"], true);
-    assert!(home.path.join(".my-agent-assets/assets.yaml").exists());
+    assert!(home.path.join(".my-agent-assets-data/assets.yaml").exists());
     let applied = json_output(
         &home.path,
         &[
@@ -170,7 +170,7 @@ fn shared_core_cli_flow_uses_source_and_target_ids() {
     let scan = json_output(&home.path, &["scan", "--scope", "user"]);
     assert_eq!(scan["sources"].as_array().unwrap().len(), 3);
     assert!(
-        fs::read_dir(home.path.join(".my-agent-assets/assets/skills"))
+        fs::read_dir(home.path.join(".my-agent-assets-data/assets/skills"))
             .unwrap()
             .next()
             .is_none()
@@ -194,11 +194,11 @@ fn shared_core_cli_flow_uses_source_and_target_ids() {
     );
     assert!(home
         .path
-        .join(".my-agent-assets/assets/skills/review/SKILL.md")
+        .join(".my-agent-assets-data/assets/skills/review/SKILL.md")
         .is_file());
     assert!(home
         .path
-        .join(".my-agent-assets/assets/commands/deploy.md")
+        .join(".my-agent-assets-data/assets/commands/deploy.md")
         .is_file());
 
     let project_text = project.to_string_lossy().to_string();
@@ -273,7 +273,7 @@ fn shared_core_cli_flow_uses_source_and_target_ids() {
     );
     assert!(!home
         .path
-        .join(".my-agent-assets/assets/skills/review")
+        .join(".my-agent-assets-data/assets/skills/review")
         .exists());
     assert!(!project.join(".claude/skills/review").exists());
     assert!(!project.join(".agents/skills/review").exists());
@@ -313,11 +313,11 @@ fn backup_delete_is_preview_bound_and_never_restores_historical_files() {
     let home = TestHome::new();
     success(&home.path, &["init", "--apply"]);
     home.write(
-        ".my-agent-assets/backups/local/removable/manifest.yaml",
+        ".my-agent-assets-data/backups/local/removable/manifest.yaml",
         "schemaVersion: 1\noperation: mount\ntarget: /tmp/runtime/.claude.json\n",
     );
     home.write(
-        ".my-agent-assets/backups/local/removable/content.json",
+        ".my-agent-assets-data/backups/local/removable/content.json",
         "{}",
     );
 
@@ -343,7 +343,7 @@ fn backup_delete_is_preview_bound_and_never_restores_historical_files() {
     assert_eq!(applied["deleted"], true);
     assert!(!home
         .path
-        .join(".my-agent-assets/backups/local/removable")
+        .join(".my-agent-assets-data/backups/local/removable")
         .exists());
 }
 
@@ -351,7 +351,7 @@ fn backup_delete_is_preview_bound_and_never_restores_historical_files() {
 fn cli_startup_recovers_an_interrupted_transaction_before_reading_status() {
     let home = TestHome::new();
     success(&home.path, &["init", "--apply"]);
-    let registry = home.path.join(".my-agent-assets/assets.yaml");
+    let registry = home.path.join(".my-agent-assets-data/assets.yaml");
     let original = fs::read(&registry).unwrap();
 
     let journal = OperationJournal::start_recoverable(
@@ -374,7 +374,7 @@ fn cli_startup_recovers_an_interrupted_transaction_before_reading_status() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("成功回滚 1 个"));
     let journal_text = fs::read_to_string(
         home.path
-            .join(".my-agent-assets/operations/cli-crash-recovery.yaml"),
+            .join(".my-agent-assets-data/operations/cli-crash-recovery.yaml"),
     )
     .unwrap();
     assert!(journal_text.contains("status: recovered"));

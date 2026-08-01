@@ -62,7 +62,7 @@ These values are part of the public JSON contract and must not be inferred only 
 
 ### `initialization_preview` / `initialization_apply`
 
-- **Purpose:** Explicitly create the fixed `~/.my-agent-assets` asset center and
+- **Purpose:** Explicitly create the fixed `~/.my-agent-assets-data` asset center and
   initialize its local Git repository on branch `main`.
 - **Preview input:** None.
 - **Apply input:** `{ previewId, previewGeneratedAtEpochSeconds }`.
@@ -257,7 +257,7 @@ shell command string.
 
 The command does not accept a frontend path. Shared core resolves `entryId`
 against the current backup history, rejects symlinked manifests, canonicalizes
-the result beneath `~/.my-agent-assets/backups`, and only then asks Finder,
+the result beneath `~/.my-agent-assets-data/backups`, and only then asks Finder,
 Explorer, or the Linux file manager to reveal it. Platform commands are invoked
 with argument arrays and never through a shell.
 
@@ -371,7 +371,7 @@ cannot be confirmed; callers must refresh status instead of immediately retrying
 
 Current behavior:
 
-- The target repository is `~/.my-agent-assets`.
+- The target repository is `~/.my-agent-assets-data`.
 - The backend locks, revalidates `previewId`, and verifies remote identity again.
 - Pull requires a clean worktree, creates a local canonical backup, and uses
   `git pull --ff-only`.
@@ -440,9 +440,9 @@ manual diagnosis.
 
 Current settings behavior:
 
-- Settings are stored as YAML at `~/.my-agent-assets/config.yaml`.
+- Settings are stored as YAML at `~/.my-agent-assets-data/config.yaml`.
 - Missing config files are not created by `settings_load`.
-- `assetCenterPath` is normalized to the fixed `~/.my-agent-assets` V1 location and is read-only in the GUI.
+- `assetCenterPath` is normalized to the fixed `~/.my-agent-assets-data` V1 location and is read-only in the GUI.
 - Preview IDs use SHA-256 over normalized input, generation time, and the current settings-file state.
 - Previews expire after 10 minutes and are recomputed after acquiring the operation lock.
 - Stale or changed previews are rejected before any write.

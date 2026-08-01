@@ -618,7 +618,7 @@ mod tests {
         let preview = SyncPreview {
             preview_id: "preview:sync:push".into(),
             direction: SyncDirection::Push,
-            repository_path: "~/.my-agent-assets".into(),
+            repository_path: "~/.my-agent-assets-data".into(),
             branch: "main".into(),
             remote: Some("origin/main".into()),
             steps: vec![PlanStep {
@@ -636,7 +636,7 @@ mod tests {
             json!({
                 "direction": "push",
                 "previewId": "preview:sync:push",
-                "repositoryPath": "~/.my-agent-assets",
+                "repositoryPath": "~/.my-agent-assets-data",
                 "branch": "main",
                 "remote": "origin/main",
                 "steps": [{
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn git_status_json_shape_includes_read_only_state() {
         let status = GitStatus {
-            repository_path: "~/.my-agent-assets".into(),
+            repository_path: "~/.my-agent-assets-data".into(),
             is_repository: false,
             status_message: "Asset center directory does not exist.".into(),
             branch: "".into(),
@@ -692,7 +692,7 @@ mod tests {
         assert_eq!(
             wire_value(status),
             json!({
-                "repositoryPath": "~/.my-agent-assets",
+                "repositoryPath": "~/.my-agent-assets-data",
                 "isRepository": false,
                 "statusMessage": "Asset center directory does not exist.",
                 "branch": "",

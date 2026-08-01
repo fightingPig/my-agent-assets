@@ -9,8 +9,8 @@ BRANCH="maa-e2e-$(date +%s)-$$"
 BIN="$ROOT_DIR/target/debug/maa"
 
 cleanup() {
-  if [[ -n "$REMOTE_URL" && -d "$FAKE_HOME/.my-agent-assets/.git" ]]; then
-    git -C "$FAKE_HOME/.my-agent-assets" push origin --delete "$BRANCH" >/dev/null 2>&1 || true
+  if [[ -n "$REMOTE_URL" && -d "$FAKE_HOME/.my-agent-assets-data/.git" ]]; then
+    git -C "$FAKE_HOME/.my-agent-assets-data" push origin --delete "$BRANCH" >/dev/null 2>&1 || true
   fi
   rm -rf "$TMP_ROOT"
 }
@@ -41,7 +41,7 @@ cargo build -p my-agent-assets-cli --bin maa >/dev/null
 SOURCE_ID="$(jq -r '.sources[] | select(.assetName == "review") | .sourceId' "$TMP_ROOT/scan.json")"
 "$BIN" --home "$FAKE_HOME" import "$SOURCE_ID" --scope user --apply >/dev/null
 
-REPOSITORY="$FAKE_HOME/.my-agent-assets"
+REPOSITORY="$FAKE_HOME/.my-agent-assets-data"
 git -C "$REPOSITORY" remote add origin "$REMOTE_URL"
 git -C "$REPOSITORY" branch -M "$BRANCH"
 

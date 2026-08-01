@@ -544,7 +544,7 @@ impl TargetRegistry {
 }
 
 pub fn registry_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets/targets.yaml")
+    crate::asset_center_path(&home).join("targets.yaml")
 }
 
 pub fn load(home: &Path) -> Result<TargetRegistry> {
@@ -637,7 +637,7 @@ fn executable_extensions() -> Vec<String> {
 }
 
 pub fn save(home: &Path, registry: &TargetRegistry) -> Result<()> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let path = guard_write_path(&root, &registry_path(home))?;
     let yaml = registry.to_yaml()?;
     let parent = path
@@ -1098,7 +1098,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         fs::create_dir_all(home.join(".claude")).unwrap();
         fs::create_dir_all(home.join(".codex")).unwrap();
         let registry = TargetRegistry::standard_user_targets(
@@ -1122,7 +1122,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         let registry = TargetRegistry::standard_user_targets(
             &home,
             ProviderState::NotInstalled,

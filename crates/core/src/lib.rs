@@ -29,6 +29,16 @@ pub mod target_management;
 pub mod targets;
 
 use std::fmt::{self, Display};
+use std::path::{Path, PathBuf};
+
+pub const ASSET_CENTER_DIRECTORY_NAME: &str = ".my-agent-assets-data";
+
+pub fn asset_center_path<H>(home: &H) -> PathBuf
+where
+    H: AsRef<Path> + ?Sized,
+{
+    home.as_ref().join(ASSET_CENTER_DIRECTORY_NAME)
+}
 
 pub type Result<T> = std::result::Result<T, MaaError>;
 

@@ -174,7 +174,7 @@ struct SchemaHeader {
 }
 
 pub fn registry_path(home: &Path) -> PathBuf {
-    home.join(".my-agent-assets/assets.yaml")
+    crate::asset_center_path(&home).join("assets.yaml")
 }
 
 pub fn load(home: &Path) -> Result<AssetRegistry, RegistryError> {
@@ -205,7 +205,7 @@ pub fn load(home: &Path) -> Result<AssetRegistry, RegistryError> {
 
 pub fn save(home: &Path, registry: &AssetRegistry) -> Result<(), RegistryError> {
     registry.validate()?;
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let path = registry_path(home);
     let guarded = guard_write_path(&root, &path).map_err(|source| RegistryError::Io {
         path: path.clone(),
@@ -317,7 +317,7 @@ fn canonical_directory(home: &Path, kind: AssetKind) -> PathBuf {
         AssetKind::Command => "commands",
         AssetKind::Mcp => "mcps",
     };
-    home.join(".my-agent-assets/assets").join(child)
+    crate::asset_center_path(&home).join("assets").join(child)
 }
 
 fn validate_content(kind: AssetKind, path: &Path) -> (ContentState, Option<String>) {
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn registry_round_trips_and_rejects_newer_schema() {
         let home = test_home("round-trip");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         let mut registry = AssetRegistry::default();
         registry
             .upsert(AssetRecord::new(AssetKind::Skill, "review").unwrap())
@@ -418,14 +418,18 @@ mod tests {
     #[test]
     fn consistency_reports_missing_unregistered_and_invalid_content() {
         let home = test_home("consistency");
-        fs::create_dir_all(home.join(".my-agent-assets/assets/skills/orphan")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/skills/orphan")).unwrap();
         fs::write(
-            home.join(".my-agent-assets/assets/skills/orphan/SKILL.md"),
+            crate::asset_center_path(&home).join("assets/skills/orphan/SKILL.md"),
             "# Orphan",
         )
         .unwrap();
-        fs::create_dir_all(home.join(".my-agent-assets/assets/mcps")).unwrap();
-        fs::write(home.join(".my-agent-assets/assets/mcps/bad.json"), "{bad").unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/mcps")).unwrap();
+        fs::write(
+            crate::asset_center_path(&home).join("assets/mcps/bad.json"),
+            "{bad",
+        )
+        .unwrap();
         let mut registry = AssetRegistry::default();
         registry
             .upsert(AssetRecord::new(AssetKind::Command, "missing").unwrap())

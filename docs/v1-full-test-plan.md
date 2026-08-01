@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-26
 
-This plan covers the current My Agent Assets V1 desktop and CLI implementation. All automated write tests must use a disposable fake HOME. Real `~/.claude`, `~/.claude.json`, and `~/.my-agent-assets` are excluded from automated testing.
+This plan covers the current My Agent Assets V1 desktop and CLI implementation. All automated write tests must use a disposable fake HOME. Real `~/.claude`, `~/.claude.json`, and `~/.my-agent-assets-data` are excluded from automated testing.
 
 ## Status Legend
 

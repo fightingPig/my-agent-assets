@@ -394,7 +394,7 @@ fn preview_fingerprint(
 }
 
 fn atomic_write_asset(home: &Path, path: &Path, content: &[u8]) -> Result<()> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let path = guard_write_path(&root, path)?;
     let parent = path
         .parent()
@@ -458,7 +458,7 @@ mod tests {
 
     fn temp_home(name: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!("maa-mcp-save-{name}-{}", operation_id()));
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         for path in [
             root.join("assets/mcps"),
             root.join("backups/local"),

@@ -568,7 +568,7 @@ mod tests {
         .unwrap();
         assert_eq!(result.status, ImportApplyStatus::Imported);
         assert!(home
-            .join(".my-agent-assets/assets/skills/review/SKILL.md")
+            .join(".my-agent-assets-data/assets/skills/review/SKILL.md")
             .is_file());
         let assets = list_assets_for_home(
             &home,

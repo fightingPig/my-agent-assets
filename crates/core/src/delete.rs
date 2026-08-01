@@ -265,7 +265,7 @@ fn apply_delete_inner(
     let (kind, name) = parse_asset_id(&request.request.asset_id)
         .map_err(|error| MaaError::new(error.to_string()))?;
     let operation_id = operation_id();
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let staging = guard_write_path(
         &root,
         &root
@@ -417,7 +417,7 @@ fn create_portable_backup(
     canonical: &Path,
     assets: &[u8],
 ) -> Result<String> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let id = format!("delete-{operation_id}");
     let backup = guard_write_path(&root, &root.join("backups/portable").join(&id))?;
     fs::create_dir_all(&backup)?;
@@ -442,7 +442,7 @@ fn create_local_backup(
     impacts: &[DeleteBindingImpact],
     mounts: &[u8],
 ) -> Result<String> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let id = format!("delete-{operation_id}");
     let backup = guard_write_path(&root, &root.join("backups/local").join(&id))?;
     fs::create_dir_all(&backup)?;
@@ -719,7 +719,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let root = home.join(".my-agent-assets");
+        let root = crate::asset_center_path(&home);
         for path in [
             root.join("assets/skills"),
             root.join("assets/commands"),

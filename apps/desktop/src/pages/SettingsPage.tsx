@@ -20,6 +20,13 @@ import {
   settingsLoad,
   settingsPreview,
 } from "../app/data-api";
+import {
+  DEFAULT_ASSET_CENTER_PATH,
+  DEFAULT_ASSET_REPOSITORY_SLUG,
+  DEFAULT_GITHUB_HTTPS_REMOTE_TEMPLATE,
+  DEFAULT_GITHUB_SSH_REMOTE_TEMPLATE,
+  DEFAULT_GIT_REMOTE_NAME,
+} from "../app/defaults";
 import type {
   AppInfo,
   ApplyResult,
@@ -36,14 +43,14 @@ import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 const noDragControl = { ...NO_DRAG_REGION_STYLE };
 
 const fallbackSettings: DesktopSettings = {
-  assetCenterPath: "~/.my-agent-assets",
+  assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
   scanRoots: ["~/workspace", "~/code"],
   maxDepth: 5,
   backupBeforeApply: true,
   backupWarningThresholdBytes: 1024 * 1024 * 1024,
   planOnlyByDefault: true,
   gitDefaultBranch: "main",
-  gitRemote: "origin",
+  gitRemote: DEFAULT_GIT_REMOTE_NAME,
   allowPublicRemotePush: false,
   appearanceTheme: "system",
   density: "compact",
@@ -54,7 +61,7 @@ const fallbackSettings: DesktopSettings = {
 
 const demoInitialization: InitializationPreview = {
   previewId: "visual-qa-initialized",
-  assetCenterPath: "~/.my-agent-assets",
+  assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
   plannedPaths: [],
   warnings: [],
   alreadyInitialized: true,
@@ -65,7 +72,7 @@ const demoInitialization: InitializationPreview = {
 
 const uninitializedVisualQaPreview: InitializationPreview = {
   previewId: "visual-qa-uninitialized",
-  assetCenterPath: "~/.my-agent-assets",
+  assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
   plannedPaths: [],
   warnings: ["资产中心尚未初始化。请先前往首页完成初始化。"],
   alreadyInitialized: false,
@@ -371,7 +378,7 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
           <label>
             <span>资产中心（V1 固定路径）</span>
             <input data-no-drag="true" readOnly style={noDragControl} value={settings.assetCenterPath} />
-            <small>当前后端固定使用 ~/.my-agent-assets，迁移能力将在后续版本提供。</small>
+            <small>当前后端固定使用 {DEFAULT_ASSET_CENTER_PATH}；旧目录不会自动迁移。</small>
           </label>
         </div>
         <p className="settings-path-guidance">已维护项目仅在“项目列表”中添加、编辑或移除；这里不再自动扫描 workspace/code 目录。</p>
@@ -437,10 +444,10 @@ export function SettingsPage({ appInfo, demoMode = false, visualQaState }: Setti
           <label className="settings-control-wide">
             <span>远程仓库 URL</span>
             <div className="path-picker-control">
-              <input data-no-drag="true" disabled={writesDisabled} onChange={(event) => { setRemoteUrl(event.target.value); setRemotePreview(null); setRemoteMessage(""); }} placeholder="git@github.com:owner/private-assets.git" style={noDragControl} value={remoteUrl} />
+              <input data-no-drag="true" disabled={writesDisabled} onChange={(event) => { setRemoteUrl(event.target.value); setRemotePreview(null); setRemoteMessage(""); }} placeholder={DEFAULT_GITHUB_SSH_REMOTE_TEMPLATE} style={noDragControl} value={remoteUrl} />
               <button className="asset-secondary-action" data-no-drag="true" disabled={writesDisabled || remoteBusy || remoteNameDirty || !remoteUrl.trim()} onClick={() => void handleRemotePreview()} style={noDragControl} type="button">预览配置</button>
             </div>
-            <small>{remoteNameDirty ? "远程名称有未保存改动；请先保存设置。" : "仅在确认后修改资产中心的 Git remote；不会执行 fetch、pull 或 push。"}</small>
+            <small>{remoteNameDirty ? "远程名称有未保存改动；请先保存设置。" : `建议仓库名：${DEFAULT_ASSET_REPOSITORY_SLUG}。SSH：${DEFAULT_GITHUB_SSH_REMOTE_TEMPLATE}；HTTPS：${DEFAULT_GITHUB_HTTPS_REMOTE_TEMPLATE}。填写真实 URL 后再预览确认。`}</small>
           </label>
         </div>
         {remotePreview ? (

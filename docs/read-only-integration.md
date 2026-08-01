@@ -53,16 +53,22 @@ Internal read functions accept an explicit `Path`, so tests can use temporary fa
 ## Data Sources
 
 `settings_load` returns default settings when no config exists. After a
-confirmed `settings_apply`, it reads `~/.my-agent-assets/config.yaml`. In V1,
+confirmed `settings_apply`, it reads `~/.my-agent-assets-data/config.yaml`. In V1,
 `assetCenterPath` is informational and normalized to the fixed
-`~/.my-agent-assets` location; the Settings UI exposes it as read-only until
-relocation is implemented consistently across all commands.
+`~/.my-agent-assets-data` location; the Settings UI exposes it as read-only.
+All commands use this fixed location consistently; changing the setting is not
+an available operation in this release.
+
+The beta.4 path change is intentionally a direct switch: the legacy
+`~/.my-agent-assets` directory is left untouched and is not read or migrated.
+Users with legacy data must copy the canonical assets and recreate mounts
+manually before removing the old directory.
 
 `list_assets` reads:
 
-- `~/.my-agent-assets/assets/skills/`
-- `~/.my-agent-assets/assets/commands/`
-- `~/.my-agent-assets/assets/mcps/`
+- `~/.my-agent-assets-data/assets/skills/`
+- `~/.my-agent-assets-data/assets/commands/`
+- `~/.my-agent-assets-data/assets/mcps/`
 
 Skills support both `<name>/` directories and root `.md` files. Commands read `.md` files. MCP assets read `.json` files, with invalid JSON marked as `invalid`.
 
@@ -81,7 +87,7 @@ Asset summaries also derive current local usage:
 A directory is treated as a project when it contains `package.json`, `Cargo.toml`, `.git/`, or `.claude/`.
 Project summaries count project runtime Skills, Commands, and MCP servers and return their names as current mounts.
 
-`list_backups` reads `~/.my-agent-assets/backups/*/manifest.json` and returns manifest summaries only. It does not read backed-up file contents, create backup directories, or restore files. Missing or invalid manifests are skipped.
+`list_backups` reads `~/.my-agent-assets-data/backups/*/manifest.json` and returns manifest summaries only. It does not read backed-up file contents, create backup directories, or restore files. Missing or invalid manifests are skipped.
 
 `scan_assets` is read-only and imports nothing. It scans:
 
@@ -99,7 +105,7 @@ Both commands are read-only. They do not create directories, write TOML, import 
 
 ## Git Safety
 
-`git_status` only reads `~/.my-agent-assets` repository state. It may run these Git commands using `std::process::Command` argument arrays:
+`git_status` only reads `~/.my-agent-assets-data` repository state. It may run these Git commands using `std::process::Command` argument arrays:
 
 - `git rev-parse --is-inside-work-tree`
 - `git branch --show-current`

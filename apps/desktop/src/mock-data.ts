@@ -25,7 +25,7 @@ export const stats: Stat[] = [
 ];
 
 export const systemChecks = [
-  { label: "资产中心", detail: "~/.my-agent-assets", status: "正常" },
+  { label: "资产中心", detail: "~/.my-agent-assets-data", status: "正常" },
   { label: "Git", detail: "main · 工作区干净", status: "正常" },
   { label: "Claude Runtime", detail: "预览模式，未读取", status: "隔离" },
   { label: "符号链接权限", detail: "macOS 可用", status: "正常" },

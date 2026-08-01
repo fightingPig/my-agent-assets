@@ -157,7 +157,7 @@ pub fn apply_diagnostic_export(
             "diagnostic export preview is stale; generate a new preview before applying",
         ));
     }
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let output = guard_write_path(&root, &preview.package_path)?;
     let mut journal = OperationJournal::start_recoverable(
         home,
@@ -211,23 +211,34 @@ fn sanitize_doctor(report: &DoctorReport) -> SanitizedDoctorSummary {
 fn package_path(home: &Path, generated_at_epoch_seconds: u64, preview_id: &str) -> PathBuf {
     let suffix = preview_id.rsplit('-').next().unwrap_or("preview");
     let suffix = &suffix[..suffix.len().min(12)];
-    home.join(".my-agent-assets/logs/diagnostics").join(format!(
-        "diagnostic-{generated_at_epoch_seconds}-{suffix}.json"
-    ))
+    crate::asset_center_path(&home)
+        .join("logs/diagnostics")
+        .join(format!(
+            "diagnostic-{generated_at_epoch_seconds}-{suffix}.json"
+        ))
 }
 
 fn export_fingerprint(home: &Path, generated_at_epoch_seconds: u64) -> Result<String> {
     let mut fingerprint = PreviewFingerprint::new("diagnostic-export");
     fingerprint.add_u64("generated-at", generated_at_epoch_seconds);
     for (label, path) in [
-        ("asset-registry", home.join(".my-agent-assets/assets.yaml")),
+        (
+            "asset-registry",
+            crate::asset_center_path(&home).join("assets.yaml"),
+        ),
         (
             "target-registry",
-            home.join(".my-agent-assets/targets.yaml"),
+            crate::asset_center_path(&home).join("targets.yaml"),
         ),
-        ("mount-registry", home.join(".my-agent-assets/mounts.yaml")),
-        ("operations", home.join(".my-agent-assets/operations")),
-        ("logs", home.join(".my-agent-assets/logs")),
+        (
+            "mount-registry",
+            crate::asset_center_path(&home).join("mounts.yaml"),
+        ),
+        (
+            "operations",
+            crate::asset_center_path(&home).join("operations"),
+        ),
+        ("logs", crate::asset_center_path(&home).join("logs")),
     ] {
         fingerprint.add_path_if_present(label, &path)?;
     }
@@ -357,9 +368,13 @@ mod tests {
     #[test]
     fn preview_bound_package_name_changes_with_the_fingerprint() {
         let home = home("unique-path");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         let first = preview_diagnostic_export_at(&home, 123).unwrap();
-        fs::write(home.join(".my-agent-assets/assets.yaml"), "changed").unwrap();
+        fs::write(
+            crate::asset_center_path(&home).join("assets.yaml"),
+            "changed",
+        )
+        .unwrap();
         let second = preview_diagnostic_export_at(&home, 123).unwrap();
         assert_ne!(first.preview_id, second.preview_id);
         assert_ne!(first.package_path, second.package_path);
@@ -373,7 +388,7 @@ mod tests {
 
         let preview_error = preview_diagnostic_export(&home).unwrap_err();
         assert!(preview_error.to_string().contains("not initialized"));
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
 
         let apply_error = apply_diagnostic_export(
             &home,
@@ -384,7 +399,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(apply_error.to_string().contains("not initialized"));
-        assert!(!home.join(".my-agent-assets").exists());
+        assert!(!crate::asset_center_path(&home).exists());
         fs::remove_dir_all(home).unwrap();
     }
 }

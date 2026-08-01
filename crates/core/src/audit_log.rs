@@ -39,7 +39,7 @@ pub fn append_operation(home: &Path, operation_type: &str, outcome: AuditOutcome
     if !valid_operation_type(operation_type) {
         return Err(MaaError::new("audit log operation type is invalid"));
     }
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let now = epoch_seconds();
     let directory = guard_write_path(&root, &root.join("logs"))?;
     fs::create_dir_all(&directory)?;
@@ -64,7 +64,7 @@ pub fn append_operation(home: &Path, operation_type: &str, outcome: AuditOutcome
 }
 
 pub fn list_log_files(home: &Path) -> Result<Vec<PathBuf>> {
-    let directory = home.join(".my-agent-assets/logs");
+    let directory = crate::asset_center_path(&home).join("logs");
     if !directory.is_dir() {
         return Ok(Vec::new());
     }
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn writes_only_redacted_operation_metadata_and_ignores_symlinks() {
         let home = home("redacted");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         append_operation(&home, "mcp_save", AuditOutcome::Completed).unwrap();
         let logs = list_log_files(&home).unwrap();
         assert_eq!(logs.len(), 1);
@@ -193,16 +193,16 @@ mod tests {
     #[test]
     fn rejects_unsafe_operation_type() {
         let home = home("unsafe");
-        fs::create_dir_all(home.join(".my-agent-assets")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home)).unwrap();
         assert!(append_operation(&home, "mcp save: secret", AuditOutcome::Completed).is_err());
-        assert!(!home.join(".my-agent-assets/logs").exists());
+        assert!(!crate::asset_center_path(&home).join("logs").exists());
         let _ = fs::remove_dir_all(home);
     }
 
     #[test]
     fn prunes_only_old_regular_log_files() {
         let home = home("retention");
-        let logs = home.join(".my-agent-assets/logs");
+        let logs = crate::asset_center_path(&home).join("logs");
         fs::create_dir_all(&logs).unwrap();
         fs::write(logs.join("operations-0.jsonl"), "old\n").unwrap();
         fs::write(logs.join("unrelated.txt"), "keep\n").unwrap();
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn ignores_malformed_or_unexpected_log_content_when_reading_entries() {
         let home = home("read-redacted");
-        let logs = home.join(".my-agent-assets/logs");
+        let logs = crate::asset_center_path(&home).join("logs");
         fs::create_dir_all(&logs).unwrap();
         fs::write(
             logs.join("operations-1.jsonl"),

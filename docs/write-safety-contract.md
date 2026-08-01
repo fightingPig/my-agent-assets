@@ -172,7 +172,7 @@ Tests must not read or write:
 
 - real `~/.claude`
 - real `~/.claude.json`
-- real `~/.my-agent-assets`
+- real `~/.my-agent-assets-data`
 - real project `.claude`
 - real project `.mcp.json`
 
@@ -219,8 +219,8 @@ config unchanged.
 `canonical_mount_apply` supports fake-HOME-tested Skill and Command mounts plus
 MCP runtime config compilation:
 
-- Source assets are resolved from `~/.my-agent-assets/assets/skills` or `~/.my-agent-assets/assets/commands`
-- MCP source assets are resolved from `~/.my-agent-assets/assets/mcps/<name>.json`
+- Source assets are resolved from `~/.my-agent-assets-data/assets/skills` or `~/.my-agent-assets-data/assets/commands`
+- MCP source assets are resolved from `~/.my-agent-assets-data/assets/mcps/<name>.json`
 - Mount or compile targets must resolve under the backend's HOME
 - Mount sources must resolve inside the asset center without symlink traversal
 - ParentDir targets and symlinked target parents are rejected before creating directories or backups
@@ -230,14 +230,14 @@ MCP runtime config compilation:
 
 `settings_preview` and `settings_apply` support fake-HOME-tested settings persistence:
 
-- Settings are written to `~/.my-agent-assets/config.yaml`
+- Settings are written to `~/.my-agent-assets-data/config.yaml`
 - `settings_load` returns defaults when no config exists and reads the saved config when present
 - Preview IDs bind the normalized request, generation time, and current config-file SHA-256 state
 - Every shared-core preview fingerprint includes a process-instance nonce, so restarting the backend invalidates previously issued preview IDs
 - Apply validates the 10-minute expiry, acquires the operation lock, and recomputes the preview before writing
 - Changed requests or config files are rejected as stale before writing
 - Write failures are returned through Tauri as command errors; the frontend must not display success unless apply and reload both complete
-- `assetCenterPath` is fixed to `~/.my-agent-assets` in V1 and is not an editable relocation setting
+- `assetCenterPath` is fixed to `~/.my-agent-assets-data` in V1 and is not an editable relocation setting
 - Settings writes do not touch Claude runtime files
 - The fixed settings destination is guarded against symlinked parent directories
 - Empty path fields are normalized to defaults
@@ -245,7 +245,7 @@ MCP runtime config compilation:
 
 `sync_apply` supports fake-HOME-tested Git sync execution:
 
-- Targets only `~/.my-agent-assets`
+- Targets only `~/.my-agent-assets-data`
 - Rejects a symlinked asset-center repository before running Git
 - Recomputes `previewId` from current Git status before running a command
 - Rejects dirty worktrees, conflicts, missing upstreams, and non-repositories

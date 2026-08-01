@@ -2,15 +2,16 @@ import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, GitBranch, RefreshCw }
 import { useEffect, useState } from "react";
 import { gitStatus, listAuditLog, previewSync, safeCommandErrorMessage, settingsApply, settingsLoad, settingsPreview, syncApply } from "../app/data-api";
 import type { ApplyResult, AuditLogEntry, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
+import { DEFAULT_ASSET_CENTER_PATH, DEFAULT_GIT_REMOTE_NAME } from "../app/defaults";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
 
 const fallbackGitStatus: GitStatus = {
-  repositoryPath: "~/.my-agent-assets",
+  repositoryPath: DEFAULT_ASSET_CENTER_PATH,
   isRepository: false,
   statusMessage: "静态预览：尚未读取本地 Git 仓库。",
   branch: "main",
-  remoteName: "origin",
+  remoteName: DEFAULT_GIT_REMOTE_NAME,
   remoteIdentity: "github.com/example/private-assets",
   upstream: "origin/main",
   clean: true,
@@ -24,11 +25,11 @@ const fallbackGitStatus: GitStatus = {
 };
 
 const emptyGitStatus: GitStatus = {
-  repositoryPath: "~/.my-agent-assets",
+  repositoryPath: DEFAULT_ASSET_CENTER_PATH,
   isRepository: false,
   statusMessage: "尚未读取本地 Git 仓库。",
   branch: "",
-  remoteName: "origin",
+  remoteName: DEFAULT_GIT_REMOTE_NAME,
   clean: true,
   ahead: 0,
   behind: 0,
@@ -61,14 +62,14 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
     if (demoMode) {
       setStatus(fallbackGitStatus);
       setSettings({
-        assetCenterPath: "~/.my-agent-assets",
+        assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
         scanRoots: [],
         maxDepth: 5,
         backupBeforeApply: true,
         backupWarningThresholdBytes: 1024 * 1024 * 1024,
         planOnlyByDefault: true,
         gitDefaultBranch: "main",
-        gitRemote: "origin",
+        gitRemote: DEFAULT_GIT_REMOTE_NAME,
         allowPublicRemotePush: false,
         appearanceTheme: "system",
         density: "compact",

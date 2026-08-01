@@ -11,6 +11,7 @@ import {
   previewAdopt,
   safeCommandErrorMessage,
 } from "../app/data-api";
+import { DEFAULT_ASSET_CENTER_PATH } from "../app/defaults";
 import type {
   ApplyResult,
   AdoptPreview,
@@ -128,7 +129,7 @@ export function ScanImportPage({
         if (!cancelled) {
           setInitialization({
             previewId: "initialization-error",
-            assetCenterPath: "~/.my-agent-assets",
+            assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
             plannedPaths: [],
             warnings: [safeCommandErrorMessage(error, "无法确认资产中心状态，请先在首页检查初始化。")],
             alreadyInitialized: false,
@@ -417,7 +418,7 @@ export function ScanImportPage({
 function uninitializedVisualQaPreview(): InitializationPreview {
   return {
     previewId: "visual-qa-uninitialized",
-    assetCenterPath: "~/.my-agent-assets",
+    assetCenterPath: DEFAULT_ASSET_CENTER_PATH,
     plannedPaths: [],
     warnings: ["资产中心尚未初始化。请先前往首页完成初始化。"],
     alreadyInitialized: false,

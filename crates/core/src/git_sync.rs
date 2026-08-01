@@ -147,7 +147,7 @@ impl VisibilityVerifier for GhCliVisibilityVerifier {
 }
 
 pub fn status(home: &Path) -> GitStatus {
-    let repository = home.join(".my-agent-assets");
+    let repository = crate::asset_center_path(&home);
     let settings =
         settings::load(home).unwrap_or_else(|_| settings::Settings::defaults_for_home(home));
     status_for_repository(&repository, &settings.git_remote)
@@ -709,7 +709,7 @@ fn status_for_repository(repository: &Path, remote_name: &str) -> GitStatus {
 }
 
 fn guard_repository(home: &Path) -> Result<PathBuf> {
-    let repository = home.join(".my-agent-assets");
+    let repository = crate::asset_center_path(&home);
     guard_existing_path(home, &repository).map_err(|error| MaaError::new(error.to_string()))
 }
 
@@ -883,7 +883,7 @@ fn hex_digest(bytes: &[u8]) -> String {
 }
 
 fn create_pull_backup(home: &Path, operation_id: &str) -> Result<String> {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let id = format!("sync-pull-{operation_id}");
     let backup = root.join("backups/local").join(&id);
     fs::create_dir_all(&backup)?;
@@ -1228,7 +1228,7 @@ mod tests {
     fn setup(label: &str) -> (PathBuf, PathBuf) {
         let home = test_home(label);
         let remote = home.join("remote.git");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         run(&home, &["init", "--bare", remote.to_str().unwrap()]);
         run(
             &home,
@@ -1309,7 +1309,7 @@ mod tests {
     #[test]
     fn tracked_machine_local_paths_block_sync_even_when_unchanged() {
         let (home, _remote) = setup("tracked-local-state");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("targets.yaml"),
             "schemaVersion: 1\ntargets: []\n",
@@ -1347,7 +1347,7 @@ mod tests {
     #[test]
     fn push_stages_only_whitelist_and_rejects_public_visibility() {
         let (home, _) = setup("whitelist");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("assets/skills/review/SKILL.md"),
             "# Updated",
@@ -1382,7 +1382,7 @@ mod tests {
     #[test]
     fn public_remote_push_setting_allows_public_and_unverifiable_remotes_with_warning() {
         let (home, _) = setup("public-remote-setting");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("assets/skills/review/SKILL.md"),
             "# Updated",
@@ -1431,7 +1431,7 @@ mod tests {
     #[test]
     fn private_push_commits_whitelist_and_pushes_without_force() {
         let (home, remote) = setup("push");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("assets/skills/review/SKILL.md"),
             "# Updated",
@@ -1468,7 +1468,7 @@ mod tests {
     fn initial_private_push_supports_an_unborn_main_branch() {
         let home = test_home("initial-push");
         let remote = home.join("remote.git");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         run(&home, &["init", "--bare", remote.to_str().unwrap()]);
         fs::create_dir_all(repository.join("assets/skills/review")).unwrap();
         fs::create_dir_all(repository.join("backups/portable")).unwrap();
@@ -1519,7 +1519,7 @@ mod tests {
     #[test]
     fn push_recovers_when_process_crashes_after_sync_commit_step() {
         let (home, remote) = setup("push-crash-recovery");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("assets/skills/review/SKILL.md"),
             "# Updated",
@@ -1578,7 +1578,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let (home, remote) = setup("push-failure");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         fs::write(
             repository.join("assets/skills/review/SKILL.md"),
             "# Updated",
@@ -1617,7 +1617,7 @@ mod tests {
     #[test]
     fn pull_requires_clean_worktree_and_creates_local_backup() {
         let (home, remote) = setup("pull");
-        let repository = home.join(".my-agent-assets");
+        let repository = crate::asset_center_path(&home);
         let other = home.join("other");
         run(
             &home,

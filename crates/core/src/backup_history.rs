@@ -35,7 +35,7 @@ pub struct BackupHistoryEntry {
 }
 
 pub fn list_backups(home: &Path) -> Vec<BackupHistoryEntry> {
-    let root = home.join(".my-agent-assets/backups");
+    let root = crate::asset_center_path(&home).join("backups");
     let mut entries = Vec::new();
     scan_class(&root.join("portable"), BackupClass::Portable, &mut entries);
     scan_class(&root.join("local"), BackupClass::Local, &mut entries);
@@ -68,7 +68,9 @@ pub fn resolve_backup_entry(home: &Path, entry_id: &str) -> Result<BackupHistory
     if is_link_or_junction(&metadata) || !metadata.is_file() {
         return Err(MaaError::new("backup manifest must be a real file"));
     }
-    let backup_root = home.join(".my-agent-assets/backups").canonicalize()?;
+    let backup_root = crate::asset_center_path(&home)
+        .join("backups")
+        .canonicalize()?;
     let manifest = entry.manifest_path.canonicalize()?;
     if !manifest.starts_with(&backup_root) {
         return Err(MaaError::new("backup manifest escapes the backup root"));
@@ -387,7 +389,7 @@ mod tests {
     #[test]
     fn lists_portable_local_and_legacy_backups_without_restoring() {
         let home = home();
-        let root = home.join(".my-agent-assets/backups");
+        let root = crate::asset_center_path(&home).join("backups");
         let portable = root.join("portable/import-1");
         let local = root.join("local/mount-1");
         let legacy = root.join("legacy-1");
@@ -443,7 +445,7 @@ mod tests {
     fn symlinked_backup_directories_are_not_followed() {
         let home = home();
         let outside = home.join("outside");
-        let portable = home.join(".my-agent-assets/backups/portable");
+        let portable = crate::asset_center_path(&home).join("backups/portable");
         fs::create_dir_all(&outside).unwrap();
         fs::create_dir_all(&portable).unwrap();
         fs::write(outside.join("manifest.yaml"), "operation: delete\n").unwrap();
@@ -458,7 +460,7 @@ mod tests {
     fn symlinked_manifest_is_not_listed_or_revealed() {
         let home = home();
         let outside = home.join("outside.yaml");
-        let backup = home.join(".my-agent-assets/backups/local/linked");
+        let backup = crate::asset_center_path(&home).join("backups/local/linked");
         fs::create_dir_all(&backup).unwrap();
         fs::write(&outside, "operation: mount\n").unwrap();
         std::os::unix::fs::symlink(&outside, backup.join("manifest.yaml")).unwrap();

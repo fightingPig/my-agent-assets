@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PREVIEW_TTL_SECONDS: u64 = 600;
-const ROOT_NAME: &str = ".my-agent-assets";
+const ROOT_NAME: &str = crate::ASSET_CENTER_DIRECTORY_NAME;
 const REQUIRED_DIRECTORIES: &[&str] = &[
     "assets/skills",
     "assets/commands",
@@ -185,7 +185,7 @@ pub fn apply_initialization(
     }
 
     let staging = home.join(format!(
-        ".my-agent-assets.init-{}-{}",
+        "{ROOT_NAME}.init-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -411,7 +411,7 @@ struct InitializationLock {
 
 impl InitializationLock {
     fn acquire(home: &Path) -> Result<Self> {
-        let path = home.join(".my-agent-assets.init.lock");
+        let path = home.join(format!("{ROOT_NAME}.init.lock"));
         OpenOptions::new()
             .create_new(true)
             .write(true)
@@ -477,7 +477,7 @@ mod tests {
             .unwrap()
             .lines()
             .any(|line| line == "projects.yaml"));
-        assert!(!home.join(".my-agent-assets.init.lock").exists());
+        assert!(!home.join(".my-agent-assets-data.init.lock").exists());
 
         let preview = preview_initialization(&home).unwrap();
         assert!(preview.already_initialized);
@@ -507,6 +507,34 @@ mod tests {
             0,
             "first-start checks must not write into HOME"
         );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn legacy_asset_center_is_left_untouched_and_not_migrated() {
+        let home = home("legacy-path");
+        let legacy = home.join(".my-agent-assets");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("legacy-marker.txt"), "keep").unwrap();
+
+        let preview = preview_initialization(&home).unwrap();
+        assert_eq!(preview.asset_center_path, crate::asset_center_path(&home));
+        assert!(preview.can_apply);
+        assert!(!preview.already_initialized);
+        assert!(legacy.join("legacy-marker.txt").is_file());
+
+        let applied = apply_initialization(
+            &home,
+            &InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
+
+        assert!(applied.created);
+        assert!(crate::asset_center_path(&home).is_dir());
+        assert!(legacy.join("legacy-marker.txt").is_file());
         let _ = fs::remove_dir_all(home);
     }
 

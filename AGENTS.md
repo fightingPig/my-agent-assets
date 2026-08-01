@@ -280,6 +280,11 @@ Do not modify window config or AppShell window strategy while adding provider su
 
 - The asset repository is the Git repository inside the user's asset center.
   It is separate from this application's source-code repository.
+- The default asset center is `~/.my-agent-assets-data`. The legacy
+  `~/.my-agent-assets` directory is not read or migrated automatically.
+- The Git remote alias defaults to `origin`. The recommended remote repository
+  slug is `my-agent-assets-data`; the owner and SSH/HTTPS URL must be supplied
+  and confirmed by the user.
 - Push defaults to verified GitHub private repositories.
 - Public remote Push is allowed only after the user explicitly enables the
   setting through preview and confirmation. Public or unknown visibility must
@@ -330,6 +335,7 @@ src/
 ├── app/
 │   ├── CurrentPage.tsx
 │   ├── contracts.ts
+│   ├── defaults.ts
 │   ├── data-api.ts
 │   ├── detail-context.ts
 │   ├── provider.ts

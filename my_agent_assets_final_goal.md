@@ -76,9 +76,9 @@ Provider 只是运行时来源和挂载目标的适配规则。
 资产中心中每个资产只保存一份 canonical copy：
 
 ```text
-~/.my-agent-assets/assets/skills/<name>/
-~/.my-agent-assets/assets/commands/<name>.md
-~/.my-agent-assets/assets/mcps/<name>.json
+~/.my-agent-assets-data/assets/skills/<name>/
+~/.my-agent-assets-data/assets/commands/<name>.md
+~/.my-agent-assets-data/assets/mcps/<name>.json
 ```
 
 不要设计成：
@@ -161,7 +161,7 @@ MCP 使用文件型统一模型，不引用 SQLite，也不建立数据库、DAO
 MCP server 的 canonical definition 是可通过 Git 同步的唯一真实配置：
 
 ```text
-~/.my-agent-assets/assets/mcps/<name>.json
+~/.my-agent-assets-data/assets/mcps/<name>.json
 ```
 
 该 JSON 文件保存 canonical MCP model，不是 Claude Code 或 Codex live config 的原样副本。统一模型使用：
@@ -351,14 +351,19 @@ targets:
 V1/V2 的资产中心根目录固定为：
 
 ```text
-~/.my-agent-assets
+~/.my-agent-assets-data
 ```
 
 - Settings 只读展示该路径，不允许编辑。
 - 不实现资产中心迁移、选择其他磁盘或自定义 root。
+- `~/.my-agent-assets` 是 beta.4 之前的旧路径；新版本不读取、不迁移，旧目录保持原样。
 - GUI、CLI 和 Rust core 使用同一固定解析规则。
 - 测试只能通过显式 fake HOME 改变解析结果，不能接触真实 HOME。
 - 不得保存一个看似可配置但后端不生效的 `assetCenterPath`。
+
+Git remote 仍使用 `origin` 作为默认别名；推荐的远程仓库 slug 为
+`my-agent-assets-data`。owner 和 SSH/HTTPS 完整 URL 必须由用户填写并通过
+Preview 确认，App 不自动创建远程仓库。
 
 ---
 
@@ -498,7 +503,7 @@ Scan/Import 永远不创建客户端目录或配置。
 不使用数据库。资产中心使用五个由 serde 正式解析的 YAML 文件：
 
 ```text
-~/.my-agent-assets/
+~/.my-agent-assets-data/
 ├── assets.yaml
 ├── config.yaml
 ├── projects.yaml
@@ -548,7 +553,7 @@ GUI 与 CLI 必须调用共享 core 的同一项目扫描逻辑：
 初始化 Preview/Apply 创建：
 
 ```text
-~/.my-agent-assets/
+~/.my-agent-assets-data/
 ├── assets/skills/
 ├── assets/commands/
 ├── assets/mcps/
@@ -567,7 +572,7 @@ GUI 与 CLI 必须调用共享 core 的同一项目扫描逻辑：
 - 初始化必须幂等；已有合法文件不覆盖。
 - 目录存在但结构损坏或 schema 不兼容时停止并显示诊断。
 - 初始化不扫描、不导入、不挂载资产。
-- 卸载 App 不删除 `~/.my-agent-assets`。
+- 卸载 App 不删除 `~/.my-agent-assets-data`。
 - 测试只允许在 fake HOME 执行初始化。
 
 ---
@@ -680,7 +685,7 @@ Unit、integration、E2E、Visual QA 和 Computer Use 自动化全部使用临�
 
 - 测试通过显式环境变量或测试参数指定根目录，例如 `MY_AGENT_ASSETS_HOME=/tmp/maa-test-home`。
 - 测试模式在 GUI 中持续显示“测试环境”，避免与真实数据混淆。
-- 自动化禁止读取或写入真实 `~/.claude`、`~/.claude.json`、`~/.codex` 和 `~/.my-agent-assets`。
+- 自动化禁止读取或写入真实 `~/.claude`、`~/.claude.json`、`~/.codex` 和 `~/.my-agent-assets-data`。
 - Release 构建不默认启用测试模式。
 - 真实 HOME 最终验收只由用户明确发起；自动化脚本不得替代用户确认真实写操作。
 - 真实环境可以先执行只读 Scan/Import Preview，任何写操作仍需单独确认。
@@ -782,7 +787,7 @@ Import 不改变原生效位置。
 
 ```text
 ~/.agents/skills/review
-→ ~/.my-agent-assets/assets/skills/review
+→ ~/.my-agent-assets-data/assets/skills/review
 ```
 
 Import 之后，原来的：
@@ -1707,7 +1712,7 @@ MCP 冲突同时展示 existing/candidate canonical JSON，并允许展开原始
 
 只读展示：
 
-- fixed asset center root: `~/.my-agent-assets`
+- fixed asset center root: `~/.my-agent-assets-data`
 
 已维护项目路径只在项目列表维护。Claude Code/Codex 标准 runtime 路径由 adapter
 自动发现，并只读显示在诊断、项目详情和挂载管理中。
@@ -1946,7 +1951,7 @@ macOS Beta 必须：
 - 验证原生 Windows titlebar、无 28px 顶部空白、盘符/路径分隔符和跨卷行为
 - 验证 junction/file symlink capability、Developer Mode 缺失提示及禁止 copy/hardlink fallback
 - 验证 Windows Claude JSON 与 Codex TOML patch
-- 验证安装、升级和卸载不删除 `~/.my-agent-assets`
+- 验证安装、升级和卸载不删除 `~/.my-agent-assets-data`
 - 完成基础键盘、可读名称、Focus、非纯颜色和 DPI/字体缩放验收
 
 Windows 未完成时只阻止 V1 Stable，不阻止 macOS Beta 发布。

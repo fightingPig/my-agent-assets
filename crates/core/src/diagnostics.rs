@@ -42,7 +42,7 @@ pub struct DoctorReport {
 }
 
 pub fn doctor(home: &Path) -> DoctorReport {
-    let root = home.join(".my-agent-assets");
+    let root = crate::asset_center_path(&home);
     let mut checks = Vec::new();
     checks.push(git_check());
 
@@ -416,7 +416,7 @@ mod tests {
             },
         )
         .unwrap();
-        let projects = home.join(".my-agent-assets/projects.yaml");
+        let projects = crate::asset_center_path(&home).join("projects.yaml");
         fs::write(&projects, "schemaVersion: 1\nprojects: [broken\n").unwrap();
 
         let report = doctor(&home);
@@ -442,9 +442,9 @@ mod tests {
             },
         )
         .unwrap();
-        fs::create_dir_all(home.join(".my-agent-assets/assets/skills/orphan")).unwrap();
+        fs::create_dir_all(crate::asset_center_path(&home).join("assets/skills/orphan")).unwrap();
         fs::write(
-            home.join(".my-agent-assets/assets/skills/orphan/SKILL.md"),
+            crate::asset_center_path(&home).join("assets/skills/orphan/SKILL.md"),
             "# Orphan",
         )
         .unwrap();

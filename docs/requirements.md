@@ -28,7 +28,7 @@ compilation.
 
 - Project name: `my-agent-assets`
 - CLI binary: `maa`
-- Default asset center: `~/.my-agent-assets`
+- Default asset center: `~/.my-agent-assets-data`
 - Runtime provider: Claude only
 - Asset types:
   - Skill: `.claude/skills/<name>/`
@@ -95,5 +95,5 @@ checkout.
 - Backup History provides files and manual restore guidance, not automatic
   historical Restore.
 - Tests and e2e scripts never access real `~/.claude`, `~/.claude.json`, or
-  `~/.my-agent-assets`.
+  `~/.my-agent-assets-data`.
 - Apply accepts registered target IDs instead of arbitrary runtime paths.

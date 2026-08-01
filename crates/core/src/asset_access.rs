@@ -51,7 +51,7 @@ pub fn load_canonical_asset_content(
         AssetKind::Skill => canonical.join("SKILL.md"),
         AssetKind::Command | AssetKind::Mcp => canonical.clone(),
     };
-    let content_path = guard_existing_path(&home.join(".my-agent-assets"), &content_path)?;
+    let content_path = guard_existing_path(&crate::asset_center_path(&home), &content_path)?;
     if !content_path.is_file() {
         return Err(MaaError::new(format!(
             "canonical asset content is not a file: {}",
@@ -93,7 +93,7 @@ pub fn resolve_asset_open_target(
             ));
         }
     };
-    let path = guard_existing_path(&home.join(".my-agent-assets"), &path)?;
+    let path = guard_existing_path(&crate::asset_center_path(&home), &path)?;
     if !path.is_file() {
         return Err(MaaError::new("asset open target is not a file"));
     }
@@ -117,7 +117,7 @@ fn resolve_registered_asset(
         )));
     }
     let canonical = canonical_path(home, kind, &name);
-    let canonical = guard_existing_path(&home.join(".my-agent-assets"), &canonical)?;
+    let canonical = guard_existing_path(&crate::asset_center_path(&home), &canonical)?;
     Ok((kind, name, canonical))
 }
 
@@ -162,9 +162,9 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(root.join(".my-agent-assets/assets/skills/review")).unwrap();
-        fs::create_dir_all(root.join(".my-agent-assets/assets/commands")).unwrap();
-        fs::create_dir_all(root.join(".my-agent-assets/assets/mcps")).unwrap();
+        fs::create_dir_all(root.join(".my-agent-assets-data/assets/skills/review")).unwrap();
+        fs::create_dir_all(root.join(".my-agent-assets-data/assets/commands")).unwrap();
+        fs::create_dir_all(root.join(".my-agent-assets-data/assets/mcps")).unwrap();
         let mut registry = AssetRegistry::default();
         for (kind, name) in [
             (AssetKind::Skill, "review"),
@@ -177,17 +177,17 @@ mod tests {
         }
         save(&root, &registry).unwrap();
         fs::write(
-            root.join(".my-agent-assets/assets/skills/review/SKILL.md"),
+            root.join(".my-agent-assets-data/assets/skills/review/SKILL.md"),
             "# Review\nreal skill content",
         )
         .unwrap();
         fs::write(
-            root.join(".my-agent-assets/assets/commands/commit.md"),
+            root.join(".my-agent-assets-data/assets/commands/commit.md"),
             "# Commit\nreal command content",
         )
         .unwrap();
         fs::write(
-            root.join(".my-agent-assets/assets/mcps/filesystem.json"),
+            root.join(".my-agent-assets-data/assets/mcps/filesystem.json"),
             r#"{"schemaVersion":1,"name":"filesystem","spec":{"type":"stdio","command":"npx"},"providerExtensions":{}}"#,
         )
         .unwrap();
@@ -245,7 +245,7 @@ mod tests {
         let home = home("symlink");
         let outside = home.join("outside.md");
         fs::write(&outside, "outside").unwrap();
-        let command = home.join(".my-agent-assets/assets/commands/commit.md");
+        let command = crate::asset_center_path(&home).join("assets/commands/commit.md");
         fs::remove_file(&command).unwrap();
         std::os::unix::fs::symlink(&outside, &command).unwrap();
         assert!(load_canonical_asset_content(&home, "command:commit").is_err());
