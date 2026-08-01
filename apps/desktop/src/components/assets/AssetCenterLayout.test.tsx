@@ -34,13 +34,28 @@ describe("Asset Center static UI", () => {
     expect(screen.queryByRole("option", { name: "deploy-prod" })).not.toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "" } });
-    fireEvent.change(status, { target: { value: "待检查" } });
+    fireEvent.click(status);
+    fireEvent.click(screen.getByRole("option", { name: "待检查" }));
     expect(screen.getByRole("option", { name: "run-tests" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "build-project" })).not.toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "not-found" } });
     expect(screen.getByText("没有匹配的Commands")).toBeInTheDocument();
     expect(screen.getByText("暂无可检查资产")).toBeInTheDocument();
+  });
+
+  it("opens the status menu as an in-app layer and returns focus to the trigger", () => {
+    render(<CommandsListPage demoMode />);
+    const trigger = screen.getByRole("combobox", { name: "Commands状态筛选" });
+
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("listbox", { name: "Commands状态选项" });
+    expect(menu).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("option", { name: "待检查" }));
+
+    expect(trigger).toHaveTextContent("待检查");
+    expect(screen.queryByRole("listbox", { name: "Commands状态选项" })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("includes format-code with complete row metadata", () => {

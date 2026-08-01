@@ -1,8 +1,8 @@
-import { ChevronRight, Search, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { ChevronRight, Search, type LucideIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import type { AssetType } from "../../app/contracts";
 import { NO_DRAG_REGION_STYLE } from "../../lib/platform";
-import { MountDraftBar, MountMatrix } from "../../ui-assets";
+import { MountDraftBar, MountMatrix, StatusFilterMenu } from "../../ui-assets";
 
 export type AssetStatusTone = "success" | "warning" | "neutral";
 
@@ -105,19 +105,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
               value={query}
             />
           </label>
-          <label className="asset-filter-field">
-            <SlidersHorizontal size={14} />
-            <select
-              aria-label={`${itemLabel}状态筛选`}
-              data-no-drag="true"
-              onChange={(event) => setStatusFilter(event.target.value)}
-              style={NO_DRAG_REGION_STYLE}
-              value={statusFilter}
-            >
-              <option value="all">全部状态</option>
-              {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-            </select>
-          </label>
+          <StatusFilterMenu itemLabel={itemLabel} onChange={setStatusFilter} statuses={statuses} value={statusFilter} />
         </div>
 
         <div className="asset-list-heading">
@@ -216,7 +204,7 @@ export function AssetCenterLayout<T extends AssetCenterItem>({
 export function InspectorFields({ fields }: { fields: readonly InspectorField[] }) {
   return (
     <dl className="asset-inspector-fields">
-      {fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}
+      {fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd title={field.value}>{field.value}</dd></div>)}
     </dl>
   );
 }

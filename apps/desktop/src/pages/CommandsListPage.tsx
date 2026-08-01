@@ -138,7 +138,7 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail, onOpenMo
       emptyTitle="未发现 Commands"
       itemLabel="Commands"
       items={items}
-      searchPlaceholder="搜索 Command 名称、用途或路径"
+      searchPlaceholder="搜索名称、用途或路径"
       stateLabel={stateLabel}
       onOpenMountPreview={onOpenMountPreview}
       onOpenDetail={onOpenAssetDetail ? (command) => onOpenAssetDetail(toAssetDetail(command, "Command", "Markdown 内容预览")) : undefined}

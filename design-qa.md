@@ -1,6 +1,6 @@
 # Design QA — UI Asset Edition
 
-Date: 2026-08-01  
+Date: 2026-08-02
 Branch: `codex/ui-asset-edition`
 
 ## Source of truth
@@ -80,7 +80,7 @@ Verified in the in-app browser:
 Automated evidence:
 
 - TypeScript: passed.
-- Frontend tests: `12` files, `106` tests passed.
+- Frontend tests: `13` files, `114` tests passed.
 - Visual QA: `68` macOS/Windows screenshots; severe `0`, warnings `0`.
 - Screenshot matrix: dashboard plus all production pages and explicit
   uninitialized/error variants at `1440×900` and `1180×760`.
@@ -96,5 +96,27 @@ away from the reference. All five were corrected before the final comparison.
 No open P0, P1 or P2 visual mismatch remains. Small differences in fixture
 counts and status text are intentional state differences, not styling defects.
 The native-window-control deviation is required by the frozen shell contract.
+
+## 2026-08-02 · MCP toolbar correction
+
+Source evidence:
+
+- `/var/folders/7q/8xcgl2tn2xd42tq6k8pz_pg80000gn/T/codex-clipboard-d08e2dc0-ec06-4445-ac27-207dac2fd1eb.png`
+
+Installed-app evidence:
+
+- `apps/desktop/artifacts/design-qa/implementation-mcp-status-menu-2026-08-02.jpeg`
+- `apps/desktop/artifacts/design-qa/comparison-mcp-status-menu-2026-08-02.png`
+
+The source and installed build were normalized to the same aspect ratio and
+placed side by side. The corrected toolbar keeps a 12px safe inset on all four
+sides, so the search and status-control borders no longer merge with the panel
+border. The popover now matches the trigger width, remains clear of the search
+field, uses a quieter border and shadow, and keeps the selected state legible
+without the oversized nested panel from the source screenshot.
+
+The shared styles cover Skills, Commands, MCP Servers and Projects. The final
+installed macOS build was opened on the MCP empty state with the menu expanded;
+no clipping, border collision or adjacent-control overlap remained.
 
 final result: passed

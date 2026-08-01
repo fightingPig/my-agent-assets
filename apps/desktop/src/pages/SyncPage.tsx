@@ -4,6 +4,7 @@ import { gitStatus, listAuditLog, previewSync, safeCommandErrorMessage, settings
 import type { ApplyResult, AuditLogEntry, DesktopSettings, GitStatus, SettingsPreview as SettingsSavePreview, SyncDirection, SyncPreview } from "../app/contracts";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { statusToneForLabel } from "../ui-assets";
 
 const fallbackGitStatus: GitStatus = {
   repositoryPath: "~/.my-agent-assets",
@@ -116,6 +117,7 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
   }, [demoMode]);
 
   const cleanLabel = status.clean ? "工作区干净" : `${status.changedFiles.length} 项变更`;
+  const repositoryTone = !status.isRepository ? "neutral" : status.clean ? "success" : "warning";
   const conflictLabel = status.conflicts.length > 0 ? `${status.conflicts.length} 项预览` : "0 项";
   const previewSummary = preview?.plannedEffects.length
     ? preview.plannedEffects.join(" / ")
@@ -233,7 +235,7 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
   return (
     <div className="operation-workspace sync-workspace">
       <section className="panel sync-repository-card">
-        <div className="section-heading"><div><h3>本地 Git 仓库</h3><p>{status.repositoryPath}</p></div><span className="healthy-badge"><CheckCircle2 size={13} />{cleanLabel}</span></div>
+        <div className="section-heading"><div><h3>本地 Git 仓库</h3><p>{status.repositoryPath}</p></div><span className={`healthy-badge ${repositoryTone}`}><CheckCircle2 size={13} />{cleanLabel}</span></div>
         <div className="sync-status-grid"><div><GitBranch size={17} /><span><small>当前分支</small><strong>{status.branch || "未检测到"}</strong></span></div><div><RefreshCw size={17} /><span><small>远程仓库</small><strong>{status.remoteIdentity ?? status.upstream ?? status.remoteName}</strong></span></div><div><ArrowUp size={17} /><span><small>Ahead</small><strong>{status.ahead} commits</strong></span></div><div><ArrowDown size={17} /><span><small>Behind</small><strong>{status.behind} commits</strong></span></div></div>
         <div className="sync-graph"><div className="sync-graph-line"><span className="local-dot" /><strong>本地 {status.branch || "工作区"}</strong><small>{status.statusMessage}</small></div><div className="sync-graph-line"><span /><strong>仓库状态</strong><small>{status.isRepository ? "已识别为本地 Git 仓库" : "未识别为本地 Git 仓库"}</small></div><div className="sync-graph-line"><span className="remote-dot" /><strong>远程仓库</strong><small>{status.remoteIdentity ?? status.upstream ?? `remote: ${status.remoteName}`}</small></div></div>
         <div className="settings-toggle-list sync-policy-toggle"><label><input checked={pendingPushPolicy?.allowPublicRemotePush ?? settings?.allowPublicRemotePush ?? false} data-no-drag="true" disabled={!settings || isPlanningPushPolicy || isApplyingPushPolicy} onChange={(event) => void handlePublicRemotePushChange(event.target.checked)} style={NO_DRAG_REGION_STYLE} type="checkbox" /><span><strong>允许推送到公开远程仓库</strong><small>默认只允许已验证的 GitHub 私有仓库。开启后可推送到任意 Git remote，并会在执行前高亮公开或未知可见性风险。</small></span></label></div>
@@ -243,7 +245,7 @@ export function SyncPage({ demoMode = false }: { demoMode?: boolean }) {
       </section>
 
       <div className="detail-two-column sync-lower-grid">
-        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className="preview-label">{stateLabel}</span></div><div className="timeline-list">{syncHistory.length > 0 ? syncHistory.map((entry) => <div key={`${entry.occurredAtEpochSeconds}:${entry.operationType}`}><CheckCircle2 size={14} /><span>本地 Git 同步 · {entry.outcome === "completed" ? "已完成" : "需要检查"}</span><time>{formatAuditTime(entry.occurredAtEpochSeconds)}</time></div>) : status.lastSyncedAt ? <div><CheckCircle2 size={14} /><span>最近一次本地同步</span><time>{status.lastSyncedAt}</time></div> : <div className="asset-empty-state"><RefreshCw size={20} /><strong>暂无同步历史</strong><span>执行真实 Pull 或 Push 后会在本地 operation journal 留下记录。</span></div>}</div></section>
+        <section className="panel detail-section"><div className="section-heading"><div><h3>同步历史</h3><p>最近的本地 Git 操作</p></div><span className={`preview-label ${statusToneForLabel(stateLabel)}`}>{stateLabel}</span></div><div className="timeline-list">{syncHistory.length > 0 ? syncHistory.map((entry) => <div key={`${entry.occurredAtEpochSeconds}:${entry.operationType}`}><CheckCircle2 size={14} /><span>本地 Git 同步 · {entry.outcome === "completed" ? "已完成" : "需要检查"}</span><time>{formatAuditTime(entry.occurredAtEpochSeconds)}</time></div>) : status.lastSyncedAt ? <div><CheckCircle2 size={14} /><span>最近一次本地同步</span><time>{status.lastSyncedAt}</time></div> : <div className="asset-empty-state"><RefreshCw size={20} /><strong>暂无同步历史</strong><span>执行真实 Pull 或 Push 后会在本地 operation journal 留下记录。</span></div>}</div></section>
         <section className="panel detail-section"><div className="section-heading"><div><h3>同步检查</h3><p>执行前风险预览</p></div></div><div className="operation-warning"><AlertTriangle size={17} /><div><strong>{preview?.warnings[0] ?? status.statusMessage}</strong><span>{previewSummary}</span></div></div><div className="environment-list"><div><strong>仓库可用</strong><span>{status.isRepository ? "是" : "否"}</span></div><div><strong>白名单变更</strong><span>{status.syncableChanges.length} 项</span></div><div><strong>阻断变更</strong><span>{status.blockedChanges.length} 项</span></div><div><strong>潜在冲突</strong><span>{conflictLabel}</span></div><div><strong>远程可见性</strong><span>{preview?.repositoryVisibility ?? "未验证"}</span></div><div><strong>计划方向</strong><span>{preview?.direction === "pull" ? "Pull" : preview?.direction === "push" ? "Push" : "未选择"}</span></div><div><strong>计划可执行</strong><span>{preview?.canApply ? "是" : "否"}</span></div></div></section>
       </div>
     </div>

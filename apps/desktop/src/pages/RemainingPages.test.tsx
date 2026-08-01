@@ -30,7 +30,9 @@ describe("remaining V1 static pages", () => {
     expect(screen.queryByRole("option", { name: "project-a" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "搜索项目" }), { target: { value: "" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "项目状态筛选" }), { target: { value: "正常" } });
+    const statusFilter = screen.getByRole("combobox", { name: "项目状态筛选" });
+    fireEvent.click(statusFilter);
+    fireEvent.click(screen.getByRole("option", { name: "正常" }));
     expect(screen.getByRole("option", { name: "project-a" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "my-app" })).not.toBeInTheDocument();
   });

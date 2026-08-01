@@ -54,6 +54,8 @@
   --maa-space-6: 24px;
   --maa-space-8: 32px;
   --maa-space-9: 36px;
+  --maa-toolbar-inset: var(--maa-space-3);
+  --maa-popover-offset: 6px;
   --maa-sidebar-width: 250px;
   --maa-macos-overlay-height: 28px;
   --maa-page-padding-x: 36px;
@@ -68,17 +70,16 @@
   --maa-radius-pill: 999px;
   --maa-shadow-subtle: 0 2px 10px rgba(29, 33, 41, 0.025);
   --maa-shadow-raised: 0 10px 28px rgba(29, 33, 41, 0.08);
+  --maa-shadow-popover: 0 14px 34px rgba(29, 33, 41, 0.12), 0 3px 10px rgba(29, 33, 41, 0.06);
   --maa-control-height: 40px;
   --maa-focus-ring: 0 0 0 3px rgba(98, 83, 232, 0.18);
   --maa-transition-fast: 140ms ease;
 
   /* Compatibility aliases used by the existing desktop pages. */
   --accent: var(--maa-color-accent);
-  --accent-hover: var(--maa-color-accent-hover);
   --accent-soft: var(--maa-color-accent-soft);
   --text: var(--maa-color-text);
   --secondary: var(--maa-color-text-secondary);
-  --muted: var(--maa-color-text-secondary);
   --tertiary: var(--maa-color-text-tertiary);
   --border: var(--maa-color-border);
   --subtle-border: var(--maa-color-border-soft);

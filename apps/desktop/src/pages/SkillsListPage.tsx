@@ -138,7 +138,7 @@ export function SkillsListPage({
       emptyTitle="未发现 Skills"
       itemLabel="Skills"
       items={items}
-      searchPlaceholder="搜索 Skill 名称、路径或作用域"
+      searchPlaceholder="搜索名称、路径或作用域"
       stateLabel={stateLabel}
       usageLabel="挂载与使用"
       usageCountLabel="个挂载"

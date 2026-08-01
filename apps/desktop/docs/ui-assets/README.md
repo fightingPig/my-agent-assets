@@ -1,6 +1,6 @@
 # My Agent Assets UI System
 
-Version: `1.0.0`
+Version: `1.1.0`
 
 This is the reusable UI asset behind the desktop edition. It is designed for
 local-first management apps: dense enough for operational work, calm enough to
@@ -9,6 +9,8 @@ scan for long periods, and explicit about every persistent write.
 ## Canonical visual references
 
 - `reference-dashboard.png` — shell, navigation, overview density, semantic color balance.
+- `reference-asset-toolbar-menu.png` — safe toolbar insets and application-layer status popover.
+- `reference-backup-history.png` — title, supporting copy and summary wrapping hierarchy.
 - `reference-skill-mount-matrix.png` — asset master-detail layout and direct provider toggles.
 - `reference-mcp-mount-matrix.png` — configuration asset variant and preview-first MCP copy.
 
@@ -22,6 +24,8 @@ behavior. The PNGs preserve the intended visual direction.
 | `src/ui-assets/tokens.css` | Color, typography, spacing, shape, elevation, layout, focus and motion tokens | Copy directly |
 | `src/ui-assets/contracts.ts` | Small structural DTOs for asset/provider/mount UI | Copy directly |
 | `src/ui-assets/components/ProviderMark.tsx` | Claude Code and Codex brand marks | Copy with the icon package |
+| `src/ui-assets/components/StatusFilterMenu.tsx` | Cross-platform status filter with keyboard, Escape and outside-click behavior | Copy with React and Lucide |
+| `src/ui-assets/status.ts` | Shared success / warning / neutral / danger classification | Copy directly |
 | `src/ui-assets/mounts/model.ts` | Pure location grouping and mount-state derivation | Copy directly |
 | `src/ui-assets/mounts/MountDraftContext.tsx` | Preview-first draft queue | Copy directly |
 | `src/ui-assets/mounts/MountMatrix.tsx` | This app's Tauri adapter for the reusable pattern | Adapt the data-loading imports |
@@ -40,6 +44,8 @@ without a runtime UI framework. The product mark remains app-owned.
 - Page title `32px`, section title `18px`, primary body `15px`, supporting UI `13px`, minimum `12px` only for compact metadata.
 - Surface radius `8–10px`; shadows are exceptional. Prefer borders and spacing.
 - Every keyboard focus state uses the shared violet focus ring.
+- Toolbars keep `12px` safe space on all four sides; controls never merge with a panel border.
+- Application popovers sit `6px` from their trigger, match the trigger width and use the dedicated popover shadow.
 
 ### Page patterns
 
@@ -57,6 +63,23 @@ without a runtime UI framework. The product mark remains app-owned.
    visible while inspecting detail.
 7. **Settings** — two-column sections at desktop widths, local scrolling at the
    compact desktop breakpoint.
+
+### Validated layout refinements
+
+- Dashboard content uses a stable `1180px` maximum width and remains centered;
+  its two primary columns are equal, separated by a true center divider and
+  keep matching inner insets.
+- Empty states center within the remaining panel body, not the full page or a
+  guessed fixed-height block.
+- Section headings treat title, supporting copy and summary as separate layers.
+  Summaries cannot steal the title width; Chinese status phrases and technical
+  tokens do not leave isolated final characters.
+- Search and status controls are inset from the owning panel. The status menu
+  is an application-layer listbox rather than a native select popup, matches
+  the trigger width and never intrudes into the search field.
+- Semantic state is always label + icon + tone. Unknown, disconnected, loading
+  and demo states are neutral; pending and uninitialized states are warnings;
+  failures and conflicts are danger states.
 
 ### Mount interaction contract
 
@@ -76,7 +99,8 @@ Select asset → inspect all user/project locations → toggle provider icon
 
 For another React app:
 
-1. Copy `tokens.css`, `contracts.ts`, `ProviderMark.tsx`, and `mounts/model.ts`.
+1. Copy `tokens.css`, `contracts.ts`, `status.ts`, the required files from
+   `components/`, and `mounts/model.ts`.
 2. Install `@lobehub/icons-static-svg` at the version recorded in the desktop
    `package.json`.
 3. Import `tokens.css` before the app stylesheet.
@@ -97,7 +121,17 @@ the seven page patterns while preserving the mount interaction contract.
   `42×42px`.
 - State is conveyed by label and icon in addition to color.
 - Interactive controls are keyboard reachable and show a visible focus ring.
+- Popovers support Arrow keys, Home/End, Enter/Space, Escape, outside click and
+  focus return to the trigger.
 - Reduced-motion preference collapses transition duration to zero.
+
+## 1.1.0 acceptance record
+
+- TypeScript, frontend tests and the production renderer build pass.
+- Visual QA covers 13 pages on macOS and Windows at `1440×900` and `1180×760`.
+- The final run contains 68 screenshots with zero severe issues and zero warnings.
+- The toolbar/menu open state was compared side by side against the reported
+  production screenshot and then rechecked in the installed macOS application.
 
 ## Non-negotiables
 

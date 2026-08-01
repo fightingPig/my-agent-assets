@@ -408,7 +408,7 @@ export function McpServersListPage({
       emptyTitle="未发现 MCP Servers"
       itemLabel="MCP Servers"
       items={items}
-      searchPlaceholder="搜索 MCP 名称、能力或配置路径"
+      searchPlaceholder="搜索名称、能力或路径"
       stateLabel={stateLabel}
       usageLabel="挂载与使用"
       usageCountLabel="个挂载"

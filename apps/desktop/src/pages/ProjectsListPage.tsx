@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderKanban, FolderOpen, Plus, RefreshCw, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { FolderKanban, FolderOpen, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   initializationPreview,
@@ -23,6 +23,7 @@ import type { ProjectDetailContext } from "../app/detail-context";
 import { InspectorFields, InspectorSection, InspectorTags } from "../components/assets/AssetCenterLayout";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { StatusFilterMenu } from "../ui-assets";
 import { staticProjects, type StaticProject } from "./project-data";
 
 const projectTone = { "正常": "success", "需检查": "warning", "未检查": "neutral", "无效": "warning" } as const;
@@ -240,8 +241,8 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail, visual
     <div className={`project-center-layout ${editor || removePreview ? "has-management-panel" : ""}`}>
       <section className="panel project-browser" aria-label="项目列表">
         <div className="asset-toolbar">
-          <label className="asset-search-field"><Search size={15} /><input aria-label="搜索项目" data-no-drag="true" onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目名称、标题或路径" style={NO_DRAG_REGION_STYLE} type="search" value={query} /></label>
-          <label className="asset-filter-field"><SlidersHorizontal size={14} /><select aria-label="项目状态筛选" data-no-drag="true" onChange={(event) => setStatus(event.target.value)} style={NO_DRAG_REGION_STYLE} value={status}><option value="all">全部状态</option><option value="正常">正常</option><option value="需检查">需检查</option><option value="未检查">未检查</option><option value="无效">无效</option></select></label>
+          <label className="asset-search-field"><Search size={15} /><input aria-label="搜索项目" data-no-drag="true" onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、标题或路径" style={NO_DRAG_REGION_STYLE} type="search" value={query} /></label>
+          <StatusFilterMenu itemLabel="项目" onChange={setStatus} statuses={["正常", "需检查", "未检查", "无效"]} value={status} />
           <button className="asset-secondary-action" data-no-drag="true" disabled={demoMode || !assetCenterReady || projects.length === 0} onClick={() => void refreshProjects([])} style={NO_DRAG_REGION_STYLE} type="button"><RefreshCw size={14} />刷新全部</button>
           <button className="asset-business-action" data-no-drag="true" disabled={demoMode || !assetCenterReady} onClick={() => void openCreate()} style={NO_DRAG_REGION_STYLE} type="button"><Plus size={14} />添加项目</button>
         </div>
@@ -251,7 +252,7 @@ export function ProjectsListPage({ demoMode = false, onOpenProjectDetail, visual
           {visibleProjects.map((project) => (
             <button aria-label={project.name} aria-selected={selected?.id === project.id} className={`project-list-row ${selected?.id === project.id ? "selected" : ""}`} data-no-drag="true" key={project.id} onClick={() => setSelectedId(project.id)} role="option" style={NO_DRAG_REGION_STYLE} type="button">
               <span className="project-row-icon"><FolderKanban size={18} /></span>
-              <span className="project-row-copy"><strong>{project.name}</strong><small>{project.title}</small><span>{project.path} · {project.updated}</span></span>
+              <span className="project-row-copy"><strong>{project.name}</strong><small>{project.title}</small><span title={project.path}>{project.path} · {project.updated}</span></span>
               <span className="project-asset-count">{project.assets} 项资产</span>
               <span className={`asset-status ${projectTone[project.status]}`}>{project.status}</span>
             </button>
