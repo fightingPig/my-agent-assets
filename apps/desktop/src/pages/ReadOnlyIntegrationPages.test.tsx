@@ -776,13 +776,13 @@ describe("read-only UI integration", () => {
       expiresAtEpochSeconds: 400,
     });
 
-    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.4", platform: "windows", arch: "x86_64", backendReady: true }} />);
+    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.5", platform: "windows", arch: "x86_64", backendReady: true }} />);
 
     expect(await screen.findByText("资产中心尚未初始化。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成保存预览" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "预览导出" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "预览注册" })).toBeDisabled();
-    expect(screen.getByDisplayValue("0.1.1-beta.4")).toHaveAttribute("readonly");
+    expect(screen.getByDisplayValue("0.1.1-beta.5")).toHaveAttribute("readonly");
     expect(settingsPreview).not.toHaveBeenCalled();
   });
 
