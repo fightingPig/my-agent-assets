@@ -81,9 +81,9 @@ export function ProjectDetailPage({
             </div>
           </section>
           <section className="panel detail-section mount-plan-card">
-            <div className="section-heading"><div><h3>挂载管理</h3><p>项目详情不直接修改运行时</p></div><Link2 size={17} /></div>
-            <p className="asset-inspector-summary">前往挂载管理选择资产、项目位置、Provider 和 MCP 范围，并在执行前查看完整预览。</p>
-            <button className="asset-business-action" data-no-drag="true" onClick={() => onPageChange?.("mounts")} style={NO_DRAG_REGION_STYLE} type="button">前往挂载管理</button>
+            <div className="section-heading"><div><h3>挂载预览</h3><p>项目详情只展示当前关系</p></div><Link2 size={17} /></div>
+            <p className="asset-inspector-summary">请在对应资产页直接切换 Claude Code / Codex；所有草稿会在挂载预览中统一确认。</p>
+            <button className="asset-business-action" data-no-drag="true" onClick={() => onPageChange?.("mounts")} style={NO_DRAG_REGION_STYLE} type="button">查看挂载预览</button>
           </section>
         </div>
       </div>

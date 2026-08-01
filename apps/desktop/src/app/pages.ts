@@ -102,9 +102,9 @@ export const PAGE_REGISTRY: readonly PageMetadata[] = [
   },
   {
     id: "mounts",
-    sidebarLabel: "挂载管理",
-    title: "挂载管理",
-    subtitle: "将资产挂载到项目或用户级目录。",
+    sidebarLabel: "挂载预览",
+    title: "挂载预览",
+    subtitle: "查看整体挂载状态，预览并确认资产页发起的变更。",
     group: "运行",
     enabled: true,
     sidebarVisible: true,

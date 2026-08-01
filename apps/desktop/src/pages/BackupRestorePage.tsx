@@ -11,6 +11,7 @@ import {
 import type { BackupDeletePreview, BackupSummary } from "../app/contracts";
 import { DEFAULT_ASSET_CENTER_PATH } from "../app/defaults";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { statusToneForLabel } from "../ui-assets";
 
 type BackupItem = {
   id: string;
@@ -208,7 +209,8 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
         <div className="section-heading">
           <div>
             <h3>备份历史</h3>
-            <p>Portable / Local backup manifest · {listState}</p>
+            <p>Portable / Local backup manifest</p>
+            <small className={`section-heading-state ${statusToneForLabel(listState)}`}>{listState}</small>
           </div>
           <span>{backups.length} 份 · {formatBytes(totalSize)} · 最早：{oldest?.created ?? "暂无"}</span>
         </div>
@@ -257,7 +259,7 @@ export function BackupRestorePage({ demoMode = false }: { demoMode?: boolean }) 
           <>
             <div className="section-heading">
               <div><h3>{selected.title}</h3><p>{selected.id}</p></div>
-              <span className="healthy-badge">只读历史</span>
+              <span className="healthy-badge neutral">只读历史</span>
             </div>
 
             <div className="restore-summary">

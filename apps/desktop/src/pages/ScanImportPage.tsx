@@ -25,6 +25,7 @@ import type {
 import type { ConflictResolverContext } from "../app/detail-context";
 import { ApplyConfirmationPanel } from "../components/ui/ApplyConfirmationPanel";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { statusToneForLabel } from "../ui-assets";
 
 const scopes = [
   { id: "user", title: "用户级", detail: "扫描 Claude Code 与 Codex 用户级来源", icon: House },
@@ -366,7 +367,7 @@ export function ScanImportPage({
       </section>
 
       <section className="panel operation-section">
-        <div className="section-heading"><div><h3>选择扫描范围</h3><p>选择仅更新本地预览，不执行导入</p></div><span className="preview-label">{stateLabel}</span></div>
+        <div className="section-heading"><div><h3>选择扫描范围</h3><p>选择仅更新本地预览，不执行导入</p></div><span className={`preview-label ${statusToneForLabel(stateLabel)}`}>{stateLabel}</span></div>
         <div className="scope-card-grid">
           {scopes.map(({ id, title, detail, icon: Icon }) => <button aria-pressed={selectedScope === id} className={`scope-card ${selectedScope === id ? "selected" : ""}`} data-no-drag="true" key={id} onClick={() => { setSelectedScope(id); setApplyResult(null); }} style={NO_DRAG_REGION_STYLE} type="button"><span><Icon size={18} /></span><strong>{title}</strong><small>{detail}</small></button>)}
         </div>

@@ -5,7 +5,10 @@ import type { AppInfo } from "./app/contracts";
 import { getPageById } from "./app/pages";
 import { AppFrame } from "./components/shell/AppFrame";
 import { PageHeader } from "./components/shell/PageHeader";
+import { demoMountDrafts, MountDraftProvider } from "./ui-assets";
+import "./ui-assets/tokens.css";
 import "./styles.css";
+import "./ui-assets/edition.css";
 import { parseVisualQaQuery, VISUAL_QA_CASES, type VisualQaCase } from "./visual-qa/config";
 import { collectVisualQaReport, type VisualQaPageReport } from "./visual-qa/diagnostics";
 
@@ -35,8 +38,10 @@ createRoot(document.getElementById("root")!).render(
       activePage={query.pageId}
       onPageChange={() => undefined}
     >
-      <PageHeader page={page} />
-      <CurrentPage activePage={query.pageId} appInfo={appInfo} demoMode visualQaState={query.state} />
+      <MountDraftProvider initialDrafts={demoMountDrafts(query.pageId)}>
+        <PageHeader page={page} />
+        <CurrentPage activePage={query.pageId} appInfo={appInfo} demoMode visualQaState={query.state} />
+      </MountDraftProvider>
     </AppFrame>
   </StrictMode>,
 );

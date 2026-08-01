@@ -90,9 +90,10 @@ const staticCommands: readonly CommandItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  onOpenMountPreview?: () => void;
 };
 
-export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetListPageProps = {}) {
+export function CommandsListPage({ demoMode = false, onOpenAssetDetail, onOpenMountPreview }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly CommandItem[]>(demoMode ? staticCommands : []);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -131,12 +132,15 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
 
   return (
     <AssetCenterLayout
+      assetType="command"
+      demoMode={demoMode}
       emptyDescription="请先扫描或导入 Claude Command。"
       emptyTitle="未发现 Commands"
       itemLabel="Commands"
       items={items}
-      searchPlaceholder="搜索 Command 名称、用途或路径"
+      searchPlaceholder="搜索名称、用途或路径"
       stateLabel={stateLabel}
+      onOpenMountPreview={onOpenMountPreview}
       onOpenDetail={onOpenAssetDetail ? (command) => onOpenAssetDetail(toAssetDetail(command, "Command", "Markdown 内容预览")) : undefined}
       renderInspector={(command) => (
         <>

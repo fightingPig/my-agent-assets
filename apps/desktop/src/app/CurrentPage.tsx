@@ -52,9 +52,9 @@ export function CurrentPage({
 }: CurrentPageProps) {
   switch (activePage) {
     case "dashboard": return <DashboardPage appInfo={appInfo} demoMode={demoMode} onPageChange={onPageChange} visualQaState={visualQaState} />;
-    case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
-    case "commands": return <CommandsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
-    case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} />;
+    case "skills": return <SkillsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} onOpenMountPreview={() => onPageChange?.("mounts")} />;
+    case "commands": return <CommandsListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} onOpenMountPreview={() => onPageChange?.("mounts")} />;
+    case "mcp": return <McpServersListPage demoMode={demoMode} onOpenAssetDetail={onOpenAssetDetail} onOpenMountPreview={() => onPageChange?.("mounts")} />;
     case "asset-detail": return <AssetDetailPage demoMode={demoMode} detail={assetDetail ?? undefined} onPageChange={onPageChange} />;
     case "projects": return <ProjectsListPage demoMode={demoMode} onOpenProjectDetail={onOpenProjectDetail} visualQaState={visualQaState} />;
     case "project-detail": return <ProjectDetailPage demoMode={demoMode} detail={projectDetail ?? undefined} onPageChange={onPageChange} />;

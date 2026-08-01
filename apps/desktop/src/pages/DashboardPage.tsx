@@ -39,6 +39,7 @@ import type {
 import type { PageId } from "../app/pages";
 import { DEFAULT_ASSET_CENTER_PATH, DEFAULT_GIT_REMOTE_NAME } from "../app/defaults";
 import { NO_DRAG_REGION_STYLE } from "../lib/platform";
+import { statusToneForLabel } from "../ui-assets";
 import {
   projects as demoProjects,
   recentActivity as demoRecentActivity,
@@ -299,7 +300,7 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange, visualQ
   ];
 
   return (
-    <>
+    <div className="dashboard-page">
       <section className="stats-grid" aria-label="资产统计">
         {stats.map((stat) => {
           const Icon = stat.icon;
@@ -367,15 +368,15 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange, visualQ
             <div><h2>系统状态</h2><p>{demoMode ? "Visual QA 示例环境" : "本机只读运行环境"}</p></div>
             <div className="initialization-actions">
               {onPageChange ? <button className="text-button" data-no-drag="true" onClick={() => onPageChange("backups")} style={NO_DRAG_REGION_STYLE} type="button">查看备份</button> : null}
-              <span className="healthy-badge"><CircleCheck size={14} />{stateLabel}</span>
+              <span className={`healthy-badge ${statusToneForLabel(stateLabel)}`}><CircleCheck size={14} />{stateLabel}</span>
             </div>
           </div>
           <div className="check-grid">
             {systemChecks.map((check) => (
               <div className="check-item" key={check.label}>
-                <div className="check-icon"><ListChecks size={17} /></div>
+                <div className={`check-icon ${statusToneForLabel(check.status)}`}><ListChecks size={17} /></div>
                 <div><strong>{check.label}</strong><span>{check.detail}</span></div>
-                <small>{check.status}</small>
+                <small className={statusToneForLabel(check.status)}>{check.status}</small>
               </div>
             ))}
           </div>
@@ -484,7 +485,7 @@ export function DashboardPage({ appInfo, demoMode = false, onPageChange, visualQ
           )}
         </section>
       </div>
-    </>
+    </div>
   );
 }
 
