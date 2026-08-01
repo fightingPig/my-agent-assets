@@ -3,6 +3,7 @@ import { FolderCog, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   listMountTargets,
+  safeCommandErrorMessage,
   targetRegistrationApply,
   targetRegistrationPreview,
   targetRemovalApply,
@@ -30,7 +31,7 @@ type PendingChange =
   | { kind: "register"; request: TargetRegistrationPreviewRequest; preview: TargetChangePreview }
   | { kind: "remove"; request: TargetRemovalPreviewRequest; preview: TargetChangePreview };
 
-export function TargetRegistryPanel() {
+export function TargetRegistryPanel({ disabled = false }: { disabled?: boolean }) {
   const [targets, setTargets] = useState<RegisteredMountTarget[]>([]);
   const [targetId, setTargetId] = useState("");
   const [targetKind, setTargetKind] = useState<MountTargetKind>("custom_skill_directory");
@@ -49,7 +50,14 @@ export function TargetRegistryPanel() {
     refreshTargets().catch((loadError) => setError(errorMessage(loadError)));
   }, []);
 
+  useEffect(() => {
+    if (!disabled) return;
+    setPending(null);
+    setResult(null);
+  }, [disabled]);
+
   const previewRegistration = async () => {
+    if (disabled) return;
     const request = { id: targetId.trim(), kind: targetKind, location: location.trim() };
     setIsPreviewing(true);
     setError(null);
@@ -65,6 +73,7 @@ export function TargetRegistryPanel() {
   };
 
   const previewRemoval = async (targetIdToRemove: string) => {
+    if (disabled) return;
     const request = { targetId: targetIdToRemove };
     setIsPreviewing(true);
     setError(null);
@@ -80,7 +89,7 @@ export function TargetRegistryPanel() {
   };
 
   const applyChange = async () => {
-    if (!pending?.preview.canApply) return;
+    if (disabled || !pending?.preview.canApply) return;
     setIsApplying(true);
     setError(null);
     try {
@@ -112,6 +121,7 @@ export function TargetRegistryPanel() {
   const selectedKind = TARGET_KINDS.find((item) => item.value === targetKind) ?? TARGET_KINDS[0];
 
   const chooseLocation = async () => {
+    if (disabled) return;
     const selected = await open({
       directory: selectedKind.directory,
       multiple: false,
@@ -137,6 +147,7 @@ export function TargetRegistryPanel() {
           <span>目标 ID</span>
           <input
             data-no-drag="true"
+            disabled={disabled}
             onChange={(event) => setTargetId(event.target.value)}
             placeholder="project-a-claude-skills"
             style={NO_DRAG_REGION_STYLE}
@@ -147,6 +158,7 @@ export function TargetRegistryPanel() {
           <span>目标类型</span>
           <select
             data-no-drag="true"
+            disabled={disabled}
             onChange={(event) => {
               const kind = event.target.value as MountTargetKind;
               setTargetKind(kind);
@@ -162,14 +174,14 @@ export function TargetRegistryPanel() {
         </label>
         <label>
           <span>{selectedKind.directory ? "目标目录" : "配置文件"}</span>
-          <div className="path-picker-control"><input data-no-drag="true" readOnly style={NO_DRAG_REGION_STYLE} value={location} /><button className="asset-secondary-action" data-no-drag="true" onClick={() => void chooseLocation()} style={NO_DRAG_REGION_STYLE} type="button">选择</button></div>
+          <div className="path-picker-control"><input data-no-drag="true" disabled={disabled} readOnly style={NO_DRAG_REGION_STYLE} value={location} /><button className="asset-secondary-action" data-no-drag="true" disabled={disabled} onClick={() => void chooseLocation()} style={NO_DRAG_REGION_STYLE} type="button">选择</button></div>
         </label>
       </div>
       <div className="settings-actions">
         <button
           className="asset-secondary-action"
           data-no-drag="true"
-          disabled={isPreviewing || !targetId.trim() || !location.trim()}
+          disabled={disabled || isPreviewing || !targetId.trim() || !location.trim()}
           onClick={previewRegistration}
           style={NO_DRAG_REGION_STYLE}
           type="button"
@@ -187,7 +199,7 @@ export function TargetRegistryPanel() {
               aria-label={`移除目标 ${target.id}`}
               className="icon-button"
               data-no-drag="true"
-              disabled={target.scope === "user" || isPreviewing}
+              disabled={disabled || target.scope === "user" || isPreviewing}
               onClick={() => previewRemoval(target.id)}
               style={NO_DRAG_REGION_STYLE}
               title={target.scope === "user" ? "内置用户级目标不可在此移除" : "预览移除目标"}
@@ -199,6 +211,7 @@ export function TargetRegistryPanel() {
         ))}
         {targets.length === 0 ? <p className="muted-text">暂无已授权运行目标。</p> : null}
       </div>
+      {disabled ? <p className="warning-text" role="status">请先在首页初始化资产中心，再管理高级自定义 Target。</p> : null}
       {pending ? (
         <ApplyConfirmationPanel
           actionLabel={pending.kind === "register" ? "确认注册目标" : "确认移除目标"}
@@ -241,6 +254,6 @@ function toApplyResult(
   };
 }
 
-function errorMessage(_error: unknown) {
-  return "运行目标操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "运行目标操作未完成。请查看系统状态或导出诊断包后重试。");
 }

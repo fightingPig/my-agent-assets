@@ -132,6 +132,7 @@ function reportIdentity(report) {
   return {
     pageId: report.pageId,
     platform: report.platform,
+    scenario: report.scenario ?? "default",
     width: report.viewport?.width,
     height: report.viewport?.height,
   };
@@ -142,6 +143,18 @@ async function clearQaReport(client) {
     window.__VISUAL_QA_READY__ = false;
     window.__VISUAL_QA_REPORT__ = undefined;
   `);
+}
+
+async function resetVisualQaScroll(client) {
+  await client.send("Runtime.evaluate", {
+    expression: `
+      window.scrollTo(0, 0);
+      for (const element of document.querySelectorAll('.app-main, .sidebar, [data-visual-qa-scroll]')) {
+        element.scrollTop = 0;
+        element.scrollLeft = 0;
+      }
+    `,
+  });
 }
 
 async function waitForQaReport(client, expected) {
@@ -227,16 +240,19 @@ async function main() {
     await waitForQaReport(client, {
       pageId: "dashboard",
       platform: "macos",
+      scenario: "default",
       ...manifestViewport,
     });
     const manifest = await evaluate(client, "window.__VISUAL_QA_MANIFEST__");
-    if (!Array.isArray(manifest) || manifest.length !== 13) {
-      throw new Error(`Expected 13 Visual QA pages, received ${manifest?.length ?? "none"}.`);
+    if (!Array.isArray(manifest) || manifest.length !== 17) {
+      throw new Error(`Expected 17 Visual QA cases, received ${manifest?.length ?? "none"}.`);
     }
+    const totalPages = new Set(manifest.map((entry) => entry.pageId)).size;
+    if (totalPages !== 13) throw new Error(`Expected 13 unique Visual QA pages, received ${totalPages}.`);
 
     const results = [];
     for (const platform of platforms) {
-      for (const page of manifest) {
+      for (const visualCase of manifest) {
         for (const viewport of viewports) {
         await client.send("Emulation.setDeviceMetricsOverride", {
           width: viewport.width,
@@ -244,14 +260,15 @@ async function main() {
           deviceScaleFactor: 1,
           mobile: false,
         });
-        const url = `${viteUrl}/visual-qa.html?platform=${platform}&page=${encodeURIComponent(page.id)}`;
+        const url = `${viteUrl}/visual-qa.html?platform=${platform}&page=${encodeURIComponent(visualCase.pageId)}&state=${encodeURIComponent(visualCase.state)}`;
         await client.send("Page.navigate", { url: "about:blank" });
         await delay(50);
         await clearQaReport(client);
         await client.send("Page.navigate", { url });
         const report = await waitForQaReport(client, {
-          pageId: page.id,
+          pageId: visualCase.pageId,
           platform,
+          scenario: visualCase.state,
           width: viewport.width,
           height: viewport.height,
         });
@@ -260,7 +277,7 @@ async function main() {
           client,
           "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
         );
-        await client.send("Runtime.evaluate", { expression: "window.scrollTo(0, 0)" });
+        await resetVisualQaScroll(client);
         const screenshotOptions = {
           format: "png",
           fromSurface: true,
@@ -272,11 +289,12 @@ async function main() {
           client,
           "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
         );
+        await resetVisualQaScroll(client);
         const screenshot = await client.send("Page.captureScreenshot", screenshotOptions);
-        const screenshotPath = join(artifactDir, `${page.id}-${viewport.width}x${viewport.height}-${platform}.png`);
+        const screenshotPath = join(artifactDir, `${visualCase.id}-${viewport.width}x${viewport.height}-${platform}.png`);
         await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
         results.push({ ...report, screenshotPath });
-        process.stdout.write(`captured ${platform} ${page.id} ${viewport.width}x${viewport.height}\n`);
+        process.stdout.write(`captured ${platform} ${visualCase.id} ${viewport.width}x${viewport.height}\n`);
         }
       }
     }
@@ -287,7 +305,8 @@ async function main() {
       generatedAt: new Date().toISOString(),
       chromePath,
       viteUrl,
-      totalPages: manifest.length,
+      totalPages,
+      totalCases: manifest.length,
       totalScreenshots: results.length,
       severeCount,
       warningCount,

@@ -4,6 +4,7 @@ import {
   canonicalAssetOpen,
   canonicalDeleteApply,
   canonicalDeletePreview,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type { ApplyResult, CanonicalDeletePreview } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
@@ -59,8 +60,8 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         action: detail.assetType === "skill" ? "reveal" : "open_external",
       });
       setMessage(`已打开：${opened.path}`);
-    } catch {
-      setMessage("无法打开资产，请检查文件是否仍存在。");
+    } catch (error) {
+      setMessage(safeCommandErrorMessage(error, "无法打开资产，请检查文件是否仍存在。"));
     }
   };
 
@@ -72,9 +73,9 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         removeMcpTargetEntries: false,
       }));
       setMessage(null);
-    } catch {
+    } catch (error) {
       setDeletePreview(null);
-      setMessage("删除影响预览生成失败。");
+      setMessage(safeCommandErrorMessage(error, "删除影响预览生成失败。"));
     }
   };
 
@@ -101,8 +102,8 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
         errors: applied.deleted ? [] : ["资产未删除。"],
       });
       if (applied.deleted) setDetail(null);
-    } catch {
-      setMessage("删除未完成；事务会自动回滚。");
+    } catch (error) {
+      setMessage(safeCommandErrorMessage(error, "删除未完成；事务会自动回滚。"));
     } finally {
       setIsApplying(false);
     }
@@ -121,7 +122,7 @@ export function AssetDetailPage({ demoMode = false, detail: detailProp, onPageCh
       <div className="detail-two-column">
         <div className="detail-column">
           <section className="panel detail-section"><div className="section-heading"><div><h3>资产信息</h3><p>{detail.typeLabel} · {detail.category}</p></div></div><dl className="entity-field-list"><div><dt>来源路径</dt><dd>{detail.sourcePath}</dd></div><div><dt>作用域</dt><dd>{detail.scope}</dd></div><div><dt>最近更新</dt><dd>{detail.updated}</dd></div><div><dt>使用引用</dt><dd>{detail.mountTargets.length} 个运行目标</dd></div></dl></section>
-          <section className="panel detail-section"><div className="section-heading"><div><h3>挂载引用</h3><p>只读关系；请在挂载管理解除</p></div><Link2 size={16} /></div><div className="reference-list">{detail.mountTargets.length > 0 ? detail.mountTargets.map((target) => <div key={target}><FolderKanban size={15} /><span>运行目标</span><small>{target}</small></div>) : <div><FolderKanban size={15} /><span>暂无挂载目标</span><small>资产中心</small></div>}</div><button className="asset-secondary-action" data-no-drag="true" onClick={() => onPageChange?.("mounts")} style={NO_DRAG_REGION_STYLE} type="button">前往挂载管理</button></section>
+          <section className="panel detail-section"><div className="section-heading"><div><h3>挂载引用</h3><p>只读关系；请在对应资产页切换 Provider</p></div><Link2 size={16} /></div><div className="reference-list">{detail.mountTargets.length > 0 ? detail.mountTargets.map((target) => <div key={target}><FolderKanban size={15} /><span>运行目标</span><small>{target}</small></div>) : <div><FolderKanban size={15} /><span>暂无挂载目标</span><small>资产中心</small></div>}</div><button className="asset-secondary-action" data-no-drag="true" onClick={() => onPageChange?.("mounts")} style={NO_DRAG_REGION_STYLE} type="button">查看挂载预览</button></section>
         </div>
         <div className="detail-column">
           <section className="panel detail-section content-preview-panel"><div className="section-heading"><div><h3>{detail.previewLabel}</h3><p>只读 canonical 内容</p></div></div><pre><code>{detail.preview}</code></pre></section>

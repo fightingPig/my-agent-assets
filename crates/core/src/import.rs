@@ -6,6 +6,7 @@ use crate::discovery::{
     discover, load_mcp_source, AssetKind, DiscoveredSource, DiscoveryScope, SourceFormat,
 };
 use crate::fingerprint::PreviewFingerprint;
+use crate::initialization::ensure_initialized;
 use crate::mount_registry::{
     load as load_mounts, registry_path as mount_registry_path, save as save_mounts,
 };
@@ -195,6 +196,7 @@ pub(crate) fn preview_import_at(
 }
 
 pub fn apply_import(home: &Path, request: &ImportApplyRequest) -> Result<ImportApplyResult> {
+    ensure_initialized(home)?;
     let _operation_lock = OperationLock::acquire(home)?;
     let preview = preview_import_at(
         home,
@@ -594,16 +596,6 @@ fn remove_any(path: &Path) -> io::Result<()> {
     }
 }
 
-fn ensure_initialized(home: &Path) -> Result<()> {
-    let root = home.join(".my-agent-assets");
-    if !root.is_dir() || !registry_path(home).is_file() {
-        return Err(MaaError::new(
-            "asset center is not initialized; run initialization first",
-        ));
-    }
-    Ok(())
-}
-
 fn operation_id() -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -623,7 +615,6 @@ fn epoch_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::asset_registry::AssetRegistry;
     use crate::mount_registry::{BindingStatus, MountBinding, MountRegistry};
     use std::time::Duration;
 
@@ -979,19 +970,14 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let root = home.join(".my-agent-assets");
-        fs::create_dir_all(root.join("assets/skills")).unwrap();
-        fs::create_dir_all(root.join("assets/commands")).unwrap();
-        fs::create_dir_all(root.join("assets/mcps")).unwrap();
-        fs::create_dir_all(root.join("backups/portable")).unwrap();
-        fs::write(
-            registry_path(&home),
-            serde_yaml::to_string(&AssetRegistry::default()).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            mount_registry_path(&home),
-            serde_yaml::to_string(&MountRegistry::default()).unwrap(),
+        fs::create_dir_all(&home).unwrap();
+        let preview = crate::initialization::preview_initialization(&home).unwrap();
+        crate::initialization::apply_initialization(
+            &home,
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
         )
         .unwrap();
         // Ensure coarse filesystems cannot make stale tests depend on mtime.

@@ -4,7 +4,7 @@ import { CurrentPage } from "../app/CurrentPage";
 import { PAGE_REGISTRY } from "../app/pages";
 import entrySource from "../visual-qa.tsx?raw";
 import { isExpectedVisualQaReport } from "../../scripts/visual-qa-readiness.mjs";
-import { parseVisualQaQuery, VISUAL_QA_PAGES } from "./config";
+import { parseVisualQaQuery, VISUAL_QA_CASES, VISUAL_QA_PAGES } from "./config";
 import {
   collectVisualQaReport,
   createVisualQaSummary,
@@ -30,10 +30,11 @@ function setSize(element: Element, sizes: Partial<Record<"clientWidth" | "client
 
 describe("Visual QA harness", () => {
   it("accepts only reports matching the expected page, platform, and viewport", () => {
-    const expected = { pageId: "skills", platform: "macos", width: 1440, height: 900 };
+    const expected = { pageId: "skills", platform: "macos", scenario: "default", width: 1440, height: 900 };
     const report = {
       pageId: "skills",
       platform: "macos",
+      scenario: "default",
       viewport: { width: 1440, height: 900 },
     };
 
@@ -42,6 +43,7 @@ describe("Visual QA harness", () => {
     expect(isExpectedVisualQaReport({}, expected)).toBe(false);
     expect(isExpectedVisualQaReport({ ...report, pageId: "commands" }, expected)).toBe(false);
     expect(isExpectedVisualQaReport({ ...report, platform: "windows" }, expected)).toBe(false);
+    expect(isExpectedVisualQaReport({ ...report, scenario: "uninitialized" }, expected)).toBe(false);
     expect(isExpectedVisualQaReport({ ...report, viewport: { width: 1180, height: 900 } }, expected)).toBe(false);
     expect(isExpectedVisualQaReport({ ...report, viewport: { width: 1440, height: 760 } }, expected)).toBe(false);
   });
@@ -49,23 +51,37 @@ describe("Visual QA harness", () => {
   it("covers every registered V1 page in registry order", () => {
     expect(VISUAL_QA_PAGES).toEqual(PAGE_REGISTRY.map(({ id, title }) => ({ id, title })));
     expect(VISUAL_QA_PAGES).toHaveLength(13);
+    expect(VISUAL_QA_CASES).toHaveLength(17);
+    expect(VISUAL_QA_CASES.filter((entry) => entry.state !== "default").map((entry) => entry.id)).toEqual([
+      "projects-project-editor",
+      "scan-uninitialized",
+      "settings-uninitialized",
+      "dashboard-recovery-error",
+    ]);
   });
 
   it("parses pages and platforms with macOS defaults and warnings", () => {
     expect(parseVisualQaQuery("?page=asset-detail&platform=windows")).toEqual({
       pageId: "asset-detail",
       platform: "windows",
+      state: "default",
       warnings: [],
     });
     expect(parseVisualQaQuery("?page=missing&platform=linux")).toEqual({
       pageId: "dashboard",
       platform: "macos",
+      state: "default",
       warnings: [
         "Unknown page 'missing', using dashboard.",
         "Unknown platform 'linux', using macos.",
       ],
     });
-    expect(parseVisualQaQuery("")).toEqual({ pageId: "dashboard", platform: "macos", warnings: [] });
+    expect(parseVisualQaQuery("")).toEqual({ pageId: "dashboard", platform: "macos", state: "default", warnings: [] });
+    expect(parseVisualQaQuery("?page=projects&state=project-editor")).toMatchObject({
+      pageId: "projects",
+      state: "project-editor",
+      warnings: [],
+    });
   });
 
   it("renders hidden detail pages directly with mock application information", () => {
@@ -73,6 +89,19 @@ describe("Visual QA harness", () => {
     expect(screen.getByRole("heading", { name: "SKILL.md 内容预览" })).toBeInTheDocument();
     rerender(<CurrentPage activePage="project-detail" appInfo={appInfo} demoMode />);
     expect(screen.getByRole("heading", { name: "已挂载资产" })).toBeInTheDocument();
+  });
+
+  it("renders the interaction states included in the screenshot manifest", () => {
+    const { rerender } = render(
+      <CurrentPage activePage="projects" appInfo={appInfo} demoMode visualQaState="project-editor" />,
+    );
+    expect(screen.getByRole("region", { name: "项目管理" })).toBeInTheDocument();
+
+    rerender(
+      <CurrentPage activePage="scan" appInfo={appInfo} demoMode visualQaState="uninitialized" />,
+    );
+    expect(screen.getByText(/资产中心尚未初始化/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成导入计划" })).toBeDisabled();
   });
 
   it("uses a one-pixel overflow tolerance and emits the report schema", () => {
@@ -143,6 +172,7 @@ describe("Visual QA harness", () => {
       pageTitle: "首页",
       viewport: { width: 1440, height: 900 },
       platform: "macos" as const,
+      scenario: "default" as const,
       overflow: { document: false, root: false, appMain: false, page: false },
       severeIssues: ["severe"],
       warningIssues: ["warning"],
@@ -153,11 +183,13 @@ describe("Visual QA harness", () => {
       chromePath: "/Applications/Google Chrome",
       viteUrl: "http://127.0.0.1:54321",
       totalPages: 13,
+      totalCases: 17,
     }, [report])).toEqual({
       generatedAt: "2026-06-23T00:00:00.000Z",
       chromePath: "/Applications/Google Chrome",
       viteUrl: "http://127.0.0.1:54321",
       totalPages: 13,
+      totalCases: 17,
       totalScreenshots: 1,
       severeCount: 1,
       warningCount: 1,

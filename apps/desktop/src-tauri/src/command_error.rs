@@ -64,7 +64,7 @@ impl DesktopCommandError {
                 "输入或本地配置不符合要求。请检查后重新预览。"
             }
             DesktopCommandErrorCode::NotInitialized => {
-                "目标客户端尚未完成初始化。请先启动对应客户端后重试。"
+                "资产中心或本地运行环境尚未完成初始化。请先在首页检查并完成初始化后重试。"
             }
             DesktopCommandErrorCode::OperationBlocked => {
                 "当前操作被安全检查阻止。请查看预览或诊断信息后重试。"

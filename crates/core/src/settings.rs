@@ -1,4 +1,5 @@
 use crate::fingerprint::PreviewFingerprint;
+use crate::initialization::ensure_initialized;
 use crate::operation::{OperationJournal, OperationLock, RecoveryTarget};
 use crate::path_safety::guard_write_path;
 use crate::{MaaError, Result as CoreResult};
@@ -300,6 +301,7 @@ pub fn preview_settings(
     home: &Path,
     request: &SettingsPreviewRequest,
 ) -> CoreResult<SettingsPreview> {
+    ensure_initialized(home)?;
     preview_settings_at(home, request, epoch_seconds())
 }
 
@@ -307,6 +309,7 @@ pub fn apply_settings(
     home: &Path,
     request: &SettingsApplyRequest,
 ) -> CoreResult<SettingsApplyResult> {
+    ensure_initialized(home)?;
     validate_preview_time(request.preview_generated_at_epoch_seconds)?;
     let _lock = OperationLock::acquire(home)?;
     let preview = preview_settings_at(
@@ -627,6 +630,18 @@ mod tests {
         home
     }
 
+    fn initialize(home: &Path) {
+        let preview = crate::initialization::preview_initialization(home).unwrap();
+        crate::initialization::apply_initialization(
+            home,
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
+    }
+
     #[test]
     fn missing_file_returns_defaults_without_writing() {
         let home = fake_home("defaults");
@@ -789,6 +804,8 @@ mod tests {
     #[test]
     fn preview_is_read_only_and_apply_persists_the_exact_settings() {
         let home = fake_home("preview-apply");
+        initialize(&home);
+        let config_before = fs::read(settings_path(&home)).unwrap();
         let mut settings = Settings::defaults_for_home(&home);
         settings.max_depth = 9;
         let request = SettingsPreviewRequest { settings };
@@ -799,7 +816,7 @@ mod tests {
         assert_eq!(preview.settings.max_depth, 9);
         assert_eq!(preview.affected_paths, vec![settings_path(&home)]);
         assert_sha256_preview_id(&preview.preview_id, "settings-save-");
-        assert!(!settings_path(&home).exists());
+        assert_eq!(fs::read(settings_path(&home)).unwrap(), config_before);
 
         let result = apply_settings(
             &home,
@@ -820,6 +837,7 @@ mod tests {
     #[test]
     fn apply_rejects_changed_request_and_stale_config() {
         let home = fake_home("preview-stale");
+        initialize(&home);
         let request = SettingsPreviewRequest {
             settings: Settings::defaults_for_home(&home),
         };
@@ -837,7 +855,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(changed_error.to_string().contains("stale"));
-        assert!(!settings_path(&home).exists());
+        assert!(settings_path(&home).exists());
 
         let mut external = Settings::defaults_for_home(&home);
         external.max_depth = 3;
@@ -859,6 +877,7 @@ mod tests {
     #[test]
     fn apply_rejects_expired_preview() {
         let home = fake_home("preview-expired");
+        initialize(&home);
         let request = SettingsPreviewRequest {
             settings: Settings::defaults_for_home(&home),
         };
@@ -875,7 +894,32 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("expired"));
-        assert!(!settings_path(&home).exists());
+        assert!(settings_path(&home).exists());
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn public_preview_and_apply_reject_uninitialized_home_without_writing() {
+        let home = fake_home("uninitialized");
+        let request = SettingsPreviewRequest {
+            settings: Settings::defaults_for_home(&home),
+        };
+
+        let preview_error = preview_settings(&home, &request).unwrap_err();
+        assert!(preview_error.to_string().contains("not initialized"));
+        assert!(!home.join(".my-agent-assets").exists());
+
+        let apply_error = apply_settings(
+            &home,
+            &SettingsApplyRequest {
+                preview_id: "settings-save-invalid".into(),
+                preview_generated_at_epoch_seconds: epoch_seconds(),
+                request,
+            },
+        )
+        .unwrap_err();
+        assert!(apply_error.to_string().contains("not initialized"));
+        assert!(!home.join(".my-agent-assets").exists());
         fs::remove_dir_all(home).unwrap();
     }
 }

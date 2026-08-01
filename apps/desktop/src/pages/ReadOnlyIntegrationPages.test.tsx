@@ -22,6 +22,7 @@ import { ScanImportPage } from "./ScanImportPage";
 import { SettingsPage } from "./SettingsPage";
 import { SkillsListPage } from "./SkillsListPage";
 import { SyncPage } from "./SyncPage";
+import { MountDraftProvider, type MountDraft } from "../ui-assets";
 
 const {
   listAssets,
@@ -51,6 +52,7 @@ const {
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
+  initializationPreview,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
   previewAdopt,
@@ -83,6 +85,7 @@ const {
   canonicalMountPreview: vi.fn(),
   canonicalMountApply: vi.fn(),
   discoverRuntimeSources: vi.fn(),
+  initializationPreview: vi.fn(),
   canonicalBatchImportPreview: vi.fn(),
   canonicalBatchImportApply: vi.fn(),
   previewAdopt: vi.fn(),
@@ -117,10 +120,12 @@ vi.mock("../app/data-api", () => ({
   canonicalMountPreview,
   canonicalMountApply,
   discoverRuntimeSources,
+  initializationPreview,
   canonicalBatchImportPreview,
   canonicalBatchImportApply,
   previewAdopt,
   adoptApply,
+  safeCommandErrorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
 afterEach(() => {
@@ -130,6 +135,16 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(open).mockResolvedValue(null);
+  initializationPreview.mockResolvedValue({
+    previewId: "initialization:test",
+    assetCenterPath: "/tmp/home/.my-agent-assets",
+    plannedPaths: [],
+    warnings: [],
+    alreadyInitialized: true,
+    canApply: false,
+    generatedAtEpochSeconds: 100,
+    expiresAtEpochSeconds: 400,
+  });
   listAssets.mockResolvedValue([assetFixture("skill:review", "review", "skill")]);
   canonicalAssetContent.mockImplementation(async (assetId: string) => ({
     assetId,
@@ -414,6 +429,27 @@ describe("read-only UI integration", () => {
     expect(screen.queryByRole("button", { name: "管理挂载" })).not.toBeInTheDocument();
   });
 
+  it("blocks project write controls until the asset center is initialized", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+    listProjects.mockResolvedValue([projectFixture()]);
+
+    render(<ProjectsListPage />);
+
+    expect(await screen.findByText("资产中心尚未初始化")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加项目" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "刷新当前" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "编辑管理信息" })).toBeDisabled();
+  });
+
   it("shows an empty state instead of static projects when listProjects is empty", async () => {
     listProjects.mockResolvedValue([]);
 
@@ -426,10 +462,11 @@ describe("read-only UI integration", () => {
 
   it("previews and saves an explicit existing project without touching its directory", async () => {
     vi.mocked(open).mockResolvedValue("/tmp/local-app");
-    render(<ProjectsListPage />);
+    const { container } = render(<ProjectsListPage />);
     await screen.findByRole("option", { name: "project-a" });
     fireEvent.click(screen.getByRole("button", { name: "添加项目" }));
     await screen.findByRole("heading", { name: "添加已有项目" });
+    expect(container.querySelector(".project-center-layout")).toHaveClass("has-management-panel");
     fireEvent.change(screen.getByLabelText("显示名称"), { target: { value: "local-app" } });
     fireEvent.click(screen.getByRole("button", { name: "生成保存预览" }));
     await waitFor(() => expect(projectSavePreview).toHaveBeenCalledWith(expect.objectContaining({ name: "local-app", path: "/tmp/local-app" })));
@@ -650,6 +687,38 @@ describe("read-only UI integration", () => {
     expect(settingsLoad).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps settings writes disabled before asset-center initialization", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+
+    render(<SettingsPage appInfo={{ name: "My Agent Assets", version: "0.1.1-beta.3", platform: "windows", arch: "x86_64", backendReady: true }} />);
+
+    expect(await screen.findByText("资产中心尚未初始化。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成保存预览" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "预览导出" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "预览注册" })).toBeDisabled();
+    expect(screen.getByDisplayValue("0.1.1-beta.3")).toHaveAttribute("readonly");
+    expect(settingsPreview).not.toHaveBeenCalled();
+  });
+
+  it("marks deferred settings as non-editable instead of implying they are active", async () => {
+    render(<SettingsPage />);
+
+    expect((await screen.findAllByText(/安全策略固定开启/))).toHaveLength(2);
+    expect(screen.getByDisplayValue("跟随系统")).toBeDisabled();
+    expect(screen.getByDisplayValue("紧凑")).toBeDisabled();
+    expect(screen.getByDisplayValue("Info")).toBeDisabled();
+    expect(screen.getByDisplayValue("maa")).toHaveAttribute("readonly");
+  });
+
   it("blocks Scan Import when the backend reports unresolved conflicts", async () => {
     const onOpenConflicts = vi.fn();
     discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:review", "review"));
@@ -732,6 +801,28 @@ describe("read-only UI integration", () => {
     }));
     expect(await screen.findByText(/skill:live-scan：新增/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled();
+  });
+
+  it("keeps scan discovery read-only when the asset center is not initialized", async () => {
+    initializationPreview.mockResolvedValue({
+      previewId: "initialization:blocked",
+      assetCenterPath: "/tmp/home/.my-agent-assets",
+      plannedPaths: [],
+      warnings: ["资产中心尚未初始化。"],
+      alreadyInitialized: false,
+      canApply: true,
+      generatedAtEpochSeconds: 100,
+      expiresAtEpochSeconds: 400,
+    });
+    discoverRuntimeSources.mockResolvedValue(discoveryFixture("source:read-only", "read-only"));
+
+    render(<ScanImportPage />);
+
+    expect(await screen.findByText("read-only")).toBeInTheDocument();
+    expect(screen.getByText("资产中心尚未初始化。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成导入计划" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "生成接管计划" })).toBeDisabled();
+    expect(canonicalBatchImportPreview).not.toHaveBeenCalled();
   });
 
   it("sends only explicitly selected scan sources to import and adopt previews", async () => {
@@ -902,14 +993,11 @@ describe("read-only UI integration", () => {
       plannedEffects: ["预览资产来源", "预览目标挂载"],
       warnings: ["Preview mount warning"],
     }));
-    const { rerender } = render(<MountManagerPage />);
-    await screen.findByRole("button", { name: "生成挂载计划" });
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
+    const { rerender } = render(<MountDraftProvider initialDrafts={[mountDraftFixture()]}><MountManagerPage /></MountDraftProvider>);
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
     expect(await screen.findByText("预览资产来源")).toBeInTheDocument();
     expect(screen.getByText("Preview mount warning")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "生成挂载计划" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "确认应用 1 项变更" })).toBeEnabled();
 
     rerender(<ConflictResolverPage demoMode />);
     fireEvent.click(screen.getByRole("option", { name: "review" }));
@@ -917,35 +1005,25 @@ describe("read-only UI integration", () => {
     expect(screen.getByRole("button", { name: "执行冲突处理" })).toBeDisabled();
   });
 
-  it("refreshes the targetId-only mount preview without calling apply", async () => {
-    render(<MountManagerPage />);
+  it("previews a staged targetId-only change without calling apply", async () => {
+    render(<MountDraftProvider initialDrafts={[mountDraftFixture({ targetId: "project-a-skills", targetLabel: "project-a", targetPath: "/tmp/project-a/.claude/skills" })]}><MountManagerPage /></MountDraftProvider>);
 
-    await screen.findByRole("button", { name: "生成挂载计划" });
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-    await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
-    fireEvent.click(screen.getAllByRole("button", { name: /Claude Code Skills/ }).at(-1)!);
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenLastCalledWith({
       assetId: "skill:review",
       targetId: "project-a-skills",
     }));
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
-    await waitFor(() => expect(canonicalMountPreview.mock.calls.length).toBeGreaterThanOrEqual(3));
     expect(canonicalMountApply).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "确认挂载" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "确认应用 1 项变更" })).toBeEnabled();
   });
 
   it("executes targetId-only mount apply without typed input", async () => {
-    render(<MountManagerPage />);
+    render(<MountDraftProvider initialDrafts={[mountDraftFixture()]}><MountManagerPage /></MountDraftProvider>);
 
-    await screen.findByRole("button", { name: "生成挂载计划" });
-    fireEvent.click(screen.getByRole("button", { name: "生成挂载计划" }));
     await waitFor(() => expect(canonicalMountPreview).toHaveBeenCalled());
 
-    const mountButton = screen.getByRole("button", { name: "确认挂载" });
+    const mountButton = screen.getByRole("button", { name: "确认应用 1 项变更" });
     expect(mountButton).toBeEnabled();
-    expect(screen.getAllByText("预览挂载计划").length).toBeGreaterThan(0);
-    expect(screen.queryByText("尚未生成真实挂载预览。")).not.toBeInTheDocument();
+    expect(screen.getByText("预览挂载计划")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText("APPLY")).not.toBeInTheDocument();
     fireEvent.click(mountButton);
 
@@ -1157,7 +1235,7 @@ describe("read-only UI integration", () => {
       assetId: "skill:real-review",
       action: "reveal",
     }));
-    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看挂载预览" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认挂载" })).not.toBeInTheDocument();
     expect(canonicalMountPreview).not.toHaveBeenCalled();
     expect(canonicalMountApply).not.toHaveBeenCalled();
@@ -1222,7 +1300,7 @@ describe("read-only UI integration", () => {
     render(<ProjectDetailPage detail={project} />);
 
     expect(screen.getByRole("heading", { name: "本地环境" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "前往挂载管理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看挂载预览" })).toBeInTheDocument();
     expect(screen.queryByText("Git 工作区")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "确认项目挂载" })).not.toBeInTheDocument();
     expect(canonicalMountPreview).not.toHaveBeenCalled();
@@ -1378,6 +1456,22 @@ function canonicalMountPreviewFixture(
     canApply: true,
     generatedAtEpochSeconds: 100,
     expiresAtEpochSeconds: 400,
+    ...overrides,
+  };
+}
+
+function mountDraftFixture(overrides: Partial<MountDraft> = {}): MountDraft {
+  return {
+    id: "skill:review:claude-user-skills",
+    assetId: "skill:review",
+    assetName: "review",
+    assetType: "skill",
+    targetId: "claude-user-skills",
+    targetLabel: "用户级",
+    targetPath: "/tmp/home/.claude/skills",
+    provider: "claude_code",
+    operation: "mount",
+    previousState: "unmounted",
     ...overrides,
   };
 }

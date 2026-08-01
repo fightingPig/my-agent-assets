@@ -4,6 +4,7 @@ use crate::import::{
     apply_import_locked, preview_import_at, ImportApplyRequest, ImportApplyResult, ImportPreview,
     ImportPreviewRequest, ImportResolution,
 };
+use crate::initialization::ensure_initialized;
 use crate::mount::{
     discard_runtime_snapshot, restore_runtime_snapshot, snapshot_runtime_path, RuntimeSnapshot,
 };
@@ -66,6 +67,7 @@ pub fn preview_batch_import(
     home: &Path,
     request: &BatchImportPreviewRequest,
 ) -> Result<BatchImportPreview> {
+    ensure_initialized(home)?;
     preview_batch_import_at(home, request, epoch_seconds())
 }
 
@@ -128,6 +130,7 @@ pub fn apply_batch_import(
     home: &Path,
     request: &BatchImportApplyRequest,
 ) -> Result<BatchImportApplyResult> {
+    ensure_initialized(home)?;
     apply_batch_import_inner(home, request, None)
 }
 
@@ -293,9 +296,8 @@ fn epoch_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::asset_registry::{load as load_assets, save as save_assets, AssetRegistry};
+    use crate::asset_registry::load as load_assets;
     use crate::discovery::{discover, DiscoveryScope};
-    use crate::mount_registry::{save as save_mounts, MountRegistry};
     use crate::operation::{crash_test, recover_incomplete};
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -407,18 +409,49 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let root = home.join(".my-agent-assets");
-        for path in [
-            root.join("assets/skills"),
-            root.join("assets/commands"),
-            root.join("assets/mcps"),
-            root.join("backups/portable"),
-            root.join("backups/local"),
-        ] {
-            fs::create_dir_all(path).unwrap();
-        }
-        save_assets(&home, &AssetRegistry::default()).unwrap();
-        save_mounts(&home, &MountRegistry::default()).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        let preview = crate::initialization::preview_initialization(&home).unwrap();
+        crate::initialization::apply_initialization(
+            &home,
+            &crate::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .unwrap();
         home
+    }
+
+    #[test]
+    fn batch_import_rejects_uninitialized_home_without_creating_write_state() {
+        let home = std::env::temp_dir().join(format!(
+            "maa-batch-import-uninitialized-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(home.join(".claude/commands")).unwrap();
+        fs::write(home.join(".claude/commands/one.md"), "one").unwrap();
+        let request = BatchImportPreviewRequest {
+            scope: DiscoveryScope::User,
+            selections: vec![BatchImportSelection {
+                source_id: "command:one".into(),
+                resolution: ImportResolution::Unresolved,
+            }],
+        };
+
+        assert!(preview_batch_import(&home, &request).is_err());
+        assert!(apply_batch_import(
+            &home,
+            &BatchImportApplyRequest {
+                preview_id: "invalid".into(),
+                preview_generated_at_epoch_seconds: epoch_seconds(),
+                request,
+            },
+        )
+        .is_err());
+        assert!(!home.join(".my-agent-assets").exists());
+        let _ = fs::remove_dir_all(home);
     }
 }

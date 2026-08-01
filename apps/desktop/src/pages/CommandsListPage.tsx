@@ -1,6 +1,6 @@
 import { TerminalSquare } from "lucide-react";
 import { useEffect, useState } from "react";
-import { canonicalAssetContent, listAssets } from "../app/data-api";
+import { canonicalAssetContent, listAssets, safeCommandErrorMessage } from "../app/data-api";
 import type { AssetSummary } from "../app/contracts";
 import type { AssetDetailContext } from "../app/detail-context";
 import {
@@ -90,9 +90,10 @@ const staticCommands: readonly CommandItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  onOpenMountPreview?: () => void;
 };
 
-export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetListPageProps = {}) {
+export function CommandsListPage({ demoMode = false, onOpenAssetDetail, onOpenMountPreview }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly CommandItem[]>(demoMode ? staticCommands : []);
   const [stateLabel, setStateLabel] = useState("读取中");
 
@@ -131,12 +132,15 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
 
   return (
     <AssetCenterLayout
+      assetType="command"
+      demoMode={demoMode}
       emptyDescription="请先扫描或导入 Claude Command。"
       emptyTitle="未发现 Commands"
       itemLabel="Commands"
       items={items}
-      searchPlaceholder="搜索 Command 名称、用途或路径"
+      searchPlaceholder="搜索名称、用途或路径"
       stateLabel={stateLabel}
+      onOpenMountPreview={onOpenMountPreview}
       onOpenDetail={onOpenAssetDetail ? (command) => onOpenAssetDetail(toAssetDetail(command, "Command", "Markdown 内容预览")) : undefined}
       renderInspector={(command) => (
         <>
@@ -148,8 +152,8 @@ export function CommandsListPage({ demoMode = false, onOpenAssetDetail }: AssetL
   );
 }
 
-function errorMessage(_error: unknown) {
-  return "本地 Command 操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "本地 Command 操作未完成。请查看系统状态或导出诊断包后重试。");
 }
 
 function toAssetDetail(command: CommandItem, typeLabel: string, previewLabel: string): AssetDetailContext {

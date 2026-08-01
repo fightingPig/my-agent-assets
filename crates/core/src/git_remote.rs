@@ -1,10 +1,10 @@
+use crate::external_command::{git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT};
 use crate::operation::OperationLock;
 use crate::{MaaError, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PREVIEW_TTL_SECONDS: u64 = 300;
@@ -101,10 +101,9 @@ pub fn apply_git_remote(
             request.request.remote_url.as_str(),
         ]
     };
-    let output = Command::new("git")
-        .current_dir(&repository)
-        .args(args)
-        .output()
+    let mut command = git_command();
+    command.current_dir(&repository).args(args);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map_err(|_| MaaError::new("Git is unavailable"))?;
     if !output.status.success() {
         let _ = fs::copy(&backup_path, &config_path);
@@ -195,10 +194,9 @@ fn valid_remote_url(value: &str) -> bool {
 }
 
 fn git_stdout(repository: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .current_dir(repository)
-        .args(args)
-        .output()
+    let mut command = git_command();
+    command.current_dir(repository).args(args);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map_err(|_| MaaError::new("Git is unavailable"))?;
     if !output.status.success() {
         return Err(MaaError::new("Git command failed"));
@@ -250,6 +248,7 @@ fn epoch_nanos() -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     fn repository(label: &str) -> PathBuf {
         let home = std::env::temp_dir().join(format!("maa-git-remote-{label}-{}", epoch_nanos()));

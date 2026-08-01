@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import {
   canonicalBatchImportApply,
   canonicalBatchImportPreview,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type {
   ApplyResult,
@@ -371,6 +372,6 @@ function toApplyResult(
   };
 }
 
-function errorMessage(_error: unknown) {
-  return "冲突处理未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "冲突处理未完成。请查看系统状态或导出诊断包后重试。");
 }

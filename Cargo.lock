@@ -1760,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-cli"
-version = "0.1.1-beta.1"
+version = "0.1.1-beta.3"
 dependencies = [
  "my-agent-assets-core",
  "serde",
@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-core"
-version = "0.1.1-beta.1"
+version = "0.1.1-beta.3"
 dependencies = [
  "humantime",
  "junction",
@@ -1785,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "my-agent-assets-desktop"
-version = "0.1.1-beta.1"
+version = "0.1.1-beta.3"
 dependencies = [
  "my-agent-assets-core",
  "serde",

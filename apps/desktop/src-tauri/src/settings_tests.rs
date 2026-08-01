@@ -34,6 +34,19 @@ impl TempHome {
     fn config_path(&self) -> PathBuf {
         self.path.join(".my-agent-assets/config.yaml")
     }
+
+    fn initialize(&self) {
+        let preview = my_agent_assets_core::initialization::preview_initialization(&self.path)
+            .expect("initialization preview should succeed");
+        my_agent_assets_core::initialization::apply_initialization(
+            &self.path,
+            &my_agent_assets_core::initialization::InitializationApplyRequest {
+                preview_id: preview.preview_id,
+                preview_generated_at_epoch_seconds: preview.generated_at_epoch_seconds,
+            },
+        )
+        .expect("initialization should succeed");
+    }
 }
 
 impl Drop for TempHome {
@@ -65,6 +78,18 @@ fn custom_settings(home: &Path) -> DesktopSettings {
 }
 
 fn save_settings(home: &Path, settings: DesktopSettings) -> SettingsApplyResult {
+    let initialization = my_agent_assets_core::initialization::preview_initialization(home)
+        .expect("initialization preview should succeed");
+    if !initialization.already_initialized {
+        my_agent_assets_core::initialization::apply_initialization(
+            home,
+            &my_agent_assets_core::initialization::InitializationApplyRequest {
+                preview_id: initialization.preview_id,
+                preview_generated_at_epoch_seconds: initialization.generated_at_epoch_seconds,
+            },
+        )
+        .expect("initialization should succeed");
+    }
     let request = SettingsPreviewInput { settings };
     let preview =
         settings_preview_for_home(home, request.clone()).expect("settings preview should succeed");
@@ -171,12 +196,8 @@ fn settings_save_rejects_symlinked_asset_center_without_writing_outside_home() {
         },
     );
 
-    let preview = result.expect("unsafe path should return a blocked preview");
-    assert!(!preview.can_apply);
-    assert!(preview
-        .warnings
-        .iter()
-        .any(|warning| warning.contains("Allowed root must not be a symlink")));
+    let error = result.expect_err("unsafe asset center must be rejected");
+    assert!(error.contains("not initialized"));
     assert!(!outside.config_path().exists());
 }
 
@@ -198,6 +219,8 @@ fn settings_save_ignores_inactive_asset_center_path_setting() {
 #[test]
 fn settings_preview_is_read_only_and_apply_requires_matching_preview() {
     let home = TempHome::new("preview-contract");
+    home.initialize();
+    let config_before = fs::read(home.config_path()).expect("config should exist after init");
     let request = SettingsPreviewInput {
         settings: custom_settings(home.path()),
     };
@@ -205,7 +228,10 @@ fn settings_preview_is_read_only_and_apply_requires_matching_preview() {
         settings_preview_for_home(home.path(), request.clone()).expect("preview should succeed");
 
     assert!(preview.can_apply);
-    assert!(!home.config_path().exists());
+    assert_eq!(
+        fs::read(home.config_path()).expect("preview must not remove config"),
+        config_before
+    );
     assert!(preview.preview_id.starts_with("settings-save-"));
     assert_eq!(preview.preview_id.len(), "settings-save-".len() + 64);
 
@@ -222,7 +248,26 @@ fn settings_preview_is_read_only_and_apply_requires_matching_preview() {
     .expect_err("changed request must invalidate preview");
 
     assert!(error.contains("stale"));
-    assert!(!home.config_path().exists());
+    assert_eq!(
+        fs::read(home.config_path()).expect("stale apply must preserve config"),
+        config_before
+    );
+}
+
+#[test]
+fn settings_preview_rejects_uninitialized_home_without_creating_asset_center() {
+    let home = TempHome::new("uninitialized-preview");
+
+    let error = settings_preview_for_home(
+        home.path(),
+        SettingsPreviewInput {
+            settings: custom_settings(home.path()),
+        },
+    )
+    .expect_err("uninitialized settings preview must fail");
+
+    assert!(error.contains("not initialized"));
+    assert!(!home.path().join(".my-agent-assets").exists());
 }
 
 #[cfg(unix)]

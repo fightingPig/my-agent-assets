@@ -1,0 +1,101 @@
+:root {
+  color-scheme: light;
+
+  /* Typography */
+  --maa-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif;
+  --maa-font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
+  --maa-font-size-12: 12px;
+  --maa-font-size-13: 13px;
+  --maa-font-size-14: 14px;
+  --maa-font-size-15: 15px;
+  --maa-font-size-18: 18px;
+  --maa-font-size-20: 20px;
+  --maa-font-size-32: 32px;
+  --maa-line-tight: 1.2;
+  --maa-line-body: 1.55;
+  --maa-line-code: 1.7;
+
+  /* Neutral foundation */
+  --maa-color-canvas: #fcfcfe;
+  --maa-color-sidebar: #f6f7fa;
+  --maa-color-surface: #ffffff;
+  --maa-color-surface-subtle: #f8f9fc;
+  --maa-color-surface-hover: #faf9ff;
+  --maa-color-text: #1d2129;
+  --maa-color-text-secondary: #667085;
+  --maa-color-text-tertiary: #9299a6;
+  --maa-color-border: #e2e5ec;
+  --maa-color-border-soft: #eceff4;
+
+  /* Brand and semantic colors */
+  --maa-color-accent: #6253e8;
+  --maa-color-accent-hover: #5144d6;
+  --maa-color-accent-pressed: #4336c4;
+  --maa-color-accent-soft: #efedff;
+  --maa-color-success: #169b55;
+  --maa-color-success-soft: #e8f7ee;
+  --maa-color-info: #3d78e6;
+  --maa-color-info-soft: #ebf3ff;
+  --maa-color-warning: #dc820d;
+  --maa-color-warning-soft: #fff4df;
+  --maa-color-danger: #bb3d42;
+  --maa-color-danger-soft: #fff0f1;
+  --maa-color-provider-claude: #d97757;
+  --maa-color-provider-claude-soft: #fff1ea;
+  --maa-color-provider-codex: #147a5f;
+  --maa-color-provider-codex-soft: #e9f7f2;
+
+  /* Layout and rhythm */
+  --maa-space-1: 4px;
+  --maa-space-2: 8px;
+  --maa-space-3: 12px;
+  --maa-space-4: 16px;
+  --maa-space-5: 20px;
+  --maa-space-6: 24px;
+  --maa-space-8: 32px;
+  --maa-space-9: 36px;
+  --maa-toolbar-inset: var(--maa-space-3);
+  --maa-popover-offset: 6px;
+  --maa-sidebar-width: 250px;
+  --maa-macos-overlay-height: 28px;
+  --maa-page-padding-x: 36px;
+  --maa-page-padding-top: 34px;
+  --maa-page-padding-bottom: 36px;
+
+  /* Shape, elevation and interaction */
+  --maa-radius-sm: 6px;
+  --maa-radius-md: 8px;
+  --maa-radius-lg: 10px;
+  --maa-radius-xl: 12px;
+  --maa-radius-pill: 999px;
+  --maa-shadow-subtle: 0 2px 10px rgba(29, 33, 41, 0.025);
+  --maa-shadow-raised: 0 10px 28px rgba(29, 33, 41, 0.08);
+  --maa-shadow-popover: 0 14px 34px rgba(29, 33, 41, 0.12), 0 3px 10px rgba(29, 33, 41, 0.06);
+  --maa-control-height: 40px;
+  --maa-focus-ring: 0 0 0 3px rgba(98, 83, 232, 0.18);
+  --maa-transition-fast: 140ms ease;
+
+  /* Compatibility aliases used by the existing desktop pages. */
+  --accent: var(--maa-color-accent);
+  --accent-soft: var(--maa-color-accent-soft);
+  --text: var(--maa-color-text);
+  --secondary: var(--maa-color-text-secondary);
+  --tertiary: var(--maa-color-text-tertiary);
+  --border: var(--maa-color-border);
+  --subtle-border: var(--maa-color-border-soft);
+  --surface: var(--maa-color-surface);
+  --sidebar: var(--maa-color-sidebar);
+  --green: var(--maa-color-success);
+  --green-soft: var(--maa-color-success-soft);
+  --blue: var(--maa-color-info);
+  --blue-soft: var(--maa-color-info-soft);
+  --amber: var(--maa-color-warning);
+  --amber-soft: var(--maa-color-warning-soft);
+  --violet-soft: var(--maa-color-accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --maa-transition-fast: 0ms;
+  }
+}

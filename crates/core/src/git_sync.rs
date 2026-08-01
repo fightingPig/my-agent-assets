@@ -1,6 +1,10 @@
 use crate::asset_registry::{
     inspect_content, load as load_assets, ContentDiagnostic, ContentState,
 };
+use crate::external_command::{
+    gh_command, git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT, REMOTE_COMMAND_TIMEOUT,
+    VISIBILITY_COMMAND_TIMEOUT,
+};
 use crate::fingerprint::process_instance_nonce;
 use crate::mount::copy_any;
 use crate::operation::{GitRefRecovery, OperationJournal, OperationLock, RecoveryTarget};
@@ -11,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+#[cfg(test)]
+use std::process::Command;
+use std::process::Output;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -116,10 +122,10 @@ pub struct GhCliVisibilityVerifier;
 impl VisibilityVerifier for GhCliVisibilityVerifier {
     fn verify(&self, remote_url: &str) -> Result<(RepositoryVisibility, String)> {
         let repository = parse_github_repository(remote_url)?;
-        let output = Command::new("gh")
-            .args(["api", &format!("repos/{repository}"), "--jq", ".visibility"])
-            .output()
-            .map_err(|_| {
+        let mut command = gh_command();
+        command.args(["api", &format!("repos/{repository}"), "--jq", ".visibility"]);
+        let output =
+            output_with_timeout(&mut command, VISIBILITY_COMMAND_TIMEOUT).map_err(|_| {
                 MaaError::new(
                     "GitHub Private visibility could not be verified because `gh` is unavailable",
                 )
@@ -434,7 +440,7 @@ fn apply_sync_with(
             let id = create_pull_backup(home, &operation_id)?;
             backup_id = Some(id);
             journal.record_step("backup_created")?;
-            run_git_checked(
+            run_git_checked_with_timeout(
                 &repository,
                 &[
                     "pull",
@@ -443,6 +449,7 @@ fn apply_sync_with(
                     &preview.status.branch,
                 ],
                 "git pull --ff-only failed",
+                REMOTE_COMMAND_TIMEOUT,
             )?;
             journal.record_step("pull_completed")?;
             pulled = true;
@@ -478,7 +485,7 @@ fn apply_sync_with(
                 journal.record_step("sync_commit_created")?;
                 commit
             };
-            let push = run_git(
+            let push = run_git_with_timeout(
                 &repository,
                 &[
                     "push",
@@ -490,6 +497,7 @@ fn apply_sync_with(
                     &settings.git_remote,
                     &preview.status.branch,
                 ],
+                REMOTE_COMMAND_TIMEOUT,
             );
             if !push.status.success() {
                 let rollback_result = if committed {
@@ -703,7 +711,7 @@ fn remote_head(repository: &Path, remote: &str, branch: &str) -> Option<String> 
     if branch.is_empty() {
         return None;
     }
-    git_stdout(
+    git_stdout_with_timeout(
         repository,
         &[
             "ls-remote",
@@ -711,6 +719,7 @@ fn remote_head(repository: &Path, remote: &str, branch: &str) -> Option<String> 
             remote,
             &format!("refs/heads/{branch}"),
         ],
+        REMOTE_COMMAND_TIMEOUT,
     )
     .ok()
     .and_then(|output| output.split_whitespace().next().map(ToOwned::to_owned))
@@ -856,11 +865,12 @@ fn run_git_with_index_checked(
     args: &[&str],
     message: &str,
 ) -> Result<()> {
-    let output = Command::new("git")
+    let mut command = git_command();
+    command
         .current_dir(repository)
         .env("GIT_INDEX_FILE", index)
-        .args(args)
-        .output()
+        .args(args);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map_err(|_| MaaError::new(message))?;
     if output.status.success() {
         Ok(())
@@ -870,11 +880,12 @@ fn run_git_with_index_checked(
 }
 
 fn git_stdout_with_index(repository: &Path, index: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
+    let mut command = git_command();
+    command
         .current_dir(repository)
         .env("GIT_INDEX_FILE", index)
-        .args(args)
-        .output()
+        .args(args);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map_err(|_| MaaError::new("Git is unavailable"))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -895,16 +906,26 @@ fn validate_preview_time(generated_at: u64) -> Result<()> {
     Ok(())
 }
 
-fn run_git(repository: &Path, args: &[&str]) -> Output {
-    Command::new("git")
-        .current_dir(repository)
-        .args(args)
-        .output()
-        .unwrap_or_else(|_| failed_output())
+fn run_git_with_timeout(repository: &Path, args: &[&str], timeout: std::time::Duration) -> Output {
+    let mut command = git_command();
+    command.current_dir(repository).args(args);
+    output_with_timeout(&mut command, timeout).unwrap_or_else(|_| failed_output())
 }
 
 fn run_git_checked(repository: &Path, args: &[&str], message: &str) -> Result<()> {
-    if run_git(repository, args).status.success() {
+    run_git_checked_with_timeout(repository, args, message, LOCAL_COMMAND_TIMEOUT)
+}
+
+fn run_git_checked_with_timeout(
+    repository: &Path,
+    args: &[&str],
+    message: &str,
+    timeout: std::time::Duration,
+) -> Result<()> {
+    if run_git_with_timeout(repository, args, timeout)
+        .status
+        .success()
+    {
         Ok(())
     } else {
         Err(MaaError::new(message))
@@ -912,10 +933,17 @@ fn run_git_checked(repository: &Path, args: &[&str], message: &str) -> Result<()
 }
 
 fn git_stdout(repository: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
-        .current_dir(repository)
-        .args(args)
-        .output()
+    git_stdout_with_timeout(repository, args, LOCAL_COMMAND_TIMEOUT)
+}
+
+fn git_stdout_with_timeout(
+    repository: &Path,
+    args: &[&str],
+    timeout: std::time::Duration,
+) -> Result<String> {
+    let mut command = git_command();
+    command.current_dir(repository).args(args);
+    let output = output_with_timeout(&mut command, timeout)
         .map_err(|_| MaaError::new("Git is unavailable"))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -925,10 +953,9 @@ fn git_stdout(repository: &Path, args: &[&str]) -> Result<String> {
 }
 
 fn git_success(repository: &Path, args: &[&str]) -> bool {
-    Command::new("git")
-        .current_dir(repository)
-        .args(args)
-        .output()
+    let mut command = git_command();
+    command.current_dir(repository).args(args);
+    output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .map(|output| output.status.success())
         .unwrap_or(false)
 }

@@ -12,8 +12,30 @@ on:
         type: string
 
 jobs:
+  validate-release:
+    name: Validate release identity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify synchronized product version and tag
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          node apps/desktop/scripts/check-release-version.mjs
+          if git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"; then
+            tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            test "${tag_commit}" = "${GITHUB_SHA}"
+          fi
+
   build-macos:
     name: Build macOS arm64 beta
+    needs: validate-release
     runs-on: macos-14
     permissions:
       contents: read
@@ -59,6 +81,7 @@ jobs:
 
   build-windows:
     name: Build Windows x64 beta
+    needs: validate-release
     runs-on: windows-latest
     permissions:
       contents: read
@@ -88,6 +111,26 @@ jobs:
 
       - name: Build unsigned Windows beta installers
         run: npm run tauri -- build --config src-tauri/tauri.windows.conf.json
+
+      - name: Verify Windows binary uses the GUI subsystem
+        working-directory: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $binaryPath = Join-Path $env:GITHUB_WORKSPACE "target/release/my-agent-assets-desktop.exe"
+          if (!(Test-Path -LiteralPath $binaryPath)) {
+            throw "Windows desktop binary was not found: $binaryPath"
+          }
+          $bytes = [System.IO.File]::ReadAllBytes($binaryPath)
+          $peHeaderOffset = [System.BitConverter]::ToInt32($bytes, 0x3c)
+          if ([System.Text.Encoding]::ASCII.GetString($bytes, $peHeaderOffset, 4) -ne "PE`0`0") {
+            throw "The desktop binary does not contain a valid PE header."
+          }
+          $optionalHeaderOffset = $peHeaderOffset + 24
+          $subsystemOffset = $optionalHeaderOffset + 68
+          $subsystem = [System.BitConverter]::ToUInt16($bytes, $subsystemOffset)
+          if ($subsystem -ne 2) {
+            throw "Expected Windows GUI subsystem (2), received $subsystem."
+          }
 
       - name: Upload Windows beta
         uses: actions/upload-artifact@v4
@@ -149,5 +192,6 @@ jobs:
 
             - macOS: Apple Silicon, ad-hoc signed, not notarized.
             - Windows: unsigned MSI and NSIS test installers.
+            - Beta.1 may have left an empty ~/.my-agent-assets/locks directory; after confirming it is empty and no operation is running, remove it manually if needed.
             - This prerelease is for controlled validation and is not V1 Stable.
           files: release-upload/*

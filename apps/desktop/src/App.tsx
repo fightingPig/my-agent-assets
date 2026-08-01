@@ -13,33 +13,37 @@ import { PageHeader } from "./components/shell/PageHeader";
 import {
   getDesktopPlatform,
   isTauriRuntime,
+  type DesktopPlatform,
 } from "./lib/platform";
+import { MountDraftProvider } from "./ui-assets";
 
-const fallbackInfo: AppInfo = {
-  name: "My Agent Assets",
-  version: "0.1.1-beta.1",
-  platform: "macOS",
-  arch: "arm64",
-  backendReady: false,
-};
+function fallbackInfo(platform: DesktopPlatform): AppInfo {
+  return {
+    name: "My Agent Assets",
+    version: "preview",
+    platform: platform === "macos" ? "macOS" : platform === "windows" ? "Windows" : "Unknown",
+    arch: "unknown",
+    backendReady: false,
+  };
+}
 
 type AppProps = {
   demoMode?: boolean;
 };
 
 function App({ demoMode = false }: AppProps = {}) {
-  const [appInfo, setAppInfo] = useState<AppInfo>(fallbackInfo);
+  const platform = getDesktopPlatform();
+  const [appInfo, setAppInfo] = useState<AppInfo>(() => fallbackInfo(platform));
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [assetDetail, setAssetDetail] = useState<AssetDetailContext | null>(null);
   const [projectDetail, setProjectDetail] = useState<ProjectDetailContext | null>(null);
   const [conflictContext, setConflictContext] = useState<ConflictResolverContext | null>(null);
-  const platform = getDesktopPlatform();
   const currentPage = getPageById(activePage);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    invoke<AppInfo>("app_info").then(setAppInfo).catch(() => setAppInfo(fallbackInfo));
-  }, []);
+    invoke<AppInfo>("app_info").then(setAppInfo).catch(() => setAppInfo(fallbackInfo(platform)));
+  }, [platform]);
 
   const openAssetDetail = (detail: AssetDetailContext) => {
     setAssetDetail(detail);
@@ -62,19 +66,21 @@ function App({ demoMode = false }: AppProps = {}) {
       onPageChange={setActivePage}
       platform={platform}
     >
-      <PageHeader page={currentPage} />
-      <CurrentPage
-        activePage={activePage}
-        appInfo={appInfo}
-        assetDetail={assetDetail}
-        conflictContext={conflictContext}
-        onOpenAssetDetail={openAssetDetail}
-        onOpenConflicts={openConflicts}
-        onOpenProjectDetail={openProjectDetail}
-        onPageChange={setActivePage}
-        projectDetail={projectDetail}
-        demoMode={demoMode}
-      />
+      <MountDraftProvider>
+        <PageHeader page={currentPage} />
+        <CurrentPage
+          activePage={activePage}
+          appInfo={appInfo}
+          assetDetail={assetDetail}
+          conflictContext={conflictContext}
+          onOpenAssetDetail={openAssetDetail}
+          onOpenConflicts={openConflicts}
+          onOpenProjectDetail={openProjectDetail}
+          onPageChange={setActivePage}
+          projectDetail={projectDetail}
+          demoMode={demoMode}
+        />
+      </MountDraftProvider>
     </AppFrame>
   );
 }

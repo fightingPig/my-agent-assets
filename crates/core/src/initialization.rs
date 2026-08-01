@@ -1,4 +1,5 @@
 use crate::asset_registry::{self, AssetRegistry};
+use crate::external_command::{git_command, output_with_timeout, LOCAL_COMMAND_TIMEOUT};
 use crate::fingerprint::PreviewFingerprint;
 use crate::mount_registry::{self, MountRegistry};
 use crate::path_safety::is_link_or_junction;
@@ -10,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const PREVIEW_TTL_SECONDS: u64 = 600;
@@ -63,6 +63,14 @@ pub struct InitializationApplyResult {
 
 pub fn preview_initialization(home: &Path) -> Result<InitializationPreview> {
     preview_initialization_at(home, epoch_seconds())
+}
+
+/// Verifies that the asset center is complete before any operation can create
+/// locks, journals, registries, or other write-side state.
+pub fn ensure_initialized(home: &Path) -> Result<()> {
+    let root = home.join(ROOT_NAME);
+    validate_existing(home, &root)
+        .map_err(|_| MaaError::new("asset center is not initialized; run initialization first"))
 }
 
 fn preview_initialization_at(
@@ -276,11 +284,11 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
     mount_registry::load(home).map_err(|error| MaaError::new(error.to_string()))?;
     crate::project_registry::load(home)?;
     targets::load(home)?;
-    let output = Command::new("git")
+    let mut command = git_command();
+    command
         .args(["rev-parse", "--is-inside-work-tree"])
-        .current_dir(root)
-        .output()
-        .map_err(git_error)?;
+        .current_dir(root);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT).map_err(git_error)?;
     if !output.status.success() || String::from_utf8_lossy(&output.stdout).trim() != "true" {
         return Err(MaaError::new("asset center is not a valid Git repository"));
     }
@@ -288,11 +296,9 @@ fn validate_existing(home: &Path, root: &Path) -> Result<()> {
 }
 
 fn initialize_git(staging: &Path) -> Result<()> {
-    let output = Command::new("git")
-        .args(["init", "-b", "main"])
-        .current_dir(staging)
-        .output()
-        .map_err(git_error)?;
+    let mut command = git_command();
+    command.args(["init", "-b", "main"]).current_dir(staging);
+    let output = output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT).map_err(git_error)?;
     if output.status.success() {
         Ok(())
     } else {
@@ -303,9 +309,9 @@ fn initialize_git(staging: &Path) -> Result<()> {
 }
 
 fn git_available() -> bool {
-    Command::new("git")
-        .arg("--version")
-        .output()
+    let mut command = git_command();
+    command.arg("--version");
+    output_with_timeout(&mut command, LOCAL_COMMAND_TIMEOUT)
         .is_ok_and(|output| output.status.success())
 }
 
@@ -487,6 +493,28 @@ mod tests {
             0,
             "first-start checks must not write into HOME"
         );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn ensure_initialized_rejects_partial_asset_center_without_writing() {
+        let home = home("partial");
+        let root = home.join(ROOT_NAME);
+        fs::create_dir_all(root.join("locks")).unwrap();
+        let before = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+
+        let error = ensure_initialized(&home).unwrap_err();
+
+        assert!(error.to_string().contains("not initialized"));
+        let after = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(before, after);
+        assert!(!root.join("assets.yaml").exists());
         let _ = fs::remove_dir_all(home);
     }
 

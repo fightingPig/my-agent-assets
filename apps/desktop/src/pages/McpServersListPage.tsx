@@ -10,6 +10,7 @@ import {
   canonicalDeleteApply,
   canonicalDeletePreview,
   listAssets,
+  safeCommandErrorMessage,
 } from "../app/data-api";
 import type {
   AssetSummary,
@@ -123,6 +124,7 @@ const staticServers: readonly McpItem[] = [
 type AssetListPageProps = {
   demoMode?: boolean;
   onOpenAssetDetail?: (detail: AssetDetailContext) => void;
+  onOpenMountPreview?: () => void;
 };
 
 type McpEditorState = {
@@ -159,6 +161,7 @@ type McpEditorProps = {
 export function McpServersListPage({
   demoMode = false,
   onOpenAssetDetail,
+  onOpenMountPreview,
 }: AssetListPageProps = {}) {
   const [items, setItems] = useState<readonly McpItem[]>(demoMode ? staticServers : []);
   const [stateLabel, setStateLabel] = useState("读取中");
@@ -371,11 +374,8 @@ export function McpServersListPage({
   return (
     <div className="mcp-page-stack">
       <div className="mcp-page-actions">
-        <div>
-          <strong>Canonical MCP</strong>
-          <span>统一模型是唯一真实配置；保存不会自动写入 Claude Code 或 Codex。</span>
-        </div>
-        <button className="primary-button" data-no-drag="true" onClick={openCreate} style={NO_DRAG_REGION_STYLE} type="button"><Plus size={15} />新增 MCP</button>
+        <span className="mcp-safety-note" id="mcp-safety-note">统一模型是唯一真实配置；保存不会自动写入 Claude Code 或 Codex。</span>
+        <button aria-describedby="mcp-safety-note" className="primary-button" data-no-drag="true" onClick={openCreate} style={NO_DRAG_REGION_STYLE} type="button"><Plus size={15} />新增 MCP</button>
       </div>
       {editor ? (
         <McpEditor
@@ -402,14 +402,17 @@ export function McpServersListPage({
         />
       ) : editorMessage ? <p className="mcp-editor-message error">{editorMessage}</p> : null}
       <AssetCenterLayout
+      assetType="mcp"
+      demoMode={demoMode}
       emptyDescription="请新增 canonical MCP，或从 Claude Code / Codex 扫描并导入。"
       emptyTitle="未发现 MCP Servers"
       itemLabel="MCP Servers"
       items={items}
-      searchPlaceholder="搜索 MCP 名称、能力或配置路径"
+      searchPlaceholder="搜索名称、能力或路径"
       stateLabel={stateLabel}
       usageLabel="挂载与使用"
       usageCountLabel="个挂载"
+      onOpenMountPreview={onOpenMountPreview}
       onOpenDetail={onOpenAssetDetail
         ? (server) => onOpenAssetDetail(toAssetDetail(server, "MCP Server", "配置 JSON 预览"))
         : undefined}
@@ -697,6 +700,6 @@ function scopeLabel(scope: AssetSummary["scope"]) {
   return "资产中心";
 }
 
-function errorMessage(_error: unknown) {
-  return "本地 MCP 操作未完成。请查看系统状态或导出诊断包后重试。";
+function errorMessage(error: unknown) {
+  return safeCommandErrorMessage(error, "本地 MCP 操作未完成。请查看系统状态或导出诊断包后重试。");
 }
